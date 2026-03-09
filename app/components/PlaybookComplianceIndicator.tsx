@@ -23,6 +23,8 @@ interface PlaybookComplianceIndicatorProps {
     compliance: ComplianceResult
     playbookName: string
     companyName: string
+    previousScore?: number | null
+    onSeekApproval?: () => void
 }
 
 // ============================================================================
@@ -439,6 +441,8 @@ export default function PlaybookComplianceIndicator({
     compliance,
     playbookName,
     companyName,
+    previousScore,
+    onSeekApproval,
 }: PlaybookComplianceIndicatorProps) {
     const [isExpanded, setIsExpanded] = useState(false)
     const [activeTab, setActiveTab] = useState<'redlines' | 'categories' | 'flexibility'>('redlines')
@@ -544,8 +548,25 @@ export default function PlaybookComplianceIndicator({
                     </div>
                 </div>
 
-                {/* Score ring */}
-                <ScoreRing score={compliance.overallScore} />
+                {/* Score ring with delta */}
+                <div className="flex flex-col items-center gap-0.5">
+                    <ScoreRing score={compliance.overallScore} />
+                    {previousScore != null && previousScore !== compliance.overallScore && (
+                        <span className={`text-[9px] font-mono font-bold ${compliance.overallScore < previousScore ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {compliance.overallScore > previousScore ? '+' : ''}{compliance.overallScore - previousScore}%
+                        </span>
+                    )}
+                </div>
+
+                {/* Seek Approval button */}
+                {onSeekApproval && compliance.overallScore < 60 && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onSeekApproval() }}
+                        className="px-3 py-1.5 text-[10px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex-shrink-0"
+                    >
+                        Seek Approval
+                    </button>
+                )}
 
                 {/* Chevron */}
                 <div className={`flex items-center justify-center w-7 h-7 rounded-md bg-white/60 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''

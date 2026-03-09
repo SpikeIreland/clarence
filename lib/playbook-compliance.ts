@@ -32,6 +32,7 @@ export interface PlaybookRule {
     escalation_contact: string | null
     escalation_contact_email: string | null
     rationale: string | null
+    negotiation_tips: string | null
     range_context: PlaybookRangeContext | null
 }
 
@@ -660,5 +661,59 @@ export function calculatePlaybookCompliance(
         redLines,
         flexibility,
         unmatchedCategories,
+    }
+}
+
+
+// ============================================================================
+// SECTION 9: SINGLE-CLAUSE COMPLIANCE CHECK
+// ============================================================================
+
+/**
+ * Check compliance impact of a single position move.
+ * More efficient than full recalculation — focuses on the affected clause
+ * and returns before/after scores plus affected rules.
+ */
+export function checkSingleClauseCompliance(
+    rules: PlaybookRule[],
+    allClauses: ContractClause[],
+    targetClauseId: string,
+    proposedPosition: number,
+    party: 'initiator' | 'respondent' | 'customer' | 'provider'
+): {
+    affectedRules: ScoredRule[]
+    categoryScore: number
+    overallScore: number
+    previousOverallScore: number
+    redLineBreaches: RedLineResult[]
+} {
+    // 1. Calculate current compliance (before move)
+    const currentResult = calculatePlaybookCompliance(rules, allClauses)
+
+    // 2. Create modified clauses with proposed position
+    const isInitiatorSide = party === 'initiator' || party === 'customer'
+    const modifiedClauses = allClauses.map(c => {
+        if (c.clause_id !== targetClauseId) return c
+        return isInitiatorSide
+            ? { ...c, initiator_position: proposedPosition, customer_position: proposedPosition }
+            : { ...c, respondent_position: proposedPosition }
+    })
+
+    // 3. Calculate new compliance
+    const newResult = calculatePlaybookCompliance(rules, modifiedClauses)
+
+    // 4. Find affected rules (in the same category as the target clause)
+    const targetClause = allClauses.find(c => c.clause_id === targetClauseId)
+    const targetCategory = targetClause ? normaliseCategory(targetClause.category) : null
+    const affectedCategory = targetCategory
+        ? newResult.categories.find(cat => cat.normalisedKey === targetCategory)
+        : null
+
+    return {
+        affectedRules: affectedCategory?.rules || [],
+        categoryScore: affectedCategory?.score || 0,
+        overallScore: newResult.overallScore,
+        previousOverallScore: currentResult.overallScore,
+        redLineBreaches: newResult.redLines.filter(rl => rl.status === 'breach'),
     }
 }

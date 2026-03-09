@@ -7,6 +7,9 @@ import { PartyChatPanel } from './components/party-chat-component'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import TrainingScorecard from './components/TrainingScorecard'
 import TrainingPlaybookCompliance from './components/TrainingPlaybookCompliance'
+import ComplianceWarningModal from '@/app/components/ComplianceWarningModal'
+import ComplianceGuidanceBanner from '@/app/components/ComplianceGuidanceBanner'
+import type { ComplianceCheckResult, GuidanceTip } from '@/lib/agents/compliance-checker'
 // ROLE MATRIX Phase 2: Dynamic position labels
 import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
 import PositionScaleIndicator from '@/app/components/PositionScaleIndicator'
@@ -269,6 +272,7 @@ interface UserInfo {
     lastName?: string
     email?: string
     company?: string
+    companyId?: string
     role?: 'customer' | 'provider'
     userId?: string
 }
@@ -2242,6 +2246,25 @@ function ContractStudioContent() {
     const [isCommitting, setIsCommitting] = useState(false)
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
+    // Playbook compliance state
+    const [complianceResult, setComplianceResult] = useState<ComplianceCheckResult | null>(null)
+    const [showComplianceWarning, setShowComplianceWarning] = useState(false)
+    const [complianceGuidanceTips, setComplianceGuidanceTips] = useState<GuidanceTip[]>([])
+    const [pendingCommitArgs, setPendingCommitArgs] = useState<{
+        sessionId: string
+        positionId: string
+        party: 'customer' | 'provider'
+        newPosition: number
+        leverageImpact: number
+        userContext: {
+            userId?: string
+            userName?: string
+            companyName?: string
+            newLeverageCustomer?: number
+            newLeverageProvider?: number
+        }
+    } | null>(null)
+
     // Party Chat state
     const [chatUnreadCount, setChatUnreadCount] = useState(0)
     const [isChatOpen, setIsChatOpen] = useState(false)
@@ -2612,6 +2635,7 @@ function ContractStudioContent() {
                 lastName: parsed.userInfo?.lastName || '',
                 email: parsed.userInfo?.email || '',
                 company: parsed.userInfo?.company || '',
+                companyId: parsed.userInfo?.companyId || '',
                 role: parsed.userInfo?.role || 'customer',
                 userId: parsed.userInfo?.userId || ''
             } as UserInfo
@@ -4775,6 +4799,75 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
             )
 
             // ============================================================
+            // PLAYBOOK COMPLIANCE CHECK (pre-commit)
+            // ============================================================
+            if (userInfo.companyId) {
+                try {
+                    const complianceBody = {
+                        sessionId: session.sessionId,
+                        clauseId: selectedClause.clauseId,
+                        clauseName: selectedClause.clauseName,
+                        clauseCategory: selectedClause.category || 'General',
+                        proposedPosition,
+                        currentPosition: currentPosition ?? null,
+                        party: preliminaryParty,
+                        companyId: userInfo.companyId,
+                        contractTypeKey: session.contractTypeKey || null,
+                        allClauses: clauses.map(c => ({
+                            clauseId: c.clauseId,
+                            clauseName: c.clauseName,
+                            category: c.category || 'General',
+                            initiatorPosition: c.customerPosition,
+                            respondentPosition: c.providerPosition,
+                            clarencePosition: c.clarenceRecommendation,
+                            customerPosition: c.customerPosition,
+                        })),
+                    }
+
+                    const complianceRes = await fetch('/api/agents/compliance-checker', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(complianceBody),
+                    })
+
+                    if (complianceRes.ok) {
+                        const complianceData = await complianceRes.json()
+                        if (complianceData.success && complianceData.result) {
+                            const cr: ComplianceCheckResult = complianceData.result
+
+                            if (cr.severity === 'guidance' && cr.guidanceTips.length > 0) {
+                                // Show inline guidance but proceed with commit
+                                setComplianceGuidanceTips(cr.guidanceTips)
+                            } else if (cr.severity === 'warning' || cr.severity === 'breach' || cr.severity === 'deal_breaker') {
+                                // Store commit args and show warning modal
+                                setComplianceResult(cr)
+                                setPendingCommitArgs({
+                                    sessionId: session.sessionId,
+                                    positionId: selectedClause.positionId,
+                                    party: userInfo.role as 'customer' | 'provider',
+                                    newPosition: proposedPosition,
+                                    leverageImpact: pendingLeverageImpact,
+                                    userContext: {
+                                        userId: userInfo.userId,
+                                        userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || undefined,
+                                        companyName: userInfo.company,
+                                        newLeverageCustomer: newLeverage.customerLeverage,
+                                        newLeverageProvider: newLeverage.providerLeverage
+                                    }
+                                })
+                                setShowComplianceWarning(true)
+                                stopWorking()
+                                setIsCommitting(false)
+                                return  // Wait for user action via modal
+                            }
+                        }
+                    }
+                } catch (complianceError) {
+                    console.warn('[ComplianceCheck] Pre-commit check failed, proceeding:', complianceError)
+                }
+            }
+
+            // ============================================================
             // COMMIT WITH CALCULATED LEVERAGE VALUES
             // ============================================================
             const result = await commitPositionChange(
@@ -4965,6 +5058,120 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         } finally {
             setIsCommitting(false)
         }
+    }
+
+    // ============================================================
+    // COMPLIANCE MODAL CALLBACKS
+    // ============================================================
+    const handleComplianceProceed = async () => {
+        setShowComplianceWarning(false)
+        if (!pendingCommitArgs) return
+
+        startWorking('position_commit')
+        setIsCommitting(true)
+
+        try {
+            const result = await commitPositionChange(
+                pendingCommitArgs.sessionId,
+                pendingCommitArgs.positionId,
+                pendingCommitArgs.party,
+                pendingCommitArgs.newPosition,
+                pendingCommitArgs.leverageImpact,
+                pendingCommitArgs.userContext
+            )
+
+            if (result.success && selectedClause) {
+                const resolvedParty = (result as { success: boolean; positionUpdate?: { party: string } }).positionUpdate?.party || pendingCommitArgs.party
+
+                const updatedClauses = clauses.map(c => {
+                    if (c.positionId === pendingCommitArgs!.positionId) {
+                        const newGap = calculateGapSize(
+                            resolvedParty === 'customer' ? pendingCommitArgs!.newPosition : c.customerPosition,
+                            resolvedParty === 'provider' ? pendingCommitArgs!.newPosition : c.providerPosition
+                        )
+                        return {
+                            ...c,
+                            customerPosition: resolvedParty === 'customer' ? pendingCommitArgs!.newPosition : c.customerPosition,
+                            providerPosition: resolvedParty === 'provider' ? pendingCommitArgs!.newPosition : c.providerPosition,
+                            gapSize: newGap,
+                            status: determineClauseStatus(newGap)
+                        }
+                    }
+                    return c
+                })
+                setClauses(updatedClauses)
+                setClauseTree(buildClauseTree(updatedClauses, clauseTree))
+
+                if (pendingCommitArgs.userContext.newLeverageCustomer != null && leverage) {
+                    setLeverage({
+                        ...leverage,
+                        leverageTrackerCustomer: pendingCommitArgs.userContext.newLeverageCustomer!,
+                        leverageTrackerProvider: pendingCommitArgs.userContext.newLeverageProvider!,
+                        leverageTrackerCalculatedAt: new Date().toISOString()
+                    })
+                }
+
+                setIsAdjusting(false)
+                setPendingLeverageImpact(0)
+                await fetchNegotiationHistory()
+                stopWorking()
+            } else {
+                setWorkingError('Failed to save your position. Please try again.')
+            }
+        } catch (error) {
+            console.error('Error committing position after compliance:', error)
+            setWorkingError('An error occurred while saving your position.')
+        } finally {
+            setIsCommitting(false)
+            setPendingCommitArgs(null)
+            setComplianceResult(null)
+        }
+    }
+
+    const handleComplianceAdjust = () => {
+        setShowComplianceWarning(false)
+        setComplianceResult(null)
+        setPendingCommitArgs(null)
+        setIsAdjusting(false)
+        setProposedPosition(null)
+        setPendingLeverageImpact(0)
+    }
+
+    const handleComplianceSeekApproval = async () => {
+        setShowComplianceWarning(false)
+        if (!pendingCommitArgs || !complianceResult || !session || !userInfo) return
+
+        try {
+            await fetch('/api/approval/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    requested_by_user_id: userInfo.userId,
+                    requested_by_name: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim(),
+                    requested_by_company: userInfo.company,
+                    request_category: 'compliance_breach',
+                    source_type: 'contract_studio',
+                    approval_context: {
+                        clauseName: selectedClause?.clauseName,
+                        proposedPosition: pendingCommitArgs.newPosition,
+                        complianceSeverity: complianceResult.severity,
+                        overallScore: complianceResult.overallScore,
+                        scoreDelta: complianceResult.scoreDelta,
+                        breachedRules: complianceResult.breachedRules,
+                        reasoning: complianceResult.reasoning,
+                    }
+                })
+            })
+        } catch (error) {
+            console.warn('[ComplianceCheck] Approval request failed:', error)
+        }
+
+        setPendingCommitArgs(null)
+        setComplianceResult(null)
+        setIsAdjusting(false)
+        setProposedPosition(null)
+        setPendingLeverageImpact(0)
     }
 
     const handleResetPosition = async () => {
@@ -8233,6 +8440,30 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         clauses={clauses}
                     />
                 </div>
+            )}
+
+            {/* Compliance Guidance Banner (inline, auto-dismisses) */}
+            {complianceGuidanceTips.length > 0 && (
+                <div className="flex-shrink-0 px-4 z-10">
+                    <ComplianceGuidanceBanner
+                        tips={complianceGuidanceTips}
+                        onDismiss={() => setComplianceGuidanceTips([])}
+                    />
+                </div>
+            )}
+
+            {/* Compliance Warning Modal */}
+            {complianceResult && (
+                <ComplianceWarningModal
+                    isOpen={showComplianceWarning}
+                    onClose={() => { setShowComplianceWarning(false); handleComplianceAdjust() }}
+                    onProceed={handleComplianceProceed}
+                    onSeekApproval={handleComplianceSeekApproval}
+                    onAdjust={handleComplianceAdjust}
+                    complianceResult={complianceResult}
+                    clauseName={selectedClause?.clauseName || ''}
+                    proposedPosition={proposedPosition ?? 0}
+                />
             )}
 
             <div className="relative flex flex-1 overflow-hidden">

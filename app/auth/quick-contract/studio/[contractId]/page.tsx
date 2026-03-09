@@ -72,6 +72,9 @@ import { getPositionDescription } from '@/lib/role-matrix'
 // Playbook compliance engine + indicator component
 import { calculatePlaybookCompliance, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
 import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
+import ComplianceWarningModal from '@/app/components/ComplianceWarningModal'
+import ComplianceGuidanceBanner from '@/app/components/ComplianceGuidanceBanner'
+import type { ComplianceCheckResult, GuidanceTip } from '@/lib/agents/compliance-checker'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -477,6 +480,14 @@ function QuickContractStudioContent() {
     const [retryingClauses, setRetryingClauses] = useState<Set<string>>(new Set())
     const [retryInProgress, setRetryInProgress] = useState(false)
     const [recertifyInProgress, setRecertifyInProgress] = useState(false)
+
+    // Playbook compliance check state
+    const [qcComplianceResult, setQcComplianceResult] = useState<ComplianceCheckResult | null>(null)
+    const [showQcComplianceWarning, setShowQcComplianceWarning] = useState(false)
+    const [qcComplianceGuidanceTips, setQcComplianceGuidanceTips] = useState<GuidanceTip[]>([])
+    const [qcPendingRevertClauseId, setQcPendingRevertClauseId] = useState<string | null>(null)
+    const [qcPendingRevertPosition, setQcPendingRevertPosition] = useState<number | null>(null)
+    const complianceCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // NEW: Auto-save state for position persistence
     const [dirtyPositions, setDirtyPositions] = useState<Map<string, number>>(new Map())
@@ -3412,7 +3423,130 @@ INSTRUCTIONS:
                 setShowDraftOfferPrompt(true)
             }
         }
-    }, [clauses, getPartyRole])
+        // ================================================================
+        // DEBOUNCED PLAYBOOK COMPLIANCE CHECK
+        // ================================================================
+        if (userInfo?.companyId && clause) {
+            if (complianceCheckTimerRef.current) clearTimeout(complianceCheckTimerRef.current)
+            complianceCheckTimerRef.current = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/agents/compliance-checker', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            clauseId,
+                            clauseName: clause.clauseName,
+                            clauseCategory: clause.category || 'General',
+                            proposedPosition: newPosition,
+                            currentPosition: role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition,
+                            party: role === 'initiator' ? 'customer' : 'provider',
+                            companyId: userInfo.companyId,
+                            contractTypeKey: null,
+                            allClauses: clauses.map(c => ({
+                                clauseId: c.clauseId,
+                                clauseName: c.clauseName,
+                                category: c.category || 'General',
+                                initiatorPosition: c.initiatorPosition,
+                                respondentPosition: c.respondentPosition,
+                                clarencePosition: c.clarencePosition,
+                            })),
+                        }),
+                    })
+                    if (res.ok) {
+                        const data = await res.json()
+                        if (data.success && data.result) {
+                            const cr: ComplianceCheckResult = data.result
+                            if (cr.severity === 'guidance' && cr.guidanceTips.length > 0) {
+                                setQcComplianceGuidanceTips(cr.guidanceTips)
+                            } else if (cr.severity === 'warning' || cr.severity === 'breach' || cr.severity === 'deal_breaker') {
+                                setQcComplianceResult(cr)
+                                setQcPendingRevertClauseId(clauseId)
+                                setQcPendingRevertPosition(
+                                    role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
+                                )
+                                setShowQcComplianceWarning(true)
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[QC ComplianceCheck] Failed:', err)
+                }
+            }, 500)
+        }
+    }, [clauses, getPartyRole, userInfo])
+
+    // ================================================================
+    // QC COMPLIANCE MODAL CALLBACKS
+    // ================================================================
+    const handleQcComplianceProceed = () => {
+        // User chose to proceed — dirty position stays, auto-save will persist it
+        setShowQcComplianceWarning(false)
+        setQcComplianceResult(null)
+        setQcPendingRevertClauseId(null)
+        setQcPendingRevertPosition(null)
+    }
+
+    const handleQcComplianceAdjust = () => {
+        // Revert the position change
+        if (qcPendingRevertClauseId && qcPendingRevertPosition !== null) {
+            const revertId = qcPendingRevertClauseId
+            const revertPos = qcPendingRevertPosition
+            setClauses(prev => prev.map(c =>
+                c.clauseId === revertId
+                    ? {
+                        ...c,
+                        ...(getPartyRole() === 'initiator'
+                            ? { initiatorPosition: revertPos }
+                            : { respondentPosition: revertPos }
+                        )
+                    }
+                    : c
+            ))
+            // Remove from dirty positions
+            setDirtyPositions(prev => {
+                const next = new Map(prev)
+                next.delete(revertId)
+                return next
+            })
+        }
+        setShowQcComplianceWarning(false)
+        setQcComplianceResult(null)
+        setQcPendingRevertClauseId(null)
+        setQcPendingRevertPosition(null)
+    }
+
+    const handleQcComplianceSeekApproval = async () => {
+        setShowQcComplianceWarning(false)
+        if (!qcComplianceResult || !userInfo) return
+
+        try {
+            await fetch('/api/approval/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contractId,
+                    requested_by_user_id: userInfo.userId,
+                    requested_by_name: userInfo.fullName,
+                    requested_by_company: userInfo.companyName,
+                    request_category: 'compliance_breach',
+                    source_type: 'quick_contract',
+                    approval_context: {
+                        clauseId: qcPendingRevertClauseId,
+                        complianceSeverity: qcComplianceResult.severity,
+                        overallScore: qcComplianceResult.overallScore,
+                        scoreDelta: qcComplianceResult.scoreDelta,
+                        breachedRules: qcComplianceResult.breachedRules,
+                        reasoning: qcComplianceResult.reasoning,
+                    }
+                })
+            })
+        } catch (err) {
+            console.warn('[QC ComplianceCheck] Approval request failed:', err)
+        }
+
+        // Revert the position
+        handleQcComplianceAdjust()
+    }
 
     // Force-save all dirty positions now (for manual "Save" or before commit)
     const forceSavePositions = useCallback(async () => {
@@ -6709,6 +6843,30 @@ INSTRUCTIONS:
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Compliance Guidance Banner (inline, auto-dismisses) */}
+            {qcComplianceGuidanceTips.length > 0 && (
+                <div className="fixed bottom-20 right-4 z-40 max-w-sm">
+                    <ComplianceGuidanceBanner
+                        tips={qcComplianceGuidanceTips}
+                        onDismiss={() => setQcComplianceGuidanceTips([])}
+                    />
+                </div>
+            )}
+
+            {/* Compliance Warning Modal */}
+            {qcComplianceResult && (
+                <ComplianceWarningModal
+                    isOpen={showQcComplianceWarning}
+                    onClose={handleQcComplianceAdjust}
+                    onProceed={handleQcComplianceProceed}
+                    onSeekApproval={handleQcComplianceSeekApproval}
+                    onAdjust={handleQcComplianceAdjust}
+                    complianceResult={qcComplianceResult}
+                    clauseName={clauses.find(c => c.clauseId === qcPendingRevertClauseId)?.clauseName || ''}
+                    proposedPosition={dirtyPositions.get(qcPendingRevertClauseId || '') ?? 0}
+                />
             )}
 
             {/* ============================================================ */}
