@@ -1,12 +1,67 @@
 // ============================================================================
-// CLARENCE System Observability - User Lookup API
-// File: app/api/system-events/user/route.ts
-// Version: 1.1 (Fixed)
-// Description: Lookup user activity by user_id or email
+// CLARENCE System Observability - Event Logging & User Lookup API
+// File: app/api/system-events/route.ts
+// Version: 1.2
+// Description: POST: Log frontend events | GET: Lookup user activity
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+
+
+// ============================================================================
+// SECTION 0: POST HANDLER — Event Ingestion
+// ============================================================================
+
+export async function POST(request: NextRequest) {
+    try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            return NextResponse.json(
+                { success: false, error: 'Database configuration missing' },
+                { status: 500 }
+            );
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const body = await request.json();
+
+        const { data, error } = await supabase
+            .from('system_events')
+            .insert({
+                session_id: body.sessionId || null,
+                user_id: body.userId || null,
+                journey_type: body.journeyType || 'unknown',
+                step_name: body.stepName || 'unknown',
+                step_number: body.stepNumber || null,
+                step_category: body.stepCategory || 'frontend',
+                status: body.status || 'completed',
+                trace_id: body.traceId || null,
+                source_system: body.sourceSystem || 'frontend',
+                source_identifier: body.sourceIdentifier || null,
+                error_message: body.errorMessage || null,
+                error_code: body.errorCode || null,
+                context: body.context || {},
+            })
+            .select('event_id')
+            .single();
+
+        if (error) {
+            // Log but don't fail — events are non-critical
+            console.warn('[SystemEvents] Insert failed:', error.message);
+            return NextResponse.json({ success: false, error: error.message }, { status: 200 });
+        }
+
+        return NextResponse.json({ success: true, eventId: data?.event_id });
+
+    } catch (error) {
+        console.warn('[SystemEvents] POST error:', error);
+        // Return 200 even on error — event logging should never block the UI
+        return NextResponse.json({ success: false, error: 'Event logging failed' }, { status: 200 });
+    }
+}
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
