@@ -264,17 +264,34 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 
     // Clear progress messages when playbooks finish parsing
     useEffect(() => {
-        if (Object.keys(parseProgress).length === 0) return
+        if (Object.keys(parseProgress).length === 0 && parsingIds.size === 0) return
         const stillParsing = new Set(playbooks.filter(p => p.status === 'parsing').map(p => p.playbookId))
-        const updated = { ...parseProgress }
-        let changed = false
-        for (const id of Object.keys(updated)) {
+        // Clear progress messages for playbooks that finished parsing
+        const updatedProgress = { ...parseProgress }
+        let progressChanged = false
+        for (const id of Object.keys(updatedProgress)) {
             if (!stillParsing.has(id) && !parsingIds.has(id)) {
-                delete updated[id]
-                changed = true
+                delete updatedProgress[id]
+                progressChanged = true
             }
         }
-        if (changed) setParseProgress(updated)
+        if (progressChanged) setParseProgress(updatedProgress)
+        // Clear parsingIds for playbooks whose status is no longer 'parsing'
+        // (i.e. the parent refreshed and status changed to 'parsed' or 'parse_failed')
+        if (parsingIds.size > 0) {
+            let idsChanged = false
+            const nextIds = new Set(parsingIds)
+            for (const id of parsingIds) {
+                if (!stillParsing.has(id)) {
+                    const pb = playbooks.find(p => p.playbookId === id)
+                    if (pb && pb.status !== 'pending_parse') {
+                        nextIds.delete(id)
+                        idsChanged = true
+                    }
+                }
+            }
+            if (idsChanged) setParsingIds(nextIds)
+        }
     }, [playbooks, parseProgress, parsingIds])
 
     const handleFileUpload = async (file: File) => {
@@ -307,9 +324,10 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         setParseProgress(prev => ({ ...prev, [playbookId]: 'Downloading document...' }))
         try {
             await onParse(playbookId, sourceFilePath, sourceFileName)
-            // Parse request sent — N8N processes in background. Show status message.
+            // Parse request sent — N8N processes in background.
+            // Keep in parsingIds so button stays disabled/shows "Processing..."
+            // until the parent refreshes playbooks (polling detects status change).
             setParseProgress(prev => ({ ...prev, [playbookId]: 'Parsing in progress — this may take a few minutes...' }))
-            setParsingIds(prev => { const next = new Set(prev); next.delete(playbookId); return next })
         } catch (e) {
             console.error('Parse error:', e)
             setParseError(e instanceof Error ? e.message : 'Failed to parse')
@@ -644,16 +662,21 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 ml-4">
-                                    {(p.status === 'pending_parse' || p.status === 'parse_failed') && (
+                                    {(p.status === 'pending_parse' || p.status === 'parse_failed') && !parsingIds.has(p.playbookId) && (
                                         <button
                                             onClick={() => handleParseClick(p.playbookId, p.sourceFilePath || '', p.sourceFileName || 'playbook')}
-                                            disabled={parsingIds.has(p.playbookId) || !p.sourceFilePath}
+                                            disabled={!p.sourceFilePath}
                                             className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
                                         >
-                                            {parsingIds.has(p.playbookId) ? 'Processing...' : p.status === 'parse_failed' ? 'Retry Parse' : 'Parse Playbook'}
+                                            {p.status === 'parse_failed' ? 'Retry Parse' : 'Parse Playbook'}
                                         </button>
                                     )}
-                                    {p.status === 'parsing' && <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg">Parsing...</span>}
+                                    {(p.status === 'parsing' || parsingIds.has(p.playbookId)) && (
+                                        <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg flex items-center gap-2">
+                                            <span className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
+                                            Parsing...
+                                        </span>
+                                    )}
                                     {p.isActive ? (
                                         <button onClick={() => onDeactivate(p.playbookId)} className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg">Deactivate</button>
                                     ) : (p.status === 'parsed' || p.status === 'inactive') && (
