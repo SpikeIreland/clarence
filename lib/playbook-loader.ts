@@ -15,9 +15,10 @@ export interface PlaybookMatch {
     playbook_name: string
     company_id: string
     contract_type_key: string | null
+    playbook_perspective: 'customer' | 'provider'
 }
 
-const PLAYBOOK_FIELDS = 'playbook_id, playbook_name, company_id, contract_type_key'
+const PLAYBOOK_FIELDS = 'playbook_id, playbook_name, company_id, contract_type_key, playbook_perspective'
 
 /**
  * Find the best-matching active playbook for a company and contract type.

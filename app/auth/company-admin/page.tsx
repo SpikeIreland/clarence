@@ -56,6 +56,7 @@ interface Playbook {
     status: 'pending_parse' | 'parsing' | 'parsed' | 'review_required' | 'active' | 'inactive' | 'superseded' | 'parse_failed'
     isActive: boolean
     contractTypeKey: string | null
+    playbookPerspective: 'customer' | 'provider'
     sourceFileName?: string
     sourceFilePath?: string
     rulesExtracted: number
@@ -165,7 +166,7 @@ function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationPr
 interface PlaybooksTabProps {
     playbooks: Playbook[]
     isLoading: boolean
-    onUpload: (file: File, contractTypeKey: string | null) => Promise<void>
+    onUpload: (file: File, contractTypeKey: string | null, perspective: 'customer' | 'provider') => Promise<void>
     onActivate: (playbookId: string) => Promise<void>
     onDeactivate: (playbookId: string) => Promise<void>
     onParse: (playbookId: string, sourceFilePath: string, sourceFileName: string) => Promise<void>
@@ -181,6 +182,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [isUploading, setIsUploading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
     const [uploadContractType, setUploadContractType] = useState<string | null>(null)
+    const [uploadPerspective, setUploadPerspective] = useState<'customer' | 'provider'>('customer')
     const [editingTypeId, setEditingTypeId] = useState<string | null>(null)
     const [editTypeValue, setEditTypeValue] = useState<string | null>(null)
     const [parsingIds, setParsingIds] = useState<Set<string>>(new Set())
@@ -309,7 +311,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         setIsUploading(true)
         setUploadError(null)
         try {
-            await onUpload(file, uploadContractType)
+            await onUpload(file, uploadContractType, uploadPerspective)
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to upload')
         } finally {
@@ -512,6 +514,28 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                         ))}
                     </select>
                 </div>
+                {/* Playbook Perspective Selector */}
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Playbook Perspective</label>
+                    <div className="flex gap-3">
+                        <label className={`flex-1 flex items-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer transition-all ${uploadPerspective === 'customer' ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-300 hover:border-slate-400'}`}>
+                            <input type="radio" name="perspective" value="customer" checked={uploadPerspective === 'customer'} onChange={() => setUploadPerspective('customer')} className="sr-only" />
+                            <span className="text-lg">🛡️</span>
+                            <div>
+                                <div className="text-sm font-medium text-slate-800">Customer / Buyer</div>
+                                <div className="text-[11px] text-slate-500">Higher positions = more customer protection</div>
+                            </div>
+                        </label>
+                        <label className={`flex-1 flex items-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer transition-all ${uploadPerspective === 'provider' ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-300 hover:border-slate-400'}`}>
+                            <input type="radio" name="perspective" value="provider" checked={uploadPerspective === 'provider'} onChange={() => setUploadPerspective('provider')} className="sr-only" />
+                            <span className="text-lg">🏢</span>
+                            <div>
+                                <div className="text-sm font-medium text-slate-800">Provider / Supplier</div>
+                                <div className="text-[11px] text-slate-500">Higher positions = more provider protection</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
                 <div
                     onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                     onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
@@ -616,6 +640,9 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         ) : (
                                             <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">General</span>
                                         )}
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${p.playbookPerspective === 'provider' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                                            {p.playbookPerspective === 'provider' ? 'Provider' : 'Customer'}
+                                        </span>
                                     </div>
                                     {/* Inline Change Type editor */}
                                     {editingTypeId === p.playbookId && (
@@ -1757,7 +1784,7 @@ function CompanyAdminContent() {
             const { data, error } = await supabase.from('company_playbooks').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
             console.log('Playbooks:', { data, error })
             if (error) { if (error.code === '42P01') { setPlaybooks([]); return }; throw error }
-            setPlaybooks((data || []).map(p => ({ playbookId: p.playbook_id, playbookName: p.playbook_name, playbookVersion: p.playbook_version, playbookDescription: p.playbook_description, playbookSummary: p.playbook_summary, status: p.status, isActive: p.is_active || false, contractTypeKey: p.contract_type_key || null, sourceFileName: p.source_file_name, sourceFilePath: p.source_file_path, rulesExtracted: p.rules_extracted || 0, aiConfidenceScore: p.ai_confidence_score, effectiveDate: p.effective_date, expiryDate: p.expiry_date, createdAt: p.created_at, createdBy: p.created_by, parsingError: p.parsing_error })))
+            setPlaybooks((data || []).map(p => ({ playbookId: p.playbook_id, playbookName: p.playbook_name, playbookVersion: p.playbook_version, playbookDescription: p.playbook_description, playbookSummary: p.playbook_summary, status: p.status, isActive: p.is_active || false, contractTypeKey: p.contract_type_key || null, playbookPerspective: p.playbook_perspective || 'customer', sourceFileName: p.source_file_name, sourceFilePath: p.source_file_path, rulesExtracted: p.rules_extracted || 0, aiConfidenceScore: p.ai_confidence_score, effectiveDate: p.effective_date, expiryDate: p.expiry_date, createdAt: p.created_at, createdBy: p.created_by, parsingError: p.parsing_error })))
         } catch (e) { console.error('Load playbooks error:', e); setPlaybooks([]) } finally { setPlaybooksLoading(false) }
     }, [])
 
@@ -1818,7 +1845,7 @@ function CompanyAdminContent() {
     }, [])
 
 
-    const handlePlaybookUpload = async (file: File, contractTypeKey: string | null = null) => {
+    const handlePlaybookUpload = async (file: File, contractTypeKey: string | null = null, perspective: 'customer' | 'provider' = 'customer') => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
         let companyId = userInfo.companyId
@@ -1835,6 +1862,7 @@ function CompanyAdminContent() {
             status: 'pending_parse',
             created_by_user_id: userInfo?.userId,
             contract_type_key: contractTypeKey,
+            playbook_perspective: perspective,
         })
         if (insertError) throw new Error(insertError.message)
         await loadPlaybooks(companyId!)

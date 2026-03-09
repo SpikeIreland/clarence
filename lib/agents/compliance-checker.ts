@@ -7,6 +7,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import {
     type PlaybookRule,
+    type PlaybookPerspective,
     type ContractClause,
     type RuleStatus,
     type ScoredRule,
@@ -34,6 +35,7 @@ export interface ComplianceCheckInput {
     allClauses: ComplianceClauseSnapshot[]
     companyId: string
     contractTypeKey?: string | null
+    perspective?: PlaybookPerspective
 }
 
 export interface ComplianceClauseSnapshot {
@@ -165,13 +167,16 @@ export async function checkCompliance(
         is_header: false,
     }))
 
+    const perspective = input.perspective || 'customer'
+
     // Run single-clause compliance check (before/after)
     const singleCheck = checkSingleClauseCompliance(
         playbookRules,
         clauses,
         input.clauseId,
         input.proposedPosition,
-        input.party
+        input.party,
+        perspective
     )
 
     // Find rules in the same normalised category as the target clause
@@ -189,7 +194,7 @@ export async function checkCompliance(
     let escalationContactEmail: string | null = null
 
     for (const rule of categoryRules) {
-        const { status, detail } = scoreRule(rule, input.proposedPosition)
+        const { status, detail } = scoreRule(rule, input.proposedPosition, perspective)
 
         // Collect breached rules
         if (status === 'breach' || status === 'fail' || status === 'escalation' || status === 'warning') {
@@ -363,7 +368,8 @@ function shouldEscalateToAgent(
     }
 
     // Multiple conflicting severity levels in same category
-    const statuses = new Set(categoryRules.map(r => scoreRule(r, input.proposedPosition).status))
+    const perspective = input.perspective || 'customer'
+    const statuses = new Set(categoryRules.map(r => scoreRule(r, input.proposedPosition, perspective).status))
     if (statuses.has('pass') && (statuses.has('breach') || statuses.has('fail'))) {
         return true
     }
@@ -396,12 +402,21 @@ async function callComplianceAgent(
 
     const client = new Anthropic({ apiKey })
 
+    const perspectiveLabel = input.perspective === 'provider' ? 'PROVIDER' : 'CUSTOMER'
+    const scaleDesc = input.perspective === 'provider'
+        ? `- 1 = Weakest position for the provider (maximum concession to customer)
+- 5 = Balanced / Market standard
+- 10 = Strongest position for the provider (maximum protection for provider)`
+        : `- 1 = Maximum flexibility for the providing party (e.g. Provider, Seller)
+- 5 = Balanced / Market standard
+- 10 = Maximum protection for the protected party (e.g. Customer, Buyer)`
+
     const systemPrompt = `You are a contract compliance analyst for the CLARENCE negotiation platform. Given a playbook rule with its rationale, negotiation tips, and range context, assess whether a proposed position move genuinely violates the spirit of the rule or is acceptable in context.
 
-## Position Scale
-- 1 = Maximum flexibility for the providing party (e.g. Provider, Seller)
-- 10 = Maximum protection for the protected party (e.g. Customer, Buyer)
-- 5 = Balanced / Market standard
+This playbook is written from the ${perspectiveLabel} perspective.
+
+## Position Scale (${perspectiveLabel} perspective)
+${scaleDesc}
 
 ## Severity Levels (from least to most severe)
 - clear: No issue — position is within acceptable bounds

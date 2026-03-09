@@ -47,6 +47,8 @@ export interface ContractClause {
     is_header: boolean
 }
 
+export type PlaybookPerspective = 'customer' | 'provider'
+
 export interface PlaybookInfo {
     playbook_id: string
     playbook_name: string
@@ -344,14 +346,31 @@ function getCategoryAveragePosition(
 // ============================================================================
 
 /**
+ * Convert a contract position (customer-oriented scale) to match a
+ * provider playbook's scale. Provider positions use 10=provider-strong,
+ * 1=provider-weak, while contract positions use 10=customer-strong,
+ * 1=customer-weak (= provider-strong). Converting: providerEquiv = 11 - pos.
+ */
+function alignPosition(position: number, perspective: PlaybookPerspective): number {
+    return perspective === 'provider' ? 11 - position : position
+}
+
+/**
  * Score a single playbook rule against an effective position.
  * Uses a TOP-DOWN compliance model:
  *   - At or above ideal     = 100% (fully compliant)
  *   - Between minimum-ideal = 85%  (compliant, within acceptable range)
  *   - Below minimum         = 30%  (non-compliant)
  *   - Deal breaker breach   = 0%   (critical breach)
+ *
+ * When perspective is 'provider', the effective position (on the customer
+ * scale) is converted to the provider scale before comparison.
  */
-export function scoreRule(rule: PlaybookRule, effectivePosition: number | null): {
+export function scoreRule(
+    rule: PlaybookRule,
+    effectivePosition: number | null,
+    perspective: PlaybookPerspective = 'customer'
+): {
     status: RuleStatus
     score: number
     detail: string
@@ -364,8 +383,11 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
         }
     }
 
+    // Convert contract position to match playbook perspective
+    const pos = alignPosition(effectivePosition, perspective)
+
     // Deal breaker below minimum = BREACH (most critical — 0%)
-    if (rule.is_deal_breaker && effectivePosition < rule.minimum_position) {
+    if (rule.is_deal_breaker && pos < rule.minimum_position) {
         return {
             status: 'breach',
             score: 0,
@@ -374,7 +396,7 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
     }
 
     // Non-negotiable below ideal = FAIL (30%)
-    if (rule.is_non_negotiable && effectivePosition < rule.ideal_position) {
+    if (rule.is_non_negotiable && pos < rule.ideal_position) {
         return {
             status: 'fail',
             score: 30,
@@ -383,7 +405,7 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
     }
 
     // At or above ideal = PASS (100%)
-    if (effectivePosition >= rule.ideal_position) {
+    if (pos >= rule.ideal_position) {
         return {
             status: 'pass',
             score: 100,
@@ -392,9 +414,9 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
     }
 
     // Within acceptable range — minimum to ideal (85%)
-    if (effectivePosition >= rule.minimum_position) {
+    if (pos >= rule.minimum_position) {
         // Check if below escalation threshold
-        if (rule.requires_approval_below != null && effectivePosition < rule.requires_approval_below) {
+        if (rule.requires_approval_below != null && pos < rule.requires_approval_below) {
             return {
                 status: 'warning',
                 score: 85,
@@ -410,7 +432,7 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
     }
 
     // Below minimum — escalation territory (30%)
-    if (rule.requires_approval_below != null && effectivePosition < rule.requires_approval_below) {
+    if (rule.requires_approval_below != null && pos < rule.requires_approval_below) {
         return {
             status: 'escalation',
             score: 30,
@@ -432,7 +454,8 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
 
 function analyseRedLines(
     rules: PlaybookRule[],
-    clauses: ContractClause[]
+    clauses: ContractClause[],
+    perspective: PlaybookPerspective = 'customer'
 ): RedLineResult[] {
     // Red lines = is_deal_breaker OR is_non_negotiable
     const redLineRules = rules.filter(r => r.is_deal_breaker || r.is_non_negotiable)
@@ -440,10 +463,11 @@ function analyseRedLines(
     return redLineRules.map(rule => {
         const normCat = normaliseCategory(rule.category)
         const { avgPosition } = getCategoryAveragePosition(clauses, normCat)
+        const pos = avgPosition !== null ? alignPosition(avgPosition, perspective) : null
 
-        const isBreach = avgPosition !== null && (
-            (rule.is_deal_breaker && avgPosition < rule.minimum_position) ||
-            (rule.is_non_negotiable && avgPosition < rule.ideal_position)
+        const isBreach = pos !== null && (
+            (rule.is_deal_breaker && pos < rule.minimum_position) ||
+            (rule.is_non_negotiable && pos < rule.ideal_position)
         )
 
         const escalationTriggered = rule.requires_approval_below != null &&
@@ -479,7 +503,8 @@ function analyseRedLines(
 
 function analyseFlexibility(
     rules: PlaybookRule[],
-    clauses: ContractClause[]
+    clauses: ContractClause[],
+    perspective: PlaybookPerspective = 'customer'
 ): FlexibilityResult[] {
     // Flexibility rules = wide position range (ideal - minimum >= 2)
     const flexRules = rules.filter(r => {
@@ -490,12 +515,13 @@ function analyseFlexibility(
     return flexRules.map(rule => {
         const normCat = normaliseCategory(rule.category)
         const { avgPosition } = getCategoryAveragePosition(clauses, normCat)
+        const pos = avgPosition !== null ? alignPosition(avgPosition, perspective) : null
 
         const flexRange = rule.ideal_position - rule.minimum_position
         let consumedPct = 0
 
-        if (avgPosition !== null && flexRange > 0) {
-            const consumed = rule.ideal_position - avgPosition
+        if (pos !== null && flexRange > 0) {
+            const consumed = rule.ideal_position - pos
             consumedPct = Math.max(0, Math.min(100, Math.round((consumed / flexRange) * 100)))
         }
 
@@ -528,7 +554,8 @@ function analyseFlexibility(
 
 function aggregateByCategory(
     rules: PlaybookRule[],
-    clauses: ContractClause[]
+    clauses: ContractClause[],
+    perspective: PlaybookPerspective = 'customer'
 ): CategoryResult[] {
     // Group rules by normalised category
     const categoryMap = new Map<string, PlaybookRule[]>()
@@ -547,7 +574,7 @@ function aggregateByCategory(
         const { avgPosition, matchedCount } = getCategoryAveragePosition(clauses, normCat)
 
         const scoredRules: ScoredRule[] = catRules.map(rule => {
-            const { status, score, detail } = scoreRule(rule, avgPosition)
+            const { status, score, detail } = scoreRule(rule, avgPosition, perspective)
             return {
                 rule,
                 status,
@@ -608,10 +635,14 @@ function aggregateByCategory(
 /**
  * Main entry point: calculates full playbook compliance from rules + clauses.
  * Call this from the Document Centre after fetching both datasets.
+ *
+ * When perspective is 'provider', contract positions (customer-oriented)
+ * are converted to the provider scale before comparison against playbook rules.
  */
 export function calculatePlaybookCompliance(
     rules: PlaybookRule[],
-    clauses: ContractClause[]
+    clauses: ContractClause[],
+    perspective: PlaybookPerspective = 'customer'
 ): ComplianceResult {
     // Filter to active, non-header clauses only
     const activeClauses = clauses.filter(c => !c.is_header)
@@ -626,9 +657,9 @@ export function calculatePlaybookCompliance(
     const unmatchedCategories = [...playbookCategories].filter(pc => !contractCategories.has(pc))
 
     // Run analyses
-    const categories = aggregateByCategory(rules, activeClauses)
-    const redLines = analyseRedLines(rules, activeClauses)
-    const flexibility = analyseFlexibility(rules, activeClauses)
+    const categories = aggregateByCategory(rules, activeClauses, perspective)
+    const redLines = analyseRedLines(rules, activeClauses, perspective)
+    const flexibility = analyseFlexibility(rules, activeClauses, perspective)
 
     // Calculate overall score (weighted average of category scores, excluding unmatched)
     const matchedCategories = categories.filter(c => !unmatchedCategories.includes(c.normalisedKey))
@@ -679,7 +710,8 @@ export function checkSingleClauseCompliance(
     allClauses: ContractClause[],
     targetClauseId: string,
     proposedPosition: number,
-    party: 'initiator' | 'respondent' | 'customer' | 'provider'
+    party: 'initiator' | 'respondent' | 'customer' | 'provider',
+    perspective: PlaybookPerspective = 'customer'
 ): {
     affectedRules: ScoredRule[]
     categoryScore: number
@@ -688,7 +720,7 @@ export function checkSingleClauseCompliance(
     redLineBreaches: RedLineResult[]
 } {
     // 1. Calculate current compliance (before move)
-    const currentResult = calculatePlaybookCompliance(rules, allClauses)
+    const currentResult = calculatePlaybookCompliance(rules, allClauses, perspective)
 
     // 2. Create modified clauses with proposed position
     const isInitiatorSide = party === 'initiator' || party === 'customer'
@@ -700,7 +732,7 @@ export function checkSingleClauseCompliance(
     })
 
     // 3. Calculate new compliance
-    const newResult = calculatePlaybookCompliance(rules, modifiedClauses)
+    const newResult = calculatePlaybookCompliance(rules, modifiedClauses, perspective)
 
     // 4. Find affected rules (in the same category as the target clause)
     const targetClause = allClauses.find(c => c.clause_id === targetClauseId)

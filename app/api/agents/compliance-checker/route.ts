@@ -86,8 +86,11 @@ export async function POST(request: NextRequest) {
             })
         }
 
+        // Pass playbook perspective through to the compliance engine
+        body.perspective = playbook.playbook_perspective || 'customer'
+
         console.log(`[ComplianceChecker API] Checking compliance for clause ${body.clauseId}`)
-        console.log(`  Playbook: ${playbook.playbook_name} (${rules.length} rules)`)
+        console.log(`  Playbook: ${playbook.playbook_name} (${rules.length} rules, perspective: ${body.perspective})`)
         console.log(`  Proposed position: ${body.proposedPosition}, Current: ${body.currentPosition}`)
 
         const result = await checkCompliance(body, rules as PlaybookRule[])
