@@ -1,6 +1,6 @@
 // ============================================================================
 // SMART PLAYBOOK EXTRACTION - Aligned to actual playbook_rules schema
-// V3: Position accuracy, per-clause measures, range_context output
+// V4: Timeout-safe — aggressive text reduction for large playbooks
 // ============================================================================
 
 const playbookData = $("Get Playbook Metadata").first().json;
@@ -19,8 +19,11 @@ if (!extractedText || extractedText.length < 100) {
 // ============================================================================
 // SMART EXTRACTION: Find and keep sections with negotiation rules
 // ============================================================================
+// Lowered from 200K to 50K: Claude needs to produce 30-80 detailed rules,
+// each with ~15 fields. Input + output must complete within 5-minute timeout.
+// Smart keyword scoring preserves the most relevant sections.
 
-const MAX_CHARS = 200000;
+const MAX_CHARS = 50000;
 const originalLength = extractedText.length;
 
 let processedText = extractedText;
@@ -251,7 +254,7 @@ For each rule, output a range_context object mapping the 1-10 scale to real-worl
 }
 
 Rules:
-- Provide 3-5 scale_points covering at minimum positions 1, 5, and 10.
+- Provide EXACTLY 3 scale_points: positions 1, 5, and 10. No more.
 - If the playbook states exact values, use those. Otherwise use industry defaults.
 - For qualitative clauses (scope, rights), use value_type "text" and descriptive labels.
 - Always set source to "parsed".
@@ -260,16 +263,18 @@ Rules:
 OTHER FIELDS
 ═══════════════════════════════════════════════════
 
-For each rule (keep text fields to 1-2 sentences max):
+IMPORTANT: Keep ALL text fields SHORT (max 15 words each) to stay within response limits.
+
+For each rule:
 - clause_code: Short identifier (e.g. "LIA-001", "TERM-002", "INS-003")
 - clause_name: Specific clause title (e.g. "Liability Cap", not just "Liability")
 - category: One of: liability, termination, payment, intellectual_property, confidentiality, data_protection, service_levels, warranties, indemnification, insurance, governance, employment, audit, benchmarking, dispute_resolution, change_control, exit_transition, subcontracting, force_majeure, other
-- rationale: Why this matters (1 sentence, from the playbook — not invented)
-- negotiation_tips: Key tactic (1 sentence)
-- talking_points: Main argument (1 sentence)
-- common_objections: Typical counterparty pushback (1 sentence)
-- counter_arguments: Response to objections (1 sentence)
-- escalation_trigger: What triggers escalation (1 sentence, or null)
+- rationale: Why this matters (max 15 words, from the playbook — not invented)
+- negotiation_tips: Key tactic (max 15 words)
+- talking_points: Main argument (max 15 words)
+- common_objections: Typical counterparty pushback (max 15 words)
+- counter_arguments: Response to objections (max 15 words)
+- escalation_trigger: What triggers escalation (max 15 words, or null)
 - escalation_contact: Role to escalate to (e.g. "Group Legal Director")
 - requires_approval_below: Position requiring approval (integer 1-10, or null)
 - importance_level: Criticality 1-10 (10=most critical)
@@ -309,7 +314,7 @@ ${wasTruncated ? `[Note: Key sections extracted via ${extractionMethod}. Focus o
 ${processedText}
 ---
 
-Remember: Extract EVERY rule with differentiated positions and per-clause range_context. Count them. Return JSON with playbook_summary, extraction_confidence, total_rules_extracted, and the complete rules array.`;
+Remember: Extract EVERY rule with differentiated positions and per-clause range_context. Count them. Keep ALL text fields under 15 words — brevity is critical. Return ONLY the JSON object with playbook_summary, extraction_confidence, total_rules_extracted, and the complete rules array. No other text.`;
 
 return {
   playbookId: playbookData.playbook_id,
