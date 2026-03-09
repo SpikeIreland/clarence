@@ -170,7 +170,7 @@ function BetaTestingAdminDashboard() {
     const [loading, setLoading] = useState(true)
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats' | 'videos'>('users')
+    const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats' | 'videos' | 'marketing'>('users')
 
     // Create user state
     const [createForm, setCreateForm] = useState({
@@ -1079,12 +1079,21 @@ function BetaTestingAdminDashboard() {
 
                         <button
                             onClick={() => setActiveTab('stats')}
-                            className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'stats'
-                                ? 'border-[#2563eb] text-[#2563eb]'
-                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                            className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'stats'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-slate-600 hover:bg-slate-50'
                                 }`}
                         >
-                            📊 Stats
+                            <span>📈</span> Statistics
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('marketing')}
+                            className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === 'marketing'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-slate-600 hover:bg-slate-50'
+                                }`}
+                        >
+                            <span>🤖</span> Marketing Agents
                         </button>
 
                         <button
@@ -1370,8 +1379,8 @@ function BetaTestingAdminDashboard() {
                                             {/* Status Message */}
                                             {companyActionMessage && (
                                                 <div className={`p-3 rounded-lg mb-3 text-sm font-medium ${companyActionMessage.type === 'success'
-                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                        : 'bg-red-50 text-red-700 border border-red-200'
+                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                    : 'bg-red-50 text-red-700 border border-red-200'
                                                     }`}>
                                                     {companyActionMessage.type === 'success' ? '✅' : '❌'} {companyActionMessage.text}
                                                 </div>
@@ -1385,8 +1394,8 @@ function BetaTestingAdminDashboard() {
                                                     </p>
                                                     <p className="text-xs text-blue-700 mt-1">
                                                         Role: <span className={`font-semibold ${selectedUser.companyUserRecord?.role === 'admin'
-                                                                ? 'text-purple-700'
-                                                                : 'text-blue-700'
+                                                            ? 'text-purple-700'
+                                                            : 'text-blue-700'
                                                             }`}>
                                                             {selectedUser.companyUserRecord?.role || 'user'}
                                                         </span>

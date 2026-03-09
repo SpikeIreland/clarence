@@ -1,0 +1,425 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "provider-questionnaire-submit",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -880,
+                -32
+            ],
+            "id": "bf96dea8-b558-44ef-9caa-9c602ee4b7ef",
+            "name": "Webhook",
+            "webhookId": "provider-questionnaire-submit-endpoint"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "cors-check",
+                            "leftValue": "={{ $json.headers?.['access-control-request-method'] }}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "exists"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -656,
+                -32
+            ],
+            "id": "60e48250-7bfa-44e9-a7f2-a0d0d1a2e750",
+            "name": "CORS Check"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{}",
+                "options": {
+                    "responseCode": 200,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Methods",
+                                "value": "GET, POST, OPTIONS"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Headers",
+                                "value": "Content-Type, Authorization"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -432,
+                -80
+            ],
+            "id": "baa91c22-c035-4cd5-91b1-838ea4c639bb",
+            "name": "CORS Response"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// PROCESS PROVIDER QUESTIONNAIRE SUBMISSION\n// ============================================================================\n\nconst body = $input.first().json.body || $input.first().json || {};\n\nconsole.log(\"=== PROVIDER QUESTIONNAIRE SUBMISSION V2 ===\");\nconsole.log(\"Received data:\", JSON.stringify(body, null, 2));\n\nconst sessionId = body.sessionId || body.session_id;\nconst providerId = body.providerId || body.provider_id; // ADD THIS\nconst partyType = body.partyType || \"provider\";\nconst answers = body.answers || {};\nconst submittedAt = body.submittedAt || new Date().toISOString();\nconst questionCount = body.questionCount || Object.keys(answers).length;\nconst formVersion = body.formVersion || \"1.0\";\n\nif (!sessionId) {\n  throw new Error(\"Session ID is required\");\n}\n\nconsole.log(\"Session ID:\", sessionId);\nconsole.log(\"Provider ID:\", providerId); // ADD THIS\nconsole.log(\"Answer count:\", Object.keys(answers).length);\n\n// Prepare answers as JSON string for database\nconst answersJson = JSON.stringify(answers);\n\nreturn [\n  {\n    json: {\n      sessionId,\n      providerId, // ADD THIS\n      partyType,\n      answers,\n      answersJson,\n      submittedAt,\n      questionCount,\n      formVersion,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -432,
+                160
+            ],
+            "id": "2c74e212-30a3-498d-b6c4-fb30674d04e3",
+            "name": "Process Data"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE provider_bids \nSET \n  questionnaire_complete = true,\n  questionnaire_completed_at = CURRENT_TIMESTAMP,\n  questionnaire_data = '{{ $json.questionnaireDataEscaped }}'::jsonb,\n  status = 'questionnaire_complete',\n  updated_at = CURRENT_TIMESTAMP\nWHERE session_id = '{{ $json.sessionId }}'::uuid\n  AND provider_id = '{{ $json.providerId }}'::uuid\nRETURNING bid_id, session_id, questionnaire_complete;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                16,
+                160
+            ],
+            "id": "bcfa8907-0629-42ad-97c0-27b207ceb6f9",
+            "name": "Update Provider Bid",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE sessions \nSET \n  status = 'provider_ready',\n  updated_at = CURRENT_TIMESTAMP\nWHERE session_id = '{{ $json.session_id }}'\nRETURNING session_id, session_number, status;",
+                "options": {
+                    "queryReplacement": "={{ [$('Process Data').first().json.sessionId] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                240,
+                64
+            ],
+            "id": "4d33705d-5517-490b-97a9-e749b2a6c791",
+            "name": "Update Session Status",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://spikeislandstudios.app.n8n.cloud/webhook/calculate-leverage",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"session_id\": \"{{ $('Normalise Questionnaire Data').first().json.sessionId }}\",\n  \"triggered_by\": \"provider_questionnaire_submit\", \n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "neverError": true
+                        }
+                    },
+                    "timeout": 60000
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                464,
+                64
+            ],
+            "id": "77bd31c6-1fd8-41a8-9038-3c88a174ab7f",
+            "name": "Trigger Leverage Calculation",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// BUILD RESPONSE\n// ============================================================================\n\nconst processData = $('Process Data').first().json;\nconst leverageResult = $input.first().json;\n\nconsole.log('=== QUESTIONNAIRE SUBMISSION COMPLETE ===');\nconsole.log('Leverage calculation result:', JSON.stringify(leverageResult, null, 2));\n\nconst leverageSuccess = leverageResult?.success === true;\nconst leverageData = leverageSuccess ? {\n  customer: leverageResult.leverage?.customer,\n  provider: leverageResult.leverage?.provider,\n  clauseCount: leverageResult.clauses?.count,\n  overallAlignment: leverageResult.clauses?.overallAlignment\n} : null;\n\nreturn [{\n  json: {\n    success: true,\n    message: 'Questionnaire submitted successfully',\n    sessionId: processData.sessionId,\n    questionnaire: {\n      answerCount: Object.keys(processData.answers).length,\n      completedAt: processData.submittedAt\n    },\n    leverageCalculation: leverageSuccess ? 'completed' : 'pending',\n    leverage: leverageData,\n    redirectTo: '/auth/contract-studio?session_id=' + processData.sessionId\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                688,
+                64
+            ],
+            "id": "4365335f-1bbb-4c60-a188-f5e9e4d78310",
+            "name": "Build Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                912,
+                64
+            ],
+            "id": "2df3e8b7-2799-474b-b308-8ce9d15ffae9",
+            "name": "Success Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\n  \"success\": false,\n  \"error\": \"Failed to save questionnaire\",\n  \"sessionId\": \"{{ $('Process Data').first().json.sessionId }}\"\n}",
+                "options": {
+                    "responseCode": 500,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                240,
+                256
+            ],
+            "id": "470568a1-7c8d-4b85-966d-7a3980f9931f",
+            "name": "Error Response"
+        },
+        {
+            "parameters": {
+                "notice": "=== MANUAL TRIGGER FOR TESTING ==="
+            },
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                -880,
+                208
+            ],
+            "id": "14b98f27-bace-45e0-90da-8fc97e8f1c1e",
+            "name": "Manual Trigger"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Test data for manual testing\nconst testData = {\n  body: {\n    sessionId: \"YOUR_SESSION_ID_HERE\",\n    partyType: \"provider\",\n    answers: {\n      batna_quality: \"6\",\n      batna_timeline: \"6-8 weeks\",\n      deal_criticality: \"Very Important - significant revenue opportunity\",\n      red_lines: \"Liability cap below 100%, Payment terms beyond NET 45\",\n      flexibility_areas: \"Pricing structure, SLA tiering, Transition timeline\",\n      pricing_strategy: \"Value-based with performance incentives\",\n      relationship_vs_margin: \"5\",\n      competitive_concerns: \"Incumbent has relationship advantage\",\n      negotiation_authority: \"Full authority within pre-approved parameters\",\n      timeline_flexibility: \"Moderate flexibility, prefer Q1 start\",\n      partnership_confidence: \"7\",\n      escalation_triggers: \"IP ownership demands, Unlimited liability\",\n      long_term_vision: \"Top 3 account within 3 years\"\n    },\n    submittedAt: new Date().toISOString(),\n    questionCount: 13,\n    formVersion: \"1.0\"\n  }\n};\nreturn [{ json: testData }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -656,
+                208
+            ],
+            "id": "fb8f8353-141b-4b88-9dae-6432f1a2d1ee",
+            "name": "Test Data"
+        },
+        {
+            "parameters": {
+                "jsCode": "const body = $input.first().json.body || $input.first().json || {};\n\n// Get session ID and provider ID\nconst sessionId = body.sessionId || body.session_id || \"\";\nconst providerId = body.providerId || body.provider_id || \"\";\n\n// Get questionnaire data and escape single quotes for PostgreSQL\nconst questionnaireData =\n  body.answers || body.questionnaireData || body.questionnaire_data || {};\nconst escapedJson = JSON.stringify(questionnaireData).replace(/'/g, \"''\");\n\nconsole.log(\"=== QUESTIONNAIRE DATA ===\");\nconsole.log(\"Session ID:\", sessionId);\nconsole.log(\"Provider ID:\", providerId);\n\nif (!sessionId) {\n  throw new Error(\"Missing sessionId\");\n}\n\nif (!providerId) {\n  throw new Error(\"Missing providerId\");\n}\n\nreturn [\n  {\n    json: {\n      sessionId: sessionId,\n      providerId: providerId,\n      questionnaireDataEscaped: escapedJson,\n      submittedAt: body.submittedAt || new Date().toISOString(),\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -208,
+                160
+            ],
+            "id": "23163442-bd60-4867-96f5-0b8be0711dc3",
+            "name": "Normalise Questionnaire Data"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "CORS Check": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Process Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Data": {
+            "main": [
+                [
+                    {
+                        "node": "Normalise Questionnaire Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Provider Bid": {
+            "main": [
+                [
+                    {
+                        "node": "Update Session Status",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Error Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Session Status": {
+            "main": [
+                [
+                    {
+                        "node": "Trigger Leverage Calculation",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Trigger Leverage Calculation",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Trigger Leverage Calculation": {
+            "main": [
+                [
+                    {
+                        "node": "Build Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Build Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Response": {
+            "main": [
+                [
+                    {
+                        "node": "Success Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Manual Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Test Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Test Data": {
+            "main": [
+                [
+                    {
+                        "node": "Process Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalise Questionnaire Data": {
+            "main": [
+                [
+                    {
+                        "node": "Update Provider Bid",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

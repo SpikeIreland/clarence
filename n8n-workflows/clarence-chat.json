@@ -1,0 +1,450 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "clarence-chat",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                -800,
+                -576
+            ],
+            "id": "7fdb6e06-5173-4dfb-b6cc-61918e97cc76",
+            "name": "Webhook",
+            "webhookId": "74ef116f-253b-41ee-99e5-8e8768934cfa"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// SECTION 1: VALIDATE INPUT — MODE-AWARE\n// Detects whether this is a session chat, dashboard chat, or general chat\n// ============================================================================\n\nconst webhookData = $input.first().json;\nconst body = webhookData.body || webhookData;\n\n// UUID validation regex\nconst uuidRegex =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n\n// ============================================================================\n// EXTRACT PARAMETERS\n// ============================================================================\n\nconst userId = body.userId || null;\nconst sessionId = body.sessionId || null;\nconst bidId = body.bidId || \"\";\nconst message = body.message || \"\";\nconst viewerRole = body.viewerRole || \"customer\";\nconst companyId = body.companyId || body.viewerCompanyId || \"\";\nconst conversationHistory = body.conversationHistory || [];\n\n// Dashboard-specific data (sent when context === 'dashboard')\nconst dashboardData = body.dashboardData || null;\nconst requestContext = body.context || \"\";\n\n// ============================================================================\n// MODE DETECTION\n// ============================================================================\n\nlet chatMode = \"session\"; // default\n\nif (sessionId && uuidRegex.test(sessionId)) {\n  chatMode = \"session\";\n} else if (dashboardData && dashboardData.userInfo) {\n  chatMode = \"dashboard\";\n} else {\n  chatMode = \"general\";\n}\n\n// ============================================================================\n// VALIDATION\n// ============================================================================\n\n// User ID always required\nif (!userId) {\n  throw new Error(\n    \"User authentication required. User must be logged in to use CLARENCE.\",\n  );\n}\n\nif (!uuidRegex.test(userId)) {\n  throw new Error(\"Invalid user ID format. Please log in again.\");\n}\n\n// Session ID only required for session mode\nif (chatMode === \"session\" && !sessionId) {\n  throw new Error(\"Session ID is required for session-based CLARENCE chat.\");\n}\n\nif (chatMode === \"session\" && !uuidRegex.test(sessionId)) {\n  throw new Error(\"Invalid session ID format.\");\n}\n\n// Message always required\nif (!message || message.trim() === \"\") {\n  throw new Error(\"Message content is required.\");\n}\n\n// Validate viewer role for session mode\nif (chatMode === \"session\" && ![\"customer\", \"provider\"].includes(viewerRole)) {\n  throw new Error('viewerRole must be \"customer\" or \"provider\".');\n}\n\n// ============================================================================\n// PREPARE OUTPUT\n// ============================================================================\n\nconsole.log(\"=== CLARENCE CHAT REQUEST ===\");\nconsole.log(\"Mode:\", chatMode);\nconsole.log(\"User:\", userId);\nconsole.log(\"Session:\", sessionId || \"(none - \" + chatMode + \" mode)\");\nconsole.log(\"Bid:\", bidId || \"(none)\");\nconsole.log(\"Role:\", viewerRole);\nconsole.log(\"Message length:\", message.length);\nif (dashboardData) {\n  console.log(\n    \"Dashboard data: company=\" + (dashboardData.userInfo?.company || \"unknown\"),\n  );\n  console.log(\n    \"Dashboard data: contracts=\" + (dashboardData.totalContracts || 0),\n  );\n}\n\nreturn {\n  // Chat mode flag — used by all downstream nodes\n  chatMode: chatMode,\n\n  // For context builder (session mode only)\n  sessionId: sessionId,\n  bidId: bidId,\n  viewerRole: viewerRole,\n  viewerUserId: userId,\n  viewerCompanyId: companyId,\n  touchpointType: \"chat\",\n  touchpointContext: {\n    userMessage: message,\n  },\n\n  // Dashboard data (dashboard mode only)\n  dashboardData: dashboardData,\n\n  // Keep original data for later use\n  original: {\n    userId: userId,\n    sessionId: sessionId,\n    bidId: bidId,\n    message: message,\n    conversationHistory: conversationHistory,\n    timestamp: new Date().toISOString(),\n    chatMode: chatMode,\n  },\n};\n"
+            },
+            "id": "f960b2a3-d96e-4ed2-953f-fd7eaacad1e3",
+            "name": "Validate Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -560,
+                -576
+            ]
+        },
+        {
+            "parameters": {
+                "workflowId": {
+                    "__rl": true,
+                    "value": "",
+                    "mode": "list"
+                },
+                "options": {}
+            },
+            "id": "553e4a41-7ad9-42a3-b7d5-987593e26943",
+            "name": "Build Context",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1,
+            "position": [
+                -128,
+                -704
+            ],
+            "notesInFlow": true,
+            "notes": "Calls clarence-context-builder sub-workflow.\n\nIMPORTANT: Set the workflowId to your context builder workflow ID after import."
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict"
+                    },
+                    "conditions": [
+                        {
+                            "id": "context-success-check",
+                            "leftValue": "={{ $json.success }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "id": "be7f48ad-adf8-461b-b98f-2f7c2e1d9223",
+            "name": "Context Built?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2,
+            "position": [
+                96,
+                -704
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\n  \"success\": false,\n  \"error\": \"Failed to build negotiation context. Please try again.\",\n  \"sessionId\": \"{{ $('Validate Input').first().json.original.sessionId }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+                "options": {
+                    "responseCode": 500
+                }
+            },
+            "id": "9ed46d8e-7f50-4752-93cb-c53ac1c699a5",
+            "name": "Error Response",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.4,
+            "position": [
+                320,
+                -528
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.anthropic.com/v1/messages",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "anthropic-version",
+                            "value": "2023-06-01"
+                        },
+                        {
+                            "name": "content-type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 1500,\n  \"temperature\": 0,\n  \"system\": {{ JSON.stringify($json.systemPrompt) }},\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.userPrompt) }}\n    }\n  ]\n}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "responseFormat": "json"
+                        }
+                    }
+                }
+            },
+            "id": "30c070af-6fbc-4c5b-b651-daac3815d20f",
+            "name": "Call Claude API",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                544,
+                -800
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "xYYWl2zK5GgqiQf8",
+                    "name": "Anthropic API Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// SECTION 3: PROCESS CLAUDE RESPONSE — MODE-AWARE\n// Handles response for both session and dashboard/general modes\n// ============================================================================\n\nconst claudeResponse = $input.first().json;\n\n// Determine which prompt builder was used\n// In session mode, data comes through Build Session Prompt\n// In dashboard mode, data comes through Build Dashboard Prompt\nlet promptData;\nlet chatMode;\n\ntry {\n  promptData = $(\"Build Session Prompt\").first().json;\n  chatMode = \"session\";\n} catch (e) {\n  try {\n    promptData = $(\"Build Dashboard Prompt\").first().json;\n    chatMode = promptData.chatMode || \"dashboard\";\n  } catch (e2) {\n    throw new Error(\"Could not find prompt data from either path\");\n  }\n}\n\nconst ctx = promptData.context; // null for dashboard mode\nconst original = promptData.original;\n\n// ============================================================================\n// EXTRACT RESPONSE TEXT\n// ============================================================================\n\nlet responseText = \"\";\n\nif (claudeResponse.content && Array.isArray(claudeResponse.content)) {\n  const textBlock = claudeResponse.content.find(\n    (block) => block.type === \"text\",\n  );\n  responseText = textBlock?.text || \"\";\n} else if (claudeResponse.text) {\n  responseText = claudeResponse.text;\n} else if (typeof claudeResponse === \"string\") {\n  responseText = claudeResponse;\n}\n\nif (!responseText) {\n  console.log(\n    \"Claude response structure:\",\n    JSON.stringify(claudeResponse, null, 2),\n  );\n  responseText =\n    \"I apologise, but I was unable to generate a response. Please try again.\";\n}\n\n// ============================================================================\n// EXTRACT DISCOVERED DATA (session mode only)\n// ============================================================================\n\nconst discoveredData = {};\nconst dataPattern = /\\[DATA:\\s*([^,]+),\\s*([^\\]]+)\\]/g;\nlet match;\nwhile ((match = dataPattern.exec(responseText)) !== null) {\n  const category = match[1].trim();\n  const value = match[2].trim();\n  if (!discoveredData[category]) {\n    discoveredData[category] = [];\n  }\n  discoveredData[category].push(value);\n}\n\n// Clean response (remove DATA markers)\nconst cleanResponse = responseText.replace(dataPattern, \"\").trim();\n\n// ============================================================================\n// BUILD CONVERSATION HISTORY\n// ============================================================================\n\nconst previousHistory = original.conversationHistory || [];\nconst updatedHistory = [\n  ...previousHistory,\n  {\n    role: \"user\",\n    content: original.message,\n    timestamp: original.timestamp,\n  },\n  {\n    role: \"assistant\",\n    content: cleanResponse,\n    timestamp: new Date().toISOString(),\n  },\n];\n\n// ============================================================================\n// PREPARE STORAGE DATA (mode-aware)\n// ============================================================================\n\nlet postgresData = null;\n\nif (chatMode === \"session\" && ctx) {\n  // Session mode: save to conversation_sessions\n  postgresData = {\n    user_id: original.userId,\n    session_id: original.sessionId,\n    conversation_history: JSON.stringify(updatedHistory),\n    discovered_data: JSON.stringify(discoveredData),\n    current_phase: ctx.session.currentPhase,\n  };\n}\n// Dashboard/General mode: postgresData stays null (skip save)\n\nconsole.log(\"=== CLAUDE RESPONSE PROCESSED ===\");\nconsole.log(\"Mode:\", chatMode);\nconsole.log(\"Response length:\", cleanResponse.length);\nconsole.log(\"Will save to DB:\", postgresData !== null);\nconsole.log(\"Model used:\", claudeResponse.model || \"unknown\");\nconsole.log(\"Stop reason:\", claudeResponse.stop_reason || \"unknown\");\n\nreturn {\n  // Response data\n  cleanResponse: cleanResponse,\n  discoveredData: discoveredData,\n\n  // Mode flag\n  chatMode: chatMode,\n\n  // For storage (null for dashboard mode)\n  postgres: postgresData,\n\n  // Pass through\n  context: ctx,\n  original: original,\n  updatedHistory: updatedHistory,\n  dashboardMeta: promptData.dashboardMeta || null,\n\n  // API metadata\n  apiMetadata: {\n    model: claudeResponse.model,\n    stopReason: claudeResponse.stop_reason,\n    inputTokens: claudeResponse.usage?.input_tokens,\n    outputTokens: claudeResponse.usage?.output_tokens,\n  },\n};\n"
+            },
+            "id": "4395113f-afc8-4268-a71d-8fd46276b25f",
+            "name": "Process Response",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                752,
+                -800
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO conversation_sessions (\n    user_id,\n    session_id,\n    conversation_history,\n    discovered_data,\n    current_phase,\n    updated_at\n) \nSELECT \n    $1::text,\n    $2::uuid,\n    $3::jsonb,\n    $4::jsonb,\n    $5::integer,\n    CURRENT_TIMESTAMP\nWHERE $2 IS NOT NULL\nON CONFLICT (user_id, session_id) \nDO UPDATE SET \n    conversation_history = EXCLUDED.conversation_history,\n    discovered_data = EXCLUDED.discovered_data,\n    current_phase = EXCLUDED.current_phase,\n    updated_at = CURRENT_TIMESTAMP\nRETURNING user_id, session_id, current_phase, updated_at;",
+                "options": {
+                    "queryReplacement": "={{ [\n    $json.postgres ? $json.postgres.user_id : $json.original.userId,\n    $json.postgres ? $json.postgres.session_id : null,\n    $json.postgres ? $json.postgres.conversation_history : '[]',\n    $json.postgres ? $json.postgres.discovered_data : '{}',\n    $json.postgres ? $json.postgres.current_phase : 0\n] }}"
+                }
+            },
+            "id": "211dfe88-b469-4521-9233-3a237f67da40",
+            "name": "Save Conversation",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                976,
+                -800
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO clause_chat_messages (\n    session_id,\n    bid_id,\n    sender,\n    sender_user_id,\n    message,\n    message_type,\n    created_at\n)\nSELECT \n    $1::uuid,\n    $2,\n    $3,\n    $4::uuid,\n    $5,\n    'user_message',\n    NOW()\nWHERE $1 IS NOT NULL\nUNION ALL\nSELECT\n    $1::uuid,\n    $2,\n    'clarence',\n    NULL,\n    $6,\n    'ai_response',\n    NOW()\nWHERE $1 IS NOT NULL;",
+                "options": {
+                    "queryReplacement": "={{ [    $('Validate Input').first().json.original.sessionId || null,    $('Validate Input').first().json.original.bidId ? \"'\" + $('Validate Input').first().json.original.bidId + \"'::uuid\" : 'NULL',    $('Process Response').first().json.context ? $('Process Response').first().json.context.viewer.role : 'user',    $('Validate Input').first().json.original.userId,    $('Validate Input').first().json.original.message.replace(/'/g, \"''\"),    $('Process Response').first().json.cleanResponse.replace(/'/g, \"''\").substring(0, 4000)] }}"
+                }
+            },
+            "id": "5009d8fd-2bfc-48eb-8050-99ab3a93a83d",
+            "name": "Save Chat Messages",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1200,
+                -800
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// SECTION 4: PREPARE FINAL RESPONSE — MODE-AWARE\n// Returns consistent shape for frontend regardless of mode\n// Fixes: overallAlignment → leverageBalance reference\n// ============================================================================\n\nconst processedData = $(\"Process Response\").first().json;\nconst chatMode = processedData.chatMode;\nconst ctx = processedData.context;\nconst original = processedData.original;\n\n// ============================================================================\n// SESSION MODE RESPONSE\n// ============================================================================\n\nif (chatMode === \"session\" && ctx) {\n  return {\n    success: true,\n    response: processedData.cleanResponse,\n\n    // Session info\n    sessionId: original.sessionId,\n    userId: original.userId,\n    bidId: original.bidId || null,\n\n    // Phase and alignment from live context\n    currentPhase: ctx.session.currentPhase,\n    alignmentScore: ctx.positions.alignmentPercentage,\n\n    // Leverage data — FIXED: use leverageBalance instead of overallAlignment\n    leverage: {\n      customer: ctx.leverage.tracker.customer,\n      provider: ctx.leverage.tracker.provider,\n      balance: ctx.leverage.leverageBalance,\n    },\n\n    // Position summary\n    positions: {\n      total: ctx.positions.total,\n      agreed: ctx.positions.agreed,\n      disputed: ctx.positions.disputed,\n      alignmentPercentage: ctx.positions.alignmentPercentage,\n    },\n\n    // Chat mode indicator\n    chatMode: \"session\",\n\n    // No artifact for chat\n    artifact: null,\n    shouldGenerateArtifact: false,\n\n    // Metadata\n    timestamp: new Date().toISOString(),\n    contextBuildTime: processedData.buildTime || 0,\n\n    debug: {\n      viewerRole: ctx.viewer.role,\n      viewerCompany: ctx.viewer.company,\n      hasPlaybook: !!ctx.playbook,\n      isTraining: ctx.mode.isTraining,\n      biggestGapCount: ctx.positions.biggestGaps?.length || 0,\n    },\n  };\n}\n\n// ============================================================================\n// DASHBOARD / GENERAL MODE RESPONSE\n// ============================================================================\n\nconst dashMeta = processedData.dashboardMeta || {};\n\nreturn {\n  success: true,\n  response: processedData.cleanResponse,\n\n  // No session info\n  sessionId: null,\n  userId: original.userId,\n  bidId: null,\n\n  // No phase/alignment data\n  currentPhase: null,\n  alignmentScore: null,\n\n  // No leverage data\n  leverage: null,\n  positions: null,\n\n  // Chat mode indicator\n  chatMode: chatMode,\n\n  // No artifact\n  artifact: null,\n  shouldGenerateArtifact: false,\n\n  // Metadata\n  timestamp: new Date().toISOString(),\n  contextBuildTime: 0,\n\n  debug: {\n    chatMode: chatMode,\n    userName: dashMeta.userName || \"unknown\",\n    companyName: dashMeta.companyName || \"unknown\",\n    contractTypes: dashMeta.contractTypes || [],\n  },\n};\n"
+            },
+            "id": "408b04e4-bd22-4e84-888a-fb51d473d714",
+            "name": "Prepare Final Response",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1424,
+                -800
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify($json) }}",
+                "options": {}
+            },
+            "id": "af333c75-c385-42ab-8c21-90956b6ea865",
+            "name": "Respond to Webhook",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.4,
+            "position": [
+                1648,
+                -800
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 3
+                    },
+                    "conditions": [
+                        {
+                            "id": "0c5edb76-bbc8-4ce6-861e-b4e0f02f9b85",
+                            "leftValue": "={{ $json.chatMode }}",
+                            "rightValue": "session",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals",
+                                "name": "filter.operator.equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.3,
+            "position": [
+                -352,
+                -576
+            ],
+            "id": "89e433e2-6bb1-4315-a344-594a779eb393",
+            "name": "Mode Check"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// SECTION 2A: BUILD SESSION PROMPT FROM UNIFIED CONTEXT\n// Version: 2.0 — Role Matrix Integration + Audit Fixes\n// Used when chatMode === 'session' (user is inside a contract session)\n//\n// CHANGES FROM V1:\n// - Added ROLE_LABELS mapping for contract-type-aware party names\n// - Added role context section to system prompt\n// - Enhanced legal expertise framing (Tier 2)\n// - Added position scale orientation guidance\n// - Improved viewer anchoring with role labels\n// - All existing audit fixes (position labels, terminology) preserved\n// ============================================================================\n\nconst contextResult = $(\"Build Context\").first().json;\nconst originalData = $(\"Validate Input\").first().json.original;\n\n// Validate context was built successfully\nif (!contextResult.success || !contextResult.context) {\n  throw new Error(\"Context builder returned invalid data\");\n}\n\nconst ctx = contextResult.context;\n\n// ============================================================================\n// SECTION: ROLE MATRIX — CONTRACT TYPE ROLE LABELS\n// Maps contractTypeKey to proper party labels (Protected Party / Providing Party)\n// Position 10 = Maximum protection for Protected Party\n// Position 1  = Maximum flexibility for Providing Party\n// ============================================================================\n\nconst ROLE_LABELS = {\n  service_agreement: { protected: \"Customer\", providing: \"Provider\" },\n  it_outsourcing: { protected: \"Customer\", providing: \"Provider\" },\n  bpo_agreement: { protected: \"Customer\", providing: \"Provider\" },\n  managed_services: { protected: \"Customer\", providing: \"Provider\" },\n  saas_agreement: { protected: \"Subscriber\", providing: \"Provider\" },\n  software_license: { protected: \"Licensee\", providing: \"Licensor\" },\n  loan_agreement: { protected: \"Borrower\", providing: \"Lender\" },\n  lease_agreement: { protected: \"Tenant\", providing: \"Landlord\" },\n  employment_contract: { protected: \"Employee\", providing: \"Employer\" },\n  nda_one_way: { protected: \"Disclosing Party\", providing: \"Receiving Party\" },\n  nda_mutual: { protected: \"Party A\", providing: \"Party B\" },\n  sales_agreement: { protected: \"Buyer\", providing: \"Seller\" },\n  purchase_agreement: { protected: \"Buyer\", providing: \"Seller\" },\n  construction_contract: { protected: \"Client\", providing: \"Contractor\" },\n  consultancy_agreement: { protected: \"Client\", providing: \"Consultant\" },\n  agency_agreement: { protected: \"Principal\", providing: \"Agent\" },\n  distribution_agreement: { protected: \"Distributor\", providing: \"Supplier\" },\n  franchise_agreement: { protected: \"Franchisee\", providing: \"Franchisor\" },\n  insurance_policy: { protected: \"Policyholder\", providing: \"Insurer\" },\n  maintenance_agreement: {\n    protected: \"Customer\",\n    providing: \"Service Provider\",\n  },\n};\n\n// ============================================================================\n// SECTION: DERIVE ROLE CONTEXT\n// Uses contractTypeKey + initiatorPartyRole from session to determine\n// who is the protected party and who is the providing party\n// ============================================================================\n\nconst contractTypeKey = ctx.session.contractTypeKey || null;\nconst initiatorPartyRole = ctx.session.initiatorPartyRole || null;\n\n// Get role labels for this contract type (fallback to Customer/Provider)\nconst roleLabels = ROLE_LABELS[contractTypeKey] || {\n  protected: \"Customer\",\n  providing: \"Provider\",\n};\n\n// Determine which label applies to the viewer\n// initiatorPartyRole is either 'protected' or 'providing'\n// The viewer might be the initiator (customer) or the respondent (provider)\nlet userRoleLabel = \"\";\nlet otherRoleLabel = \"\";\n\nif (contractTypeKey && initiatorPartyRole) {\n  // We know the contract type and who initiated\n  if (ctx.viewer.role === \"customer\") {\n    // Viewer is the initiator (customer = initiator in CLARENCE)\n    userRoleLabel = roleLabels[initiatorPartyRole] || roleLabels.protected;\n    otherRoleLabel =\n      initiatorPartyRole === \"protected\"\n        ? roleLabels.providing\n        : roleLabels.protected;\n  } else {\n    // Viewer is the respondent (provider = respondent in CLARENCE)\n    // Respondent gets the opposite role to the initiator\n    const respondentRole =\n      initiatorPartyRole === \"protected\" ? \"providing\" : \"protected\";\n    userRoleLabel = roleLabels[respondentRole] || roleLabels.providing;\n    otherRoleLabel = roleLabels[initiatorPartyRole] || roleLabels.protected;\n  }\n} else {\n  // Fallback: no role data, use generic labels based on viewer role\n  userRoleLabel = ctx.viewer.role === \"customer\" ? \"Customer\" : \"Provider\";\n  otherRoleLabel = ctx.viewer.role === \"customer\" ? \"Provider\" : \"Customer\";\n}\n\n// ============================================================================\n// SECTION: HELPER FUNCTIONS\n// ============================================================================\n\nfunction getPositionLabel(position, label1, label5, label10) {\n  if (!label1 && !label5 && !label10) return null;\n  if (position <= 2) return label1 || null;\n  if (position <= 4)\n    return label1 && label5\n      ? `between ${label1} and ${label5}`\n      : label1 || label5 || null;\n  if (position === 5) return label5 || null;\n  if (position <= 7)\n    return label5 && label10\n      ? `between ${label5} and ${label10}`\n      : label5 || label10 || null;\n  return label10 || null;\n}\n\nfunction getClauseGoverns(clauseName) {\n  const governsMap = {\n    \"Payment Terms\": \"when and how payments are made\",\n    \"Liability Cap\": \"maximum financial exposure for each party\",\n    \"Termination Rights\": \"how and when parties can exit the contract\",\n    \"IP Ownership\":\n      \"who owns intellectual property created during the contract\",\n    \"Data Protection\": \"how personal and sensitive data is handled\",\n    \"Service Levels\": \"performance standards and remedies for failure\",\n    Indemnification: \"who bears the cost of specific losses or claims\",\n    Confidentiality: \"protection of sensitive business information\",\n    \"Force Majeure\": \"rights when extraordinary events prevent performance\",\n    \"Dispute Resolution\": \"how disagreements are resolved\",\n    \"Change Control\": \"how contract modifications are managed\",\n    Insurance: \"required coverage and risk transfer\",\n  };\n  for (const [key, value] of Object.entries(governsMap)) {\n    if (clauseName && clauseName.toLowerCase().includes(key.toLowerCase()))\n      return value;\n  }\n  return \"contract terms and obligations\";\n}\n\n// ============================================================================\n// SECTION: DETERMINE VIEWER CONTEXT\n// ============================================================================\n\nconst isCustomerViewer = ctx.viewer.role === \"customer\";\nconst userPartyName = isCustomerViewer\n  ? ctx.parties.customer.companyName\n  : ctx.parties.provider.companyName;\nconst otherPartyName = isCustomerViewer\n  ? ctx.parties.provider.companyName\n  : ctx.parties.customer.companyName;\nconst userLeverage = isCustomerViewer\n  ? ctx.leverage.tracker.customer\n  : ctx.leverage.tracker.provider;\nconst otherLeverage = isCustomerViewer\n  ? ctx.leverage.tracker.provider\n  : ctx.leverage.tracker.customer;\n\n// ============================================================================\n// SECTION: BUILD SYSTEM PROMPT\n// ============================================================================\n\nconst systemPrompt = `# CLARENCE System Prompt\n\nYou are CLARENCE (Contract Legal Alignment & Regulatory Efficiency Negotiation & Collaboration Engine), The Honest Broker — a professional contract mediator trusted by all parties.\n\n## YOUR LEGAL EXPERTISE\n\nYou are an expert mediator with deep expertise in:\n- Commercial contract law across major jurisdictions (UK, US, EU, Middle East, APAC)\n- Business Process Outsourcing (BPO) agreements and IT outsourcing\n- Service level agreements and performance management frameworks\n- Liability allocation, indemnification, and risk management\n- Data protection, GDPR, and cross-border data transfer regulations\n- Employment law considerations in outsourcing (TUPE, ARD)\n- Intellectual property rights in service delivery contexts\n- Dispute resolution and termination frameworks\n\nWhen users ask general legal questions (not specific to their contract), draw on your full legal expertise to provide authoritative, nuanced guidance. Always note that you are providing legal information, not legal advice, and recommend consulting a qualified lawyer for specific situations.\n\n## CRITICAL: WHO YOU ARE SPEAKING TO\n\nYOU ARE SPEAKING TO: ${userPartyName} (${ctx.viewer.role})\nTheir contract role: ${userRoleLabel}\n\nThe other party is: ${otherPartyName}\nTheir contract role: ${otherRoleLabel}\n\n- ALWAYS use \"you/your\" when referring to ${userPartyName}\n- ALWAYS use \"${otherPartyName}\" or \"the ${otherRoleLabel}\" when referring to the other party\n- YOUR leverage is ${userLeverage}% (this is ${userPartyName}'s negotiating power)\n- ${otherPartyName}'s leverage is ${otherLeverage}%\n- NEVER confuse whose leverage is whose\n\n## CONTRACT ROLE CONTEXT\n${\n  contractTypeKey\n    ? `\nThis is a ${ctx.session.contractType || contractTypeKey.replace(/_/g, \" \")}.\nIn this contract type:\n- The ${roleLabels.protected} (protected party) benefits from positions closer to 10\n- The ${roleLabels.providing} (providing party) benefits from positions closer to 1\n- Position 5 represents a balanced, market-standard position\n\n${userPartyName} is the ${userRoleLabel}. ${otherPartyName} is the ${otherRoleLabel}.\nUse these role labels naturally in your responses (e.g. \"as the ${userRoleLabel}, you...\" or \"the ${otherRoleLabel} may want...\").\n`\n    : `\nNo specific contract type has been set. Use generic \"customer/provider\" terminology.\nPositions closer to 10 favour the protected party; positions closer to 1 favour the providing party.\n`\n}\n\n## CRITICAL RULE: POSITION ACCURACY\n\n- Positions are on a 1-10 scale where 1 = most flexibility for ${roleLabels.providing}, 10 = most protection for ${roleLabels.protected}\n- NEVER guess or interpolate what a position number means in practical terms\n- ONLY state the practical meaning (e.g., '45 days', '120% of fees') if you have been given the POSITION LABELS\n- If position labels are NOT provided, describe positions ONLY by their number and relative direction\n  (e.g., \"you moved from position 8 to 6, a concession toward the ${otherRoleLabel}\")\n- NEVER invent specific contract terms like day counts, percentages, or fee multiples from position numbers alone\n\n## IMPORTANT TERMINOLOGY\n\n- Leverage Balance (${ctx.leverage.leverageBalance || \"N/A\"}%) = how evenly matched the parties' overall negotiating power is\n- Clause Alignment (${ctx.positions.alignmentPercentage}%) = the average agreement percentage across all contract clauses\n- When the user asks about \"alignment\", they mean CLAUSE ALIGNMENT (what's on their screen)\n- Never confuse these two metrics\n\n## Your Core Identity\n\nYou are an expert mediator who:\n- Guides parties through structured negotiation phases\n- Maintains neutrality while ensuring fairness\n- Focuses on creating mutually beneficial outcomes\n- Combines legal expertise with practical business sense\n- Makes complex contract negotiations accessible and efficient\n\n## Language Rules — MANDATORY\n\n1. NEVER use adversarial language (\"versus\", \"against\", \"fighting\", \"battle\")\n   DO use \"and\", \"alongside\", \"between\", \"working with\"\n2. NEVER say \"aggressive\" — use \"strong\", \"firm\", \"priority\"\n3. NEVER refer to yourself as \"the AI\" or \"AI-generated\"\n4. Use the correct role labels: \"${userRoleLabel}\" for the user, \"${otherRoleLabel}\" for the other party\n5. Be confident — you ARE the expert\n\n## Communication Style\n\n- Be conversational and approachable, not overly formal\n- Ask a maximum of TWO questions per response\n- Provide clear explanations of legal concepts when needed\n- Write naturally without excessive formatting tags\n\n${\n  ctx.mode.isTraining\n    ? `\n## TRAINING MODE ACTIVE\nThis is a training session. The user is practicing negotiation.\nOpponent type: ${ctx.mode.trainingOpponentType || \"balanced\"}\n${ctx.mode.opponentPersonality || \"\"}\nProvide constructive feedback on their approach.\n`\n    : \"\"\n}`;\n\n// ============================================================================\n// SECTION: FORMAT CLAUSE GAPS WITH POSITION LABELS\n// ============================================================================\n\nfunction formatClauseGap(c) {\n  const userPos = isCustomerViewer ? c.customer_position : c.provider_position;\n  const otherPos = isCustomerViewer ? c.provider_position : c.customer_position;\n  const governs = getClauseGoverns(c.clause_name);\n\n  let labelInfo = \"\";\n  if (c.position_1_label || c.position_5_label || c.position_10_label) {\n    labelInfo = `\\n  Position scale: ${c.position_1_label || \"?\"} (1/${roleLabels.providing}-favourable) → ${c.position_5_label || \"?\"} (5/balanced) → ${c.position_10_label || \"?\"} (10/${roleLabels.protected}-favourable)`;\n\n    const userMeaning = isCustomerViewer\n      ? c.customer_position_meaning\n      : c.provider_position_meaning;\n    const otherMeaning = isCustomerViewer\n      ? c.provider_position_meaning\n      : c.customer_position_meaning;\n    if (userMeaning)\n      labelInfo += `\\n  Your position (${userRoleLabel}) means approximately: ${userMeaning}`;\n    if (otherMeaning)\n      labelInfo += `\\n  ${otherPartyName}'s position (${otherRoleLabel}) means approximately: ${otherMeaning}`;\n  }\n\n  return `- ${c.clause_name} (governs ${governs}): gap of ${parseFloat(c.gap_size).toFixed(1)}\\n  Your position: ${userPos}/10, ${otherPartyName}'s position: ${otherPos}/10${labelInfo}`;\n}\n\n// ============================================================================\n// SECTION: FORMAT CONTEXT SECTIONS\n// ============================================================================\n\nlet biggestGapsText = \"\";\nif (ctx.positions.biggestGaps && ctx.positions.biggestGaps.length > 0) {\n  biggestGapsText = ctx.positions.biggestGaps\n    .slice(0, 5)\n    .map((g) => formatClauseGap(g))\n    .join(\"\\n\");\n}\n\nlet recentMovesText = \"\";\nif (ctx.recentHistory.lastMoves && ctx.recentHistory.lastMoves.length > 0) {\n  recentMovesText = ctx.recentHistory.lastMoves\n    .slice(0, 3)\n    .map((m) => {\n      const isUserMove =\n        (isCustomerViewer && m.partyRole === \"customer\") ||\n        (!isCustomerViewer && m.partyRole === \"provider\");\n      const moverName = isUserMove ? \"You\" : otherPartyName;\n      const moverRole = isUserMove ? userRoleLabel : otherRoleLabel;\n\n      let moveText = `- ${moverName} (${moverRole}) moved ${m.clauseName} from position ${m.fromPosition} to ${m.toPosition}`;\n\n      if (m.position_1_label || m.position_5_label || m.position_10_label) {\n        const fromMeaning = getPositionLabel(\n          m.fromPosition,\n          m.position_1_label,\n          m.position_5_label,\n          m.position_10_label,\n        );\n        const toMeaning = getPositionLabel(\n          m.toPosition,\n          m.position_1_label,\n          m.position_5_label,\n          m.position_10_label,\n        );\n        if (fromMeaning) moveText += `\\n  From: approximately ${fromMeaning}`;\n        if (toMeaning) moveText += `\\n  To: approximately ${toMeaning}`;\n      }\n\n      return moveText;\n    })\n    .join(\"\\n\");\n}\n\nlet recentChatText = \"\";\nif (\n  ctx.recentHistory.recentChatMessages &&\n  ctx.recentHistory.recentChatMessages.length > 0\n) {\n  recentChatText = ctx.recentHistory.recentChatMessages\n    .slice(0, 5)\n    .reverse()\n    .map(\n      (msg) =>\n        `${msg.senderRole === \"clarence\" ? \"CLARENCE\" : msg.senderRole === ctx.viewer.role ? \"YOU\" : otherPartyName.toUpperCase()}: ${msg.messageText.substring(0, 200)}${msg.messageText.length > 200 ? \"...\" : \"\"}`,\n    )\n    .join(\"\\n\\n\");\n}\n\nlet playbookText = \"\";\nif (ctx.playbook && ctx.playbook.hasPlaybook) {\n  playbookText = `\\n=== PLAYBOOK GUIDANCE ===\\n${ctx.viewer.company} has an active negotiation playbook: \"${ctx.playbook.playbookName}\"\\nTotal rules: ${ctx.playbook.totalRules || 0}\\nConsider their company policies when advising.\\n`;\n  if (ctx.playbook.activeAlerts && ctx.playbook.activeAlerts.length > 0) {\n    playbookText += `\\nACTIVE ALERTS:\\n`;\n    ctx.playbook.activeAlerts.forEach((alert) => {\n      playbookText += `- [${alert.severity.toUpperCase()}] ${alert.alertTitle}\\n`;\n    });\n  }\n}\n\nlet strategicText = \"\";\nif (\n  ctx.viewer.role === \"customer\" &&\n  ctx.strategicInsights.customerPriorities\n) {\n  strategicText = `\\n=== YOUR PRIORITIES (Confidential to ${userRoleLabel}) ===\\n`;\n  if (ctx.strategicInsights.customerPriorities) {\n    strategicText += `Priorities: ${JSON.stringify(ctx.strategicInsights.customerPriorities)}\\n`;\n  }\n  if (ctx.strategicInsights.customerRedLines) {\n    strategicText += `Red Lines: ${JSON.stringify(ctx.strategicInsights.customerRedLines)}\\n`;\n  }\n} else if (\n  ctx.viewer.role === \"provider\" &&\n  ctx.strategicInsights.providerPriorities\n) {\n  strategicText = `\\n=== YOUR PRIORITIES (Confidential to ${userRoleLabel}) ===\\n`;\n  if (ctx.strategicInsights.providerPriorities) {\n    strategicText += `Services: ${ctx.strategicInsights.providerPriorities}\\n`;\n  }\n  if (ctx.strategicInsights.providerFlexibility) {\n    strategicText += `Flexibility areas: ${JSON.stringify(ctx.strategicInsights.providerFlexibility)}\\n`;\n  }\n}\n\n// ============================================================================\n// SECTION: BUILD USER PROMPT\n// ============================================================================\n\nconst userPrompt = `=== NEGOTIATION CONTEXT ===\n\n## Session Information\n- Session: ${ctx.session.sessionNumber}\n- Contract Type: ${ctx.session.contractType}${contractTypeKey ? ` (${contractTypeKey.replace(/_/g, \" \")})` : \"\"}\n- Deal Value: ${ctx.session.currency} ${ctx.session.dealValue.toLocaleString()}\n- Industry: ${ctx.session.industry}\n- Status: ${ctx.session.status}\n\n## Contract Roles\n- You: ${userPartyName} — the ${userRoleLabel}\n- Other party: ${otherPartyName} — the ${otherRoleLabel}\n- Position scale: 1 = favours ${roleLabels.providing}, 10 = favours ${roleLabels.protected}\n\n## Current Phase\nPhase ${ctx.session.currentPhase}: ${ctx.session.phaseName}\n\n## Leverage\n- Your Leverage (${userRoleLabel}): ${userLeverage}%\n- ${otherPartyName}'s Leverage (${otherRoleLabel}): ${otherLeverage}%\n- Leverage Balance: ${ctx.leverage.leverageBalance || \"N/A\"}%\n\n### Leverage Factors\n- Market Dynamics: ${ctx.leverage.factors.marketDynamics.score}% — ${ctx.leverage.factors.marketDynamics.rationale}\n- Economic Factors: ${ctx.leverage.factors.economicFactors.score}% — ${ctx.leverage.factors.economicFactors.rationale}\n- Strategic Position: ${ctx.leverage.factors.strategicPosition.score}% — ${ctx.leverage.factors.strategicPosition.rationale}\n- BATNA: ${ctx.leverage.factors.batna.score}% — ${ctx.leverage.factors.batna.rationale}\n\n## Negotiation Progress\n- Total Clauses: ${ctx.positions.total}\n- Agreed: ${ctx.positions.agreed}\n- Aligned: ${ctx.positions.aligned}\n- Disputed: ${ctx.positions.disputed}\n- Clause Alignment: ${ctx.positions.alignmentPercentage}%\n- Average Gap Size: ${ctx.positions.averageGapSize}\n\n${biggestGapsText ? `### Biggest Gaps (Priority Items)\\nIf position labels are provided for a clause, use the ACTUAL TERMS — never guess.\\n${biggestGapsText}\\n` : \"\"}\n\n${recentMovesText ? `### Recent Position Changes\\n${recentMovesText}\\n` : \"\"}\n\n${strategicText}\n\n${playbookText}\n\n${recentChatText ? `=== RECENT CONVERSATION ===\\n${recentChatText}\\n` : \"\"}\n\n=== CURRENT USER MESSAGE ===\n${ctx.touchpoint.userMessage}\n\n=== YOUR TASK ===\nBased on the negotiation context above, respond to the user's message while:\n1. Speaking directly to them as ${userPartyName} (the ${userRoleLabel}) — always \"you/your\" for them\n2. Referring to the other party as ${otherPartyName} or \"the ${otherRoleLabel}\"\n3. Referencing specific data from the context (leverage, positions, gaps)\n4. If position labels are provided for a clause, use the ACTUAL TERMS to describe positions\n5. Use \"Clause Alignment\" (${ctx.positions.alignmentPercentage}%) when discussing how close the parties are to agreement\n6. Maintaining continuity with recent conversation\n7. Being helpful, strategic, and moving the negotiation forward\n\nRespond naturally and conversationally.`;\n\n// ============================================================================\n// SECTION: RETURN DATA FOR CLAUDE\n// ============================================================================\n\nreturn {\n  systemPrompt: systemPrompt,\n  userPrompt: userPrompt,\n\n  // Pass through for later nodes\n  chatMode: \"session\",\n  context: ctx,\n  original: originalData,\n  buildTime: contextResult.buildTime,\n};\n"
+            },
+            "id": "5baa3f32-4d94-489f-aad7-3e4606fc9c98",
+            "name": "Build Session Prompt",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                320,
+                -800
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// SECTION 2B: BUILD DASHBOARD/GENERAL PROMPT\n// Used when chatMode === 'dashboard' or 'general' (no session context)\n// Positions CLARENCE as a legal intelligence expert\n// ============================================================================\n\nconst validatedData = $(\"Validate Input\").first().json;\nconst originalData = validatedData.original;\nconst dashboardData = validatedData.dashboardData;\nconst chatMode = validatedData.chatMode;\n\n// ============================================================================\n// EXTRACT USER CONTEXT\n// ============================================================================\n\nlet userName = \"there\";\nlet companyName = \"\";\nlet contractTypes = [];\nlet totalContracts = 0;\nlet activeContracts = 0;\nlet totalValue = 0;\nlet userRole = \"customer\";\nlet isTrainingMode = false;\n\nif (dashboardData && dashboardData.userInfo) {\n  const ui = dashboardData.userInfo;\n  userName = ui.firstName || ui.email?.split(\"@\")[0] || \"there\";\n  companyName = ui.company || \"\";\n  userRole = ui.role || \"customer\";\n  contractTypes = dashboardData.contractTypes || [];\n  totalContracts = dashboardData.totalContracts || 0;\n  activeContracts = dashboardData.activeContracts || 0;\n  totalValue = dashboardData.totalValue || 0;\n  isTrainingMode = dashboardData.isTrainingMode || false;\n}\n\n// ============================================================================\n// BUILD SYSTEM PROMPT — LEGAL EXPERT MODE\n// ============================================================================\n\nconst systemPrompt = `# CLARENCE System Prompt — Legal Intelligence Mode\n\nYou are CLARENCE (Contract Legal Alignment & Regulatory Efficiency Negotiation & Collaboration Engine), The Honest Broker.\n\nYou are a legal intelligence expert with deep expertise in:\n- Commercial contract law across major jurisdictions (UK, US, EU, Middle East, APAC)\n- Business Process Outsourcing (BPO) agreements and IT outsourcing\n- Service level agreements and performance management frameworks\n- Liability allocation, indemnification, and risk management\n- Data protection, GDPR, and cross-border data transfer regulations\n- Employment law considerations in outsourcing (TUPE, ARD)\n- Intellectual property rights in service delivery contexts\n- Dispute resolution and termination frameworks\n- Negotiation strategy and contract lifecycle management\n- Industry benchmarks and market standard positions\n\n## Context\n\nThe user is chatting with you from the CLARENCE dashboard — they are not currently inside a specific contract negotiation session. They may ask:\n- General legal questions about contract clauses, jurisdictions, or industry practice\n- Questions about their contract portfolio or negotiation strategy\n- Requests for guidance on upcoming negotiations\n- Questions about CLARENCE features and how to use the platform\n\n## Communication Style\n\n- Be authoritative and confident — you ARE the expert\n- Provide specific, detailed answers with jurisdictional awareness\n- When discussing common market positions, cite what's typical vs. aggressive vs. conservative\n- Reference industry standards and best practices\n- Be conversational and approachable, not overly formal\n- Ask a maximum of TWO questions per response\n- Write naturally without excessive formatting tags\n\n## Language Rules — MANDATORY\n\n1. NEVER use adversarial language (\"versus\", \"against\", \"fighting\", \"battle\")\n2. NEVER say \"aggressive\" — use \"strong\", \"firm\", \"priority\"\n3. NEVER refer to yourself as \"the AI\" or \"AI-generated\"\n4. NEVER say \"I recommend consulting a lawyer\" or \"seek legal advice\" or \"consult legal counsel\"\n5. You ARE the trusted expert — be confident in your knowledge\n6. When discussing jurisdictional specifics, note differences clearly but authoritatively\n\n${\n  companyName\n    ? `\n## User Context\n- Speaking to: ${userName} from ${companyName}\n- Their role: ${userRole}\n${contractTypes.length > 0 ? `- Contract types they work with: ${contractTypes.join(\", \")}` : \"\"}\n${totalContracts > 0 ? `- Active contracts: ${activeContracts} of ${totalContracts} total` : \"\"}\n${totalValue > 0 ? `- Portfolio value: £${totalValue.toLocaleString()}` : \"\"}\n\nUse this context to personalise your responses where relevant. For example, if they work with BPO contracts, weight your examples toward outsourcing scenarios.\n`\n    : \"\"\n}`;\n\n// ============================================================================\n// BUILD USER PROMPT\n// ============================================================================\n\nlet conversationContext = \"\";\nif (\n  originalData.conversationHistory &&\n  originalData.conversationHistory.length > 0\n) {\n  const recentHistory = originalData.conversationHistory.slice(-6);\n  conversationContext = `=== RECENT CONVERSATION ===\\n`;\n  recentHistory.forEach((msg) => {\n    const role = msg.role === \"user\" ? userName.toUpperCase() : \"CLARENCE\";\n    const content = (msg.content || \"\").substring(0, 300);\n    conversationContext += `${role}: ${content}${msg.content && msg.content.length > 300 ? \"...\" : \"\"}\\n\\n`;\n  });\n}\n\nconst userPrompt = `${conversationContext}=== CURRENT MESSAGE ===\n${originalData.message}\n\n=== YOUR TASK ===\nRespond to the user's question drawing on your full legal and contract expertise.\n${companyName ? `The user works at ${companyName} and manages ${contractTypes.length > 0 ? contractTypes.join(\" and \") + \" contracts\" : \"various contracts\"}. Tailor your response to their context where relevant.` : \"\"}\nBe specific, authoritative, and practical. If the question involves jurisdictional considerations, address them clearly.\nRespond naturally and conversationally.`;\n\n// ============================================================================\n// RETURN DATA FOR CLAUDE\n// ============================================================================\n\nconsole.log(\"=== DASHBOARD PROMPT BUILT ===\");\nconsole.log(\"Mode:\", chatMode);\nconsole.log(\"User:\", userName);\nconsole.log(\"Company:\", companyName || \"(unknown)\");\nconsole.log(\"Contract types:\", contractTypes.join(\", \") || \"(none)\");\nconsole.log(\"Message:\", originalData.message.substring(0, 80) + \"...\");\n\nreturn {\n  systemPrompt: systemPrompt,\n  userPrompt: userPrompt,\n\n  // Pass through for later nodes\n  chatMode: chatMode,\n  context: null, // No session context in dashboard mode\n  original: originalData,\n  buildTime: 0,\n\n  // Dashboard-specific data for downstream nodes\n  dashboardMeta: {\n    userName: userName,\n    companyName: companyName,\n    contractTypes: contractTypes,\n    totalContracts: totalContracts,\n    totalValue: totalValue,\n  },\n};\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -32,
+                -464
+            ],
+            "id": "86e76c3a-7569-4907-9e4e-e43edaa106a8",
+            "name": "Build Dashboard Prompt"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [
+                    {
+                        "node": "Mode Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Context": {
+            "main": [
+                [
+                    {
+                        "node": "Context Built?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Context Built?": {
+            "main": [
+                [
+                    {
+                        "node": "Build Session Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Error Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Call Claude API": {
+            "main": [
+                [
+                    {
+                        "node": "Process Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Response": {
+            "main": [
+                [
+                    {
+                        "node": "Save Conversation",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Conversation": {
+            "main": [
+                [
+                    {
+                        "node": "Save Chat Messages",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Chat Messages": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Final Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Final Response": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Mode Check": {
+            "main": [
+                [
+                    {
+                        "node": "Build Context",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Build Dashboard Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Session Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Call Claude API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Dashboard Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Call Claude API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

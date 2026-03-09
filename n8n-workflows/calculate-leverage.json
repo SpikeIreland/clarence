@@ -1,0 +1,547 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "calculate-leverage",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -1264,
+                -192
+            ],
+            "id": "74fc98f4-62ea-431a-8372-4bf84a88ee19",
+            "name": "Webhook",
+            "webhookId": "calculate-leverage-endpoint"
+        },
+        {
+            "parameters": {
+                "notice": "=== MANUAL TRIGGER FOR TESTING ==="
+            },
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                -1264,
+                48
+            ],
+            "id": "4ab0b3a1-0558-4214-adfb-c26d7925a541",
+            "name": "Manual Trigger"
+        },
+        {
+            "parameters": {
+                "jsCode": "const testData = {\n  body: {\n    sessionId: \"74a21f4d-38e5-47dc-b910-393ee031008d\"\n  }\n};\nreturn [{ json: testData }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1040,
+                48
+            ],
+            "id": "1935e0cf-a5fe-47fa-8afb-c02ef367fc6b",
+            "name": "Test Data"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "cors-check",
+                            "leftValue": "={{ $json.headers?.['access-control-request-method'] }}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "exists"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -1040,
+                -192
+            ],
+            "id": "72b9828c-00f6-4112-afcd-c308c5a2c129",
+            "name": "CORS Check"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{}",
+                "options": {
+                    "responseCode": 200,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Methods",
+                                "value": "GET, POST, OPTIONS"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Headers",
+                                "value": "Content-Type, Authorization"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -816,
+                -240
+            ],
+            "id": "490e8216-923c-4c8b-8499-773dbf4c024e",
+            "name": "CORS Response"
+        },
+        {
+            "parameters": {
+                "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst sessionId = body.sessionId || body.session_id;\n\nif (!sessionId) {\n  throw new Error('Session ID is required');\n}\n\nconsole.log('=== LEVERAGE CALCULATION V2.3 START ===');\nconsole.log('Session ID:', sessionId);\n\nreturn [{ json: { sessionId } }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -816,
+                0
+            ],
+            "id": "fd14ca9e-00d7-4f18-99a2-08030b45f38b",
+            "name": "Extract Session ID"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "-- V2.3: Fetch customer requirements WITH fallback to sessions table\n-- Uses COALESCE to merge data from both tables\nSELECT \n  COALESCE(cr.session_id, s.session_id) as session_id,\n  COALESCE(cr.company_name, s.customer_company) as company_name,\n  COALESCE(cr.service_required, s.contract_type) as service_required,\n  COALESCE(cr.deal_value::text, s.budget_range_max::text, '500000') as deal_value,\n  COALESCE(cr.number_of_bidders::text, s.number_of_bidders::text, '3') as number_of_bidders,\n  COALESCE(cr.market_position, s.market_position, 'moderate') as market_position,\n  COALESCE(cr.decision_timeline, s.decision_timeline, 'normal') as decision_timeline,\n  COALESCE(cr.service_criticality, 'important') as service_criticality,\n  COALESCE(cr.alternative_options, '') as alternative_options,\n  COALESCE(cr.switching_costs, 'moderate') as switching_costs,\n  COALESCE(cr.budget_flexibility, 'moderate') as budget_flexibility,\n  COALESCE(cr.walk_away_point, '') as walk_away_point,\n  COALESCE(cr.in_house_capability, 'partial') as in_house_capability,\n  COALESCE(cr.incumbent_status, '') as incumbent_status,\n  cr.strategic_answers,\n  cr.questionnaire_data,\n  cr.annual_revenue,\n  CASE WHEN cr.session_id IS NOT NULL THEN 'customer_requirements' ELSE 'sessions_fallback' END as data_source\nFROM sessions s\nLEFT JOIN customer_requirements cr ON s.session_id = cr.session_id\nWHERE s.session_id = '{{ $json.sessionId }}'::uuid;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                -592,
+                0
+            ],
+            "id": "58e682b5-ce7a-487e-958d-c01d9c20e5d0",
+            "name": "Fetch Customer Requirements",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT * FROM provider_capabilities WHERE session_id = '{{ $('Extract Session ID').first().json.sessionId }}'::uuid",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                -368,
+                0
+            ],
+            "id": "2a04f6c7-db3a-4b34-998d-9cb92b24e186",
+            "name": "Fetch Provider Capabilities",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT pb.*, s.session_number, s.status as session_status FROM provider_bids pb JOIN sessions s ON s.session_id = pb.session_id WHERE pb.session_id = '{{ $('Extract Session ID').first().json.sessionId }}'::uuid",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                -144,
+                0
+            ],
+            "id": "73df5a47-59ec-4b48-9b78-fee2d2ed90f1",
+            "name": "Fetch Provider Bid & Questionnaire",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// CLARENCE LEVERAGE CALCULATION ALGORITHM V2.3\n// Now handles missing customer_requirements via fallback data\n// ============================================================================\n\nconst sessionId = $('Extract Session ID').first().json.sessionId;\nconst customerReq = $('Fetch Customer Requirements').first().json || {};\nconst providerCap = $('Fetch Provider Capabilities').first().json || {};\nconst providerBid = $('Fetch Provider Bid & Questionnaire').first().json || {};\n\nconsole.log('=== CALCULATING LEVERAGE V2.3 ===');\nconsole.log('Data Source:', customerReq.data_source || 'unknown');\nconsole.log('Customer Company:', customerReq.company_name);\nconsole.log('Provider Company:', providerCap.company_name || providerBid.provider_company);\n\n// Parse questionnaire data\nlet customerQuestionnaire = {};\nlet providerQuestionnaire = {};\n\ntry {\n  if (customerReq.questionnaire_data) {\n    customerQuestionnaire = typeof customerReq.questionnaire_data === 'string' \n      ? JSON.parse(customerReq.questionnaire_data) \n      : customerReq.questionnaire_data;\n  }\n  if (customerReq.strategic_answers) {\n    const strategic = typeof customerReq.strategic_answers === 'string'\n      ? JSON.parse(customerReq.strategic_answers)\n      : customerReq.strategic_answers;\n    customerQuestionnaire = { ...customerQuestionnaire, ...strategic };\n  }\n} catch (e) { console.log('Could not parse customer questionnaire:', e.message); }\n\ntry {\n  if (providerBid.questionnaire_data) {\n    providerQuestionnaire = typeof providerBid.questionnaire_data === 'string' \n      ? JSON.parse(providerBid.questionnaire_data) \n      : providerBid.questionnaire_data;\n  }\n} catch (e) { console.log('Could not parse provider questionnaire:', e.message); }\n\n// ============================================================================\n// LEVERAGE FACTOR CALCULATIONS (4 factors, 25% each)\n// ============================================================================\n\nfunction calculateMarketDynamics() {\n  let score = 50;\n  let rationale = [];\n  \n  let numBidders = 3;\n  const biddersStr = String(customerReq.number_of_bidders || '3');\n  if (biddersStr.includes('-')) {\n    const parts = biddersStr.split('-');\n    numBidders = (parseInt(parts[0]) + parseInt(parts[1])) / 2;\n  } else {\n    numBidders = parseInt(biddersStr) || 3;\n  }\n  \n  if (numBidders >= 5) { score += 15; rationale.push('Multiple providers competing (' + numBidders + ')'); }\n  else if (numBidders >= 3) { score += 10; rationale.push('Healthy provider competition (' + numBidders + ')'); }\n  else if (numBidders < 2) { score -= 10; rationale.push('Limited provider options'); }\n  \n  const marketPosition = String(customerReq.market_position || 'moderate').toLowerCase();\n  if (marketPosition === 'strong') { score += 10; rationale.push('Strong market position'); }\n  else if (marketPosition === 'weak') { score -= 10; rationale.push('Weak market position'); }\n  \n  const decisionTimeline = String(customerReq.decision_timeline || 'normal').toLowerCase();\n  if (decisionTimeline === 'urgent') { score -= 15; rationale.push('Urgent timeline pressure'); }\n  else if (decisionTimeline === 'flexible') { score += 10; rationale.push('Flexible timeline'); }\n  \n  return { score: Math.max(20, Math.min(80, score)), rationale: rationale.join('. ') || 'Standard market conditions' };\n}\n\nfunction calculateEconomicFactors() {\n  let score = 50;\n  let rationale = [];\n  \n  const dealValue = parseFloat(customerReq.deal_value) || 500000;\n  \n  let customerRevenue = 50000000;\n  const revenueStr = String(customerReq.annual_revenue || '50M');\n  if (revenueStr.includes('M')) {\n    const match = revenueStr.match(/(\\d+)M/);\n    if (match) customerRevenue = parseInt(match[1]) * 1000000;\n  }\n  \n  const dealToRevenue = (dealValue / customerRevenue) * 100;\n  \n  if (dealToRevenue < 2) { score += 15; rationale.push('Small deal relative to customer size (' + dealToRevenue.toFixed(1) + '%)'); }\n  else if (dealToRevenue > 5) { score -= 10; rationale.push('Significant investment (' + dealToRevenue.toFixed(1) + '% of revenue)'); }\n  \n  const switchingCosts = String(customerReq.switching_costs || 'moderate').toLowerCase();\n  if (switchingCosts === 'low' || switchingCosts === 'minimal') { score += 10; rationale.push('Low switching costs'); }\n  else if (switchingCosts === 'high' || switchingCosts === 'significant') { score -= 15; rationale.push('High switching costs'); }\n  \n  const budgetFlex = String(customerReq.budget_flexibility || 'moderate').toLowerCase();\n  if (budgetFlex === 'high' || budgetFlex === 'flexible') { score += 10; rationale.push('Flexible budget'); }\n  else if (budgetFlex === 'low' || budgetFlex === 'fixed') { score -= 10; rationale.push('Fixed budget constraints'); }\n  \n  return { score: Math.max(20, Math.min(80, score)), rationale: rationale.join('. ') || 'Standard economic position' };\n}\n\nfunction calculateStrategicPosition() {\n  let score = 50;\n  let rationale = [];\n  \n  const criticality = String(customerReq.service_criticality || 'important').toLowerCase();\n  if (criticality === 'critical' || criticality === 'essential') { score -= 15; rationale.push('Business-critical service'); }\n  else if (criticality === 'low' || criticality === 'nice-to-have') { score += 15; rationale.push('Non-critical service'); }\n  \n  const incumbentStatus = String(customerReq.incumbent_status || '').toLowerCase();\n  if (incumbentStatus.includes('replacing')) { score += 10; rationale.push('Replacing incumbent provider'); }\n  \n  const alternativeOptions = String(customerReq.alternative_options || '').toLowerCase();\n  if (alternativeOptions.includes('strong')) { score += 10; rationale.push('Strong alternatives available'); }\n  else if (alternativeOptions.includes('limited') || alternativeOptions.includes('weak')) { score -= 10; rationale.push('Limited alternatives'); }\n  \n  return { score: Math.max(20, Math.min(80, score)), rationale: rationale.join('. ') || 'Balanced strategic position' };\n}\n\nfunction calculateBATNA() {\n  let score = 50;\n  let rationale = [];\n  \n  const walkAway = String(customerReq.walk_away_point || '').toLowerCase();\n  if (walkAway.includes('delay') || walkAway.includes('walk')) { score += 15; rationale.push('Customer can walk away or delay'); }\n  else if (walkAway.includes('must') || walkAway.includes('critical')) { score -= 15; rationale.push('Customer must proceed'); }\n  \n  const inHouse = String(customerReq.in_house_capability || '').toLowerCase();\n  if (inHouse === 'full' || inHouse.includes('strong')) { score += 10; rationale.push('Strong in-house capability'); }\n  else if (inHouse === 'none' || inHouse.includes('no')) { score -= 10; rationale.push('No in-house alternative'); }\n  else if (inHouse === 'partial') { score += 5; rationale.push('Partial in-house capability'); }\n  \n  const providerBATNA = parseInt(providerQuestionnaire.batna_quality) || 5;\n  if (providerBATNA >= 8) { score -= 15; rationale.push('Provider has strong alternatives'); }\n  else if (providerBATNA <= 3) { score += 15; rationale.push('Provider has limited alternatives'); }\n  \n  return { score: Math.max(20, Math.min(80, score)), rationale: rationale.join('. ') || 'Balanced alternatives' };\n}\n\n// Calculate all factors\nconst marketDynamics = calculateMarketDynamics();\nconst economicFactors = calculateEconomicFactors();\nconst strategicPosition = calculateStrategicPosition();\nconst batnaAnalysis = calculateBATNA();\n\nconsole.log('Market Dynamics:', marketDynamics);\nconsole.log('Economic Factors:', economicFactors);\nconsole.log('Strategic Position:', strategicPosition);\nconsole.log('BATNA Analysis:', batnaAnalysis);\n\n// Overall leverage (weighted average)\nconst customerLeverage = Math.round(\n  (marketDynamics.score * 0.25) +\n  (economicFactors.score * 0.25) +\n  (strategicPosition.score * 0.25) +\n  (batnaAnalysis.score * 0.25)\n);\nconst providerLeverage = 100 - customerLeverage;\n\nconsole.log('=== FINAL LEVERAGE ===');\nconsole.log('Customer:', customerLeverage + '%');\nconsole.log('Provider:', providerLeverage + '%');\nconsole.log('Data Source:', customerReq.data_source);\n\n// Factors breakdown for storage\nconst leverageFactorsBreakdown = {\n  marketDynamics: { score: marketDynamics.score, rationale: marketDynamics.rationale },\n  economicFactors: { score: economicFactors.score, rationale: economicFactors.rationale },\n  strategicPosition: { score: strategicPosition.score, rationale: strategicPosition.rationale },\n  batna: { score: batnaAnalysis.score, rationale: batnaAnalysis.rationale },\n  dataSource: customerReq.data_source || 'unknown'\n};\n\nreturn [{\n  json: {\n    sessionId,\n    customerLeverage,\n    providerLeverage,\n    leverageFactorsBreakdown: JSON.stringify(leverageFactorsBreakdown),\n    calculatedAt: new Date().toISOString(),\n    dataSource: customerReq.data_source || 'unknown'\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                80,
+                0
+            ],
+            "id": "401db4b6-5c2f-42c0-b886-a854976fb50c",
+            "name": "Calculate Leverage"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO leverage_calculations (\n  id,\n  session_id,\n  bid_id,\n  leverage_type,\n  customer_leverage,\n  provider_leverage,\n  alignment_percentage,\n  is_aligned,\n  leverage_factors_breakdown,\n  calculated_at,\n  version,\n  calculation_trigger\n) VALUES (\n  gen_random_uuid(),\n  '{{ $json.sessionId }}',\n  '{{ $('Fetch Provider Bid & Questionnaire').first().json.bid_id }}',\n  'master',\n  {{ $json.customerLeverage }},\n  {{ $json.providerLeverage }},\n  0,\n  false,\n  '{{ $json.leverageFactorsBreakdown }}'::jsonb,\n  NOW(),\n  1,\n  'questionnaire_complete'\n)\nON CONFLICT (session_id, bid_id, leverage_type) DO UPDATE SET\n  customer_leverage = EXCLUDED.customer_leverage,\n  provider_leverage = EXCLUDED.provider_leverage,\n  leverage_factors_breakdown = EXCLUDED.leverage_factors_breakdown,\n  calculated_at = NOW(),\n  version = leverage_calculations.version + 1\nRETURNING id, session_id, bid_id, customer_leverage, provider_leverage",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                304,
+                0
+            ],
+            "id": "01a75b0c-23e5-435f-b158-13adb2a714a5",
+            "name": "Save Leverage Calculation",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE sessions \nSET \n  status = 'negotiation_ready',\n  customer_leverage = {{ $('Calculate Leverage').first().json.customerLeverage }},\n  provider_leverage = {{ $('Calculate Leverage').first().json.providerLeverage }},\n  leverage_tracker_customer = {{ $('Calculate Leverage').first().json.customerLeverage }},\n  leverage_tracker_provider = {{ $('Calculate Leverage').first().json.providerLeverage }},\n  leverage_calculated_at = CURRENT_TIMESTAMP,\n  updated_at = CURRENT_TIMESTAMP\nWHERE session_id = '{{ $('Calculate Leverage').first().json.sessionId }}'::uuid\nRETURNING \n  session_id, \n  session_number, \n  status,\n  customer_leverage,\n  provider_leverage,\n  leverage_tracker_customer,\n  leverage_tracker_provider,\n  leverage_calculated_at;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                528,
+                0
+            ],
+            "id": "623780b5-861c-4d81-8658-97d9f813bb36",
+            "name": "Update Session",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT * FROM populate_session_clauses(\n  '{{ $('Calculate Leverage').first().json.sessionId }}'::UUID,\n  {{ $('Calculate Leverage').first().json.customerLeverage }},\n  {{ $('Calculate Leverage').first().json.providerLeverage }}\n);",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                752,
+                0
+            ],
+            "id": "6ec75a20-6178-4546-9765-9da6c3df677e",
+            "name": "Populate Session Clauses",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  s.session_id,\n  s.status,\n  s.customer_leverage,\n  s.provider_leverage,\n  (SELECT COUNT(*) FROM leverage_calculations WHERE session_id::text = s.session_id::text) as leverage_count,\n  (SELECT COUNT(*) FROM session_clause_positions WHERE session_id = s.session_id) as clause_count,\n  (SELECT COUNT(*) FROM session_clause_positions WHERE session_id = s.session_id AND clause_level = 0) as parent_count,\n  (SELECT COUNT(*) FROM session_clause_positions WHERE session_id = s.session_id AND clause_level = 1) as child_count\nFROM sessions s\nWHERE s.session_id = '{{ $('Calculate Leverage').first().json.sessionId }}'::uuid;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                976,
+                -96
+            ],
+            "id": "855c6106-2b70-4bc4-b7f2-d347599e01b4",
+            "name": "Verification Check",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const leverage = $('Calculate Leverage').first().json;\nconst verification = $('Verification Check').first().json;\n\nreturn [{ \n  json: {\n    ...leverage,\n    clauseCount: verification.clause_count,\n    parentCount: verification.parent_count,\n    childCount: verification.child_count,\n    overallAlignment: 0\n  } \n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1200,
+                -96
+            ],
+            "id": "cfeb4df3-0713-43d8-a3c3-de343f8faf1b",
+            "name": "Build Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\n  \"success\": true,\n  \"sessionId\": \"{{ $json.sessionId }}\",\n  \"leverage\": {\n    \"customer\": {{ $json.customerLeverage }},\n    \"provider\": {{ $json.providerLeverage }}\n  },\n  \"clauses\": {\n    \"total\": {{ $json.clauseCount }},\n    \"parents\": {{ $json.parentCount }},\n    \"children\": {{ $json.childCount }}\n  },\n  \"dataSource\": \"{{ $json.dataSource }}\",\n  \"calculatedAt\": \"{{ $json.calculatedAt }}\"\n}",
+                "options": {
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                1424,
+                -96
+            ],
+            "id": "49cde7e9-94e4-4059-8df0-cc2bfcf5d217",
+            "name": "Success Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={ \"success\": false, \"error\": \"Leverage calculation failed\" }",
+                "options": {
+                    "responseCode": 500,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                976,
+                96
+            ],
+            "id": "ea5d41bf-bd99-42b4-9171-71d1b053272d",
+            "name": "Error Response"
+        },
+        {
+            "parameters": {
+                "content": "## V2.3 FIX\n\n**Problem:** Workflow failed when customer_requirements was empty.\n\n**Solution:** Modified Fetch Customer Requirements to JOIN with sessions table and use COALESCE for fallback values.\n\nNow the query:\n1. Always returns data (from sessions at minimum)\n2. Uses customer_requirements when available\n3. Falls back to sessions table data when not\n4. Includes `data_source` field to track which table was used",
+                "height": 280,
+                "width": 380
+            },
+            "type": "n8n-nodes-base.stickyNote",
+            "typeVersion": 1,
+            "position": [
+                -592,
+                -272
+            ],
+            "id": "fdbfda8b-37ce-4642-9ae6-237b6397b87e",
+            "name": "V2.3 Fix Notes"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Manual Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Test Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Test Data": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Session ID",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "CORS Check": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Extract Session ID",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract Session ID": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Customer Requirements",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Customer Requirements": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Provider Capabilities",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Provider Capabilities": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Provider Bid & Questionnaire",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Provider Bid & Questionnaire": {
+            "main": [
+                [
+                    {
+                        "node": "Calculate Leverage",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Calculate Leverage": {
+            "main": [
+                [
+                    {
+                        "node": "Save Leverage Calculation",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Leverage Calculation": {
+            "main": [
+                [
+                    {
+                        "node": "Update Session",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Update Session",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Session": {
+            "main": [
+                [
+                    {
+                        "node": "Populate Session Clauses",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Populate Session Clauses": {
+            "main": [
+                [
+                    {
+                        "node": "Verification Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Error Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Verification Check": {
+            "main": [
+                [
+                    {
+                        "node": "Build Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Response": {
+            "main": [
+                [
+                    {
+                        "node": "Success Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}
