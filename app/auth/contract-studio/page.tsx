@@ -8252,9 +8252,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-xs text-slate-500">Template</div>
+                                    <div className="text-xs text-slate-500">{isTrainingMode ? 'Playbook' : 'Template'}</div>
                                     <div className="text-sm font-medium text-slate-700">
-                                        {session?.templateName || 'Not selected'}
+                                        {isTrainingMode
+                                            ? (trainingAvatarInfo?.scenarioName || 'Training Playbook')
+                                            : (session?.templateName || 'Not selected')}
                                     </div>
                                 </div>
                             </div>
