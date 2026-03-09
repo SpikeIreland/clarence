@@ -2172,6 +2172,33 @@ function BetaTestingAdminDashboard() {
                     </div>
                 )}
 
+                {/* ========================================================== */}
+                {/* TAB 6: MARKETING AGENTS                                      */}
+                {/* ========================================================== */}
+                {activeTab === 'marketing' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold text-slate-800">Marketing Agents Dashboard</h2>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="p-6 text-center text-slate-500">
+                                <span className="text-4xl mb-4 block">🤖</span>
+                                <h3 className="text-lg font-medium text-slate-800 mb-2">Agent Control Centre</h3>
+                                <p className="mb-6">The Marketing Agents are connected to the autonomous n8n workflows that ingest Training Videos and generate optimized Social Media content following the Honest Broker Philosophy.</p>
+
+                                <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors inline-flex items-center gap-2">
+                                    <span>⚡️</span> Auto-Generate from Latest Videos
+                                </button>
+
+                                <div className="mt-8 text-sm text-slate-400">
+                                    (Integration with social_posts table and individual post review UI pending n8n workflow deployment)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </main>
         </div>
     )
