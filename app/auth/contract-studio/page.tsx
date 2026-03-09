@@ -6172,11 +6172,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                             const myBarPercent = toBarPercent(myDbPosition)
                             const otherBarPercent = toBarPercent(otherDbPosition)
+                            const clarenceBarPercent = toBarPercent(clarenceDbPosition)
                             const proposedBarPercent = toBarPercent(proposedPosition)
 
                             // Check for alignment
                             const isAligned = myDbPosition !== null && otherDbPosition !== null &&
                                 Math.abs(myDbPosition - otherDbPosition) < 0.5
+                            const isMeAtClarence = myDbPosition !== null && clarenceDbPosition !== null &&
+                                Math.abs(myDbPosition - clarenceDbPosition) < 0.5
+                            const isOtherAtClarence = otherDbPosition !== null && clarenceDbPosition !== null &&
+                                Math.abs(otherDbPosition - clarenceDbPosition) < 0.5
 
                             const isProposing = isAdjusting && proposedPosition !== myDbPosition
 
@@ -6196,8 +6201,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                                     {/* Position Bar with Markers */}
                                     <div
-                                        className="relative h-12 bg-gradient-to-r from-blue-200 via-slate-100 to-emerald-200 rounded-lg border border-slate-300 cursor-pointer hover:border-slate-400 transition-all"
+                                        className={`relative h-12 bg-gradient-to-r from-blue-200 via-slate-100 to-emerald-200 rounded-lg border transition-all ${isLocked
+                                            ? 'border-slate-400 opacity-60 cursor-not-allowed'
+                                            : 'border-slate-300 cursor-pointer hover:border-slate-400'
+                                            }`}
                                         onClick={(e) => {
+                                            if (isLocked) return
                                             const rect = e.currentTarget.getBoundingClientRect()
                                             const clickPercent = ((e.clientX - rect.left) / rect.width) * 100
                                             // 0% = position 1 (provider), 100% = position 10 (customer)
@@ -6205,12 +6214,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             const clampedPosition = Math.max(1, Math.min(10, newPosition))
                                             handlePositionDrag(clampedPosition)
                                         }}
-                                        title="Click to set your position"
+                                        title={isLocked ? "This clause is locked" : "Click to set your position"}
                                     >
                                         {/* Other Party marker - ONLY show if provider has been invited */}
                                         {(hasProviderInvited || isTrainingMode) && otherBarPercent !== null && !isAligned && (
                                             <div
-                                                className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md"
+                                                className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md ${isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                                                 style={{
                                                     left: `${otherBarPercent}%`,
                                                     transform: 'translate(-50%, -50%)',
@@ -6221,13 +6230,32 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 title={`${roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}: ${otherDbPosition?.toFixed(1)}`}
                                             >
                                                 {isCustomer ? 'P' : 'C'}
+                                                {isOtherAtClarence && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
+                                                        <span className="text-[10px] text-white">★</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* CLARENCE marker */}
+                                        {clarenceBarPercent !== null && !isMeAtClarence && !isOtherAtClarence && (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-sm font-bold text-white z-10 shadow-md"
+                                                style={{
+                                                    left: `${clarenceBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)'
+                                                }}
+                                                title={`CLARENCE suggests: ${clarenceDbPosition?.toFixed(1)}`}
+                                            >
+                                                ★
                                             </div>
                                         )}
 
                                         {/* Your position / Aligned marker - Aligned only shows if provider invited */}
-                                        {hasProviderInvited && isAligned && myBarPercent !== null ? (
+                                        {(hasProviderInvited || isTrainingMode) && isAligned && myBarPercent !== null ? (
                                             <div
-                                                className="absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg"
+                                                className={`absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg ${isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}
                                                 style={{
                                                     left: `${myBarPercent}%`,
                                                     transform: 'translate(-50%, -50%)',
@@ -6241,7 +6269,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             </div>
                                         ) : myBarPercent !== null && (
                                             <div
-                                                className="absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg"
+                                                className={`absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg ${isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}
                                                 style={{
                                                     left: `${myBarPercent}%`,
                                                     transform: 'translate(-50%, -50%)',
@@ -6253,6 +6281,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 title={`You: ${myDbPosition?.toFixed(1)}`}
                                             >
                                                 {isCustomer ? 'C' : 'P'}
+                                                {isMeAtClarence && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
+                                                        <span className="text-[10px] text-white">★</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -6328,17 +6361,21 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
                                             <span>You</span>
                                         </div>
-                                        {hasProviderInvited && (
+                                        {(hasProviderInvited || isTrainingMode) && (
                                             <div className="flex items-center gap-1">
                                                 <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
                                                 <span>{roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}</span>
                                             </div>
                                         )}
                                         <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                            <span>CLARENCE</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
                                             <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                                             <span>Proposed</span>
                                         </div>
-                                        {hasProviderInvited && (
+                                        {(hasProviderInvited || isTrainingMode) && (
                                             <div className="flex items-center gap-1">
                                                 <div className="w-3 h-3 rounded-full overflow-hidden flex">
                                                     <div className="w-1/2 h-full bg-emerald-500"></div>
@@ -8112,7 +8149,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
             {/* Training Mode Banner - shows only in training mode */}
             {isTrainingMode && (
                 <TrainingModeBanner
