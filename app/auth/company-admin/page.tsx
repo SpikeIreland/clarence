@@ -2040,7 +2040,18 @@ function CompanyAdminContent() {
             console.error('Failed to delete playbook rules:', rulesError)
         }
 
-        // 2. Delete the playbook record
+        // 2. Delete training sessions referencing this playbook (foreign key dependency)
+        const { error: trainingError } = await supabase
+            .from('playbook_training_sessions')
+            .delete()
+            .eq('playbook_id', playbookId)
+
+        console.log('Delete training sessions result:', { trainingError })
+        if (trainingError) {
+            console.error('Failed to delete training sessions:', trainingError)
+        }
+
+        // 3. Delete the playbook record
         const { error: playbookError } = await supabase
             .from('company_playbooks')
             .delete()
@@ -2053,7 +2064,7 @@ function CompanyAdminContent() {
             return
         }
 
-        // 3. Delete the file from storage
+        // 4. Delete the file from storage
         if (sourceFilePath) {
             const { error: storageError } = await supabase.storage
                 .from('playbooks')
@@ -2065,7 +2076,7 @@ function CompanyAdminContent() {
             }
         }
 
-        // 4. Reload playbooks
+        // 5. Reload playbooks
         await loadPlaybooks(userInfo.companyId)
     }
 
