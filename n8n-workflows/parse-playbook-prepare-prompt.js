@@ -12,7 +12,7 @@ const extractedText = validateData.extractedText || "";
 if (!extractedText || extractedText.length < 100) {
   throw new Error(
     "No usable text received from frontend extraction. Length: " +
-      (extractedText?.length || 0),
+    (extractedText?.length || 0),
   );
 }
 

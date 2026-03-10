@@ -3,7 +3,7 @@
 // Based on CLARENCE Algorithm Technical Specification
 // =====================================================
 
-interface LeverageInputs {
+export interface LeverageInputs {
     // Market Dynamics (25% weight)
     alternativeProvidersAvailable: number // 1-10
     marketConditions: 'buyers_market' | 'sellers_market' | 'balanced'

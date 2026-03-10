@@ -930,7 +930,9 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                 clarence_summary: tc.clarence_summary,
                 clarence_assessment: tc.clarence_assessment,
                 clarence_flags: tc.clarence_flags || [],
-                clarence_certified_at: tc.clarence_certified_at
+                clarence_certified_at: tc.clarence_certified_at,
+                initiator_position: tc.default_customer_position_override ?? null,
+                respondent_position: tc.default_provider_position_override ?? null,
             }))
 
             const { error: copyError } = await supabase

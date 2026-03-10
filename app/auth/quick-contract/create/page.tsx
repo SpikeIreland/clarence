@@ -533,9 +533,9 @@ function QuickContractCreateContent() {
                         clause_id: tc.template_clause_id || crypto.randomUUID(),
                         clause_number: tc.clause_number || tc.display_number || String(index + 1),
                         clause_name: tc.clause_name || 'Untitled Clause',
-                        category: tc.category || 'Other',
-                        content: tc.default_text || '',
-                        original_text: tc.default_text || '',
+                        category: tc.category || tc.category_name || 'Other',
+                        content: tc.default_text || tc.clause_content || '',
+                        original_text: tc.default_text || tc.clause_content || '',
                         clause_level: tc.clause_level || 1,
                         display_order: tc.display_order || (tc.category_order * 100) + tc.clause_order,
                         parent_clause_id: tc.parent_clause_id || tc.parent_template_clause_id,
@@ -547,7 +547,9 @@ function QuickContractCreateContent() {
                         clarence_certified: tc.clarence_certified || false,
                         clarence_certified_at: tc.clarence_certified_at,
                         status: tc.status || (tc.clarence_certified ? 'certified' : 'pending'),
-                        is_header: tc.is_header || false
+                        is_header: tc.is_header || false,
+                        initiator_position: tc.default_customer_position_override ?? null,
+                        respondent_position: tc.default_provider_position_override ?? null,
                     }))
                 } else {
                     console.log('Strategy C: No clauses found in template_clauses', tcError)
@@ -640,7 +642,9 @@ function QuickContractCreateContent() {
                     clarence_summary: c.clarence_summary,
                     clarence_assessment: c.clarence_assessment,
                     clarence_flags: c.clarence_flags || [],
-                    clarence_certified_at: c.clarence_certified_at
+                    clarence_certified_at: c.clarence_certified_at,
+                    initiator_position: c.initiator_position ?? null,
+                    respondent_position: c.respondent_position ?? null,
                 }))
 
                 const { error: copyError } = await supabase

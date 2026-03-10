@@ -37,7 +37,9 @@ interface PartyChatPanelProps {
     avatarName?: string
     avatarInitials?: string
     avatarCompany?: string
-    // NEW: External message injection (from AI counter-moves)
+    // Dynamic Agent (from training orchestrator)
+    generatedAgentId?: string | null
+    // External message injection (from AI counter-moves)
     externalMessages?: Array<{
         messageId: string
         senderType: 'customer' | 'provider'
@@ -307,7 +309,9 @@ export function PartyChatPanel({
     avatarName,
     avatarInitials,
     avatarCompany,
-    // NEW: External message injection (from AI counter-moves)
+    // Dynamic Agent (from training orchestrator)
+    generatedAgentId,
+    // External message injection (from AI counter-moves)
     externalMessages = [],
     onExternalMessagesConsumed
 }: PartyChatPanelProps) {
@@ -573,33 +577,72 @@ export function PartyChatPanel({
         setIsSending(true)
 
         try {
-            // Call the training party chat endpoint
-            const response = await fetch(`${API_BASE}/training-party-chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: sessionId,
-                    userMessage: messageText,
-                    aiPersonality: aiPersonality,
-                    avatarName: displayName,
-                    chatHistory: messages.slice(-10).map(m => ({
-                        sender: m.senderType,
-                        message: m.messageText
-                    }))
-                })
-            })
-
-            // Simulate natural typing delay (1.5-3 seconds)
-            await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500))
-
             let aiResponseText: string
 
-            if (response.ok) {
-                const result = await response.json()
-                aiResponseText = result.aiResponse || getFallbackResponse(aiPersonality)
+            if (generatedAgentId) {
+                // ============================================================
+                // Dynamic Agent: Use opponent-agent API for in-character chat
+                // ============================================================
+                const [response] = await Promise.all([
+                    fetch('/api/agents/opponent-agent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'chat',
+                            agentId: generatedAgentId,
+                            sessionId: sessionId,
+                            userMessage: messageText,
+                            chatHistory: messages.slice(-10).map(m => ({
+                                sender: m.senderType === currentUserType ? 'user' : 'opponent',
+                                message: m.messageText
+                            })),
+                            negotiationState: {
+                                totalClauses: 0,
+                                agreedClauses: 0,
+                                customerLeverage: 50,
+                                providerLeverage: 50,
+                                sessionProgress: 0,
+                            },
+                        }),
+                    }),
+                    // Simulate natural typing delay in parallel
+                    new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500)),
+                ])
+
+                if (response.ok) {
+                    const result = await response.json()
+                    aiResponseText = result.result?.message || getFallbackResponse(aiPersonality)
+                } else {
+                    aiResponseText = getFallbackResponse(aiPersonality)
+                }
             } else {
-                // Use fallback if API fails
-                aiResponseText = getFallbackResponse(aiPersonality)
+                // ============================================================
+                // Legacy: Use n8n training-party-chat webhook
+                // ============================================================
+                const response = await fetch(`${API_BASE}/training-party-chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        userMessage: messageText,
+                        aiPersonality: aiPersonality,
+                        avatarName: displayName,
+                        chatHistory: messages.slice(-10).map(m => ({
+                            sender: m.senderType,
+                            message: m.messageText
+                        }))
+                    })
+                })
+
+                // Simulate natural typing delay
+                await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500))
+
+                if (response.ok) {
+                    const result = await response.json()
+                    aiResponseText = result.aiResponse || getFallbackResponse(aiPersonality)
+                } else {
+                    aiResponseText = getFallbackResponse(aiPersonality)
+                }
             }
 
             // Add AI response

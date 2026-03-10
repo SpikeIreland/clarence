@@ -2201,6 +2201,11 @@ function ContractStudioContent() {
     const [aiThinkingClause, setAiThinkingClause] = useState<string | null>(null)
     const [trainingAvatarInfo, setTrainingAvatarInfo] = useState<TrainingAvatarInfo | null>(null)
     const [showTrainingScorecard, setShowTrainingScorecard] = useState(false)
+    // Dynamic Agent (from training orchestrator)
+    const [generatedAgentId, setGeneratedAgentId] = useState<string | null>(null)
+    const [generatedAgentPersona, setGeneratedAgentPersona] = useState<{
+        name: string; title: string; company: string; industry: string; communicationStyle: string
+    } | null>(null)
 
     // ==========================================================================
     // SIGN OUT FUNCTION
@@ -3796,12 +3801,40 @@ function ContractStudioContent() {
 
                 // Extract avatar info for training mode (for Party Chat AI integration)
                 if (sessionData.isTraining) {
-                    const avatarInfo = extractTrainingAvatarInfo(
-                        sessionData.notes || null,
-                        sessionData.providerCompany
-                    )
-                    setTrainingAvatarInfo(avatarInfo)
-                    console.log('Training Avatar Info:', avatarInfo)
+                    // Check for dynamically generated agent first
+                    const supabaseForAgent = createClient()
+                    const { data: agentData } = await supabaseForAgent
+                        .from('generated_agents')
+                        .select('agent_id, persona, personality_traits')
+                        .eq('session_id', sessionData.sessionId)
+                        .single()
+
+                    if (agentData?.persona) {
+                        // Dynamic agent — use generated persona
+                        setGeneratedAgentId(agentData.agent_id)
+                        setGeneratedAgentPersona(agentData.persona)
+                        const persona = agentData.persona as { name: string; company: string; communicationStyle?: string }
+                        const traits = agentData.personality_traits as { style?: string } | null
+                        const initials = persona.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                        setTrainingAvatarInfo({
+                            characterName: persona.name,
+                            scenarioName: 'Dynamic Training',
+                            aiPersonality: (traits?.style as 'cooperative' | 'balanced' | 'aggressive') || 'balanced',
+                            avatarInitials: initials,
+                            companyName: persona.company,
+                        })
+                        console.log('Generated Agent loaded:', persona.name, agentData.agent_id)
+                    } else {
+                        // Legacy fixed character — parse from notes
+                        const avatarInfo = extractTrainingAvatarInfo(
+                            sessionData.notes || null,
+                            sessionData.providerCompany
+                        )
+                        setTrainingAvatarInfo(avatarInfo)
+                        setGeneratedAgentId(null)
+                        setGeneratedAgentPersona(null)
+                        console.log('Legacy Training Avatar Info:', avatarInfo)
+                    }
                 } else {
                     setTrainingAvatarInfo(null)
                 }
@@ -4282,7 +4315,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     setSelectedClause(result.subClause as ContractClause)
                 }
             } else {
-                alert(result.error || 'Failed to add sub-clause')
+                alert(typeof result.error === 'string' ? result.error : 'Failed to add sub-clause')
             }
         } catch (error) {
             console.error('Error adding sub-clause:', error)
@@ -4573,7 +4606,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         // Don't trigger if not in training mode
         if (!isTrainingMode || !session) return
 
-        const aiPersonality = extractAIPersonality(session.notes || null)
+        const aiPersonality = trainingAvatarInfo?.aiPersonality || extractAIPersonality(session.notes || null)
         // Use avatar name from extracted info, fallback to provider company or default
         const avatarName = trainingAvatarInfo?.characterName || session.providerCompany || 'AI Opponent'
 
@@ -4586,19 +4619,75 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         const MINIMUM_THINKING_TIME = 2000 // 2 seconds minimum for UX
 
         try {
-            // Call the standalone function
-            const result = await triggerAICounterMove(
-                session.sessionId,
-                clauseId,
-                positionId,
-                newCustomerPosition,
-                previousCustomerPosition,
-                currentProviderPosition,
-                clauseNumber,
-                clauseName,
-                aiPersonality,
-                session.bidId || null
-            )
+            let result: TrainingAIMoveResult
+
+            // ============================================================
+            // Dynamic Agent: Use opponent-agent API for live AI reasoning
+            // Legacy: Fall back to n8n training-ai-move webhook
+            // ============================================================
+            if (generatedAgentId) {
+                const agentResponse = await fetch('/api/agents/opponent-agent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'counter-move',
+                        agentId: generatedAgentId,
+                        sessionId: session.sessionId,
+                        clause: {
+                            clauseId,
+                            clauseName,
+                            clauseCategory: clauseNumber,
+                            customerPosition: previousCustomerPosition,
+                            providerPosition: currentProviderPosition,
+                            clarencePosition: null,
+                            proposedPosition: newCustomerPosition,
+                        },
+                        moveHistory: [],
+                        negotiationState: {
+                            totalClauses: clauses.length,
+                            agreedClauses: clauses.filter(c => c.isAgreed).length,
+                            customerLeverage: leverage?.leverageScoreCustomer || 50,
+                            providerLeverage: leverage?.leverageScoreProvider || 50,
+                            sessionProgress: clauses.length > 0
+                                ? Math.round((clauses.filter(c => c.isAgreed).length / clauses.length) * 100)
+                                : 0,
+                        },
+                    }),
+                })
+
+                const agentResult = await agentResponse.json()
+
+                if (agentResult.success && agentResult.result) {
+                    const r = agentResult.result
+                    result = {
+                        success: true,
+                        decision: r.action,
+                        newProviderPosition: r.counterPosition,
+                        previousProviderPosition: currentProviderPosition,
+                        providerResponse: r.reasoning,
+                        teachingMoment: undefined,
+                        isAligned: r.action === 'accept' && r.counterPosition === newCustomerPosition,
+                        newGap: Math.abs(newCustomerPosition - r.counterPosition),
+                        customerPosition: newCustomerPosition,
+                    }
+                } else {
+                    result = { success: false, error: 'Opponent agent call failed' }
+                }
+            } else {
+                // Legacy: use n8n webhook
+                result = await triggerAICounterMove(
+                    session.sessionId,
+                    clauseId,
+                    positionId,
+                    newCustomerPosition,
+                    previousCustomerPosition,
+                    currentProviderPosition,
+                    clauseNumber,
+                    clauseName,
+                    aiPersonality,
+                    session.bidId || null
+                )
+            }
 
             // Ensure minimum thinking time has elapsed for better UX
             const elapsedTime = Date.now() - startTime
@@ -4638,7 +4727,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 // The opponent's words belong in the Party Chat panel.
                 // Teaching moments stay in CLARENCE Chat (coach guidance).
                 // ==========================================================
-                if (result.providerResponse) {
+                if (result.providerResponse && typeof result.providerResponse === 'string') {
                     const decisionEmoji = result.decision === 'accept' ? '✅'
                         : result.decision === 'counter' ? '⇄️'
                             : '✋'
@@ -4664,14 +4753,15 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     }
 
                     // Teaching moment stays in CLARENCE Chat (it's coach guidance, not opponent dialogue)
-                    if (result.teachingMoment) {
+                    const teachingText = typeof result.teachingMoment === 'string' ? result.teachingMoment : null
+                    if (teachingText) {
                         const teachingMessage: ClauseChatMessage = {
                             messageId: `teaching-${Date.now()}`,
                             sessionId: session.sessionId,
                             positionId: positionId,
                             sender: 'clarence',
                             senderUserId: null,
-                            message: `🎓 **CLARENCE's Tip:** ${result.teachingMoment}`,
+                            message: `🎓 **CLARENCE's Tip:** ${teachingText}`,
                             messageType: 'notification',
                             relatedPositionChange: false,
                             triggeredBy: 'training_ai_move',
@@ -5676,7 +5766,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     console.error('Error refreshing clauses:', refreshError)
                 }
             } else {
-                alert(result.error || 'Failed to confirm agreement')
+                alert(typeof result.error === 'string' ? result.error : 'Failed to confirm agreement')
             }
         } catch (error) {
             console.error('Error confirming agreement:', error)
@@ -8373,6 +8463,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     trainingAvatarInfo={trainingAvatarInfo}
                     sessionCreatedAt={session?.createdAt || null}
                     sessionId={session?.sessionId || null}
+                    userId={userInfo?.userId || null}
+                    generatedAgentId={generatedAgentId}
                     onClose={() => setShowTrainingScorecard(false)}
                     onBackToTraining={() => router.push('/auth/training')}
                 />
@@ -8426,7 +8518,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     avatarName={trainingAvatarInfo?.characterName}
                     avatarInitials={trainingAvatarInfo?.avatarInitials}
                     avatarCompany={trainingAvatarInfo?.companyName}
-                    // NEW: Inject messages from AI counter-moves into Party Chat
+                    // Dynamic Agent (from training orchestrator)
+                    generatedAgentId={generatedAgentId}
+                    // Inject messages from AI counter-moves into Party Chat
                     externalMessages={pendingPartyChatMessages}
                     onExternalMessagesConsumed={() => setPendingPartyChatMessages([])}
                 />

@@ -64,6 +64,8 @@ interface TrainingScorecardProps {
     trainingAvatarInfo: TrainingAvatarInfo | null
     sessionCreatedAt: string | null
     sessionId: string | null
+    userId?: string | null
+    generatedAgentId?: string | null
     onClose: () => void
     onBackToTraining: () => void
 }
@@ -285,6 +287,8 @@ export default function TrainingScorecard({
     trainingAvatarInfo,
     sessionCreatedAt,
     sessionId,
+    userId,
+    generatedAgentId,
     onClose,
     onBackToTraining,
 }: TrainingScorecardProps) {
@@ -293,9 +297,31 @@ export default function TrainingScorecard({
     const [playbookCompliance, setPlaybookCompliance] = useState<{
         score: number; rulesPassed: number; rulesTotal: number; redLineBreaches: number
     } | null>(null)
+    const [clarenceDebrief, setClarenceDebrief] = useState<string | null>(null)
+    const [isLoadingDebrief, setIsLoadingDebrief] = useState(false)
 
     // Calculate score
     const score = calculateTrainingScore(clauses)
+
+    // Trigger Clarence debrief for dynamic agent sessions
+    useEffect(() => {
+        if (sessionId && userId && generatedAgentId && !clarenceDebrief && !isLoadingDebrief) {
+            setIsLoadingDebrief(true)
+            fetch('/api/agents/debrief', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, userId }),
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.debrief?.summary) {
+                        setClarenceDebrief(data.debrief.summary)
+                    }
+                })
+                .catch(err => console.error('[TrainingScorecard] Debrief error:', err))
+                .finally(() => setIsLoadingDebrief(false))
+        }
+    }, [sessionId, userId, generatedAgentId, clarenceDebrief, isLoadingDebrief])
 
     // Extract teaching moments
     const teachingMoments = chatMessages.filter(m =>
@@ -550,6 +576,31 @@ export default function TrainingScorecard({
                         </div>
                     )}
                 </div>
+
+                {/* Clarence Debrief (dynamic agent sessions only) */}
+                {(clarenceDebrief || isLoadingDebrief) && (
+                    <div className="px-8 py-6 border-t border-slate-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                                <span className="text-white font-bold">C</span>
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-slate-800">Clarence&apos;s Debrief</h3>
+                                <p className="text-xs text-slate-500">Personalised feedback on your negotiation</p>
+                            </div>
+                        </div>
+                        {isLoadingDebrief ? (
+                            <div className="flex items-center gap-3 text-slate-500 text-sm">
+                                <div className="w-4 h-4 border-2 border-slate-300 border-t-emerald-500 rounded-full animate-spin"></div>
+                                Clarence is analysing your session...
+                            </div>
+                        ) : (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-slate-700 whitespace-pre-wrap">
+                                {clarenceDebrief}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Footer */}
                 <div className="px-8 py-5 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-shrink-0">
