@@ -706,30 +706,31 @@ function TrainingStudioPage() {
                     })
                 }
 
-                // Apply agent's initial positions as provider positions
-                if (agentConfig.initialPositions) {
-                    const { data: positions } = await supabase
-                        .from('session_clause_positions')
-                        .select('position_id, clause_category')
-                        .eq('session_id', sessionResult.sessionId)
+                // Diverge provider positions from customer to create negotiation gaps
+                // Difficulty determines how far apart positions start
+                const difficulty = agentConfig.personalityTraits?.style || 'balanced'
+                const shiftRange = difficulty === 'cooperative' ? { min: 2, max: 3 }
+                    : difficulty === 'aggressive' ? { min: 3, max: 5 }
+                    : { min: 2, max: 4 } // balanced
 
-                    if (positions && positions.length > 0) {
-                        const updates = positions.map((pos: Record<string, unknown>) => {
-                            const category = (pos.clause_category as string) || ''
-                            const agentPosition = agentConfig.initialPositions[category]
-                            if (agentPosition !== undefined) {
-                                return supabase
-                                    .from('session_clause_positions')
-                                    .update({ provider_position: agentPosition })
-                                    .eq('position_id', pos.position_id)
-                            }
-                            return null
-                        }).filter(Boolean)
+                const { data: positions } = await supabase
+                    .from('session_clause_positions')
+                    .select('position_id, customer_position')
+                    .eq('session_id', sessionResult.sessionId)
 
-                        if (updates.length > 0) {
-                            await Promise.all(updates)
-                        }
-                    }
+                if (positions && positions.length > 0) {
+                    const updates = positions.map((pos: Record<string, unknown>) => {
+                        const custPos = (pos.customer_position as number) || 5
+                        // Shift provider position away from customer (provider favours lower values)
+                        const shift = shiftRange.min + Math.floor(Math.random() * (shiftRange.max - shiftRange.min + 1))
+                        // Provider pushes position lower (more favourable to them), clamped to 1-10
+                        const provPos = Math.max(1, Math.min(10, custPos - shift))
+                        return supabase
+                            .from('session_clause_positions')
+                            .update({ provider_position: provPos })
+                            .eq('position_id', pos.position_id)
+                    })
+                    await Promise.all(updates)
                 }
 
                 // Navigate to contract studio
