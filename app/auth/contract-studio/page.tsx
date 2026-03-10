@@ -7590,9 +7590,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="text-xs text-slate-400">AI Opponent</div>
                                     <div className="text-sm font-medium text-amber-400 flex items-center gap-1 justify-end">
                                         <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-                                        {providerCompany}
+                                        {trainingAvatarInfo?.companyName || providerCompany}
                                     </div>
-                                    <div className="text-xs text-slate-500">{session.providerContactName || 'AI Negotiator'}</div>
+                                    <div className="text-xs text-slate-500">{trainingAvatarInfo?.characterName || session.providerContactName || 'AI Negotiator'}</div>
                                 </div>
                             ) : isCustomer && !hasProviderInvited ? (
                                 /* No provider invited yet - show invite prompt */
@@ -8505,7 +8505,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <PartyChatPanel
                     sessionId={session.sessionId}
                     providerId=""
-                    providerName={userInfo.role === 'customer' ? session.providerCompany : session.customerCompany}
+                    providerName={isTrainingMode ? (trainingAvatarInfo?.characterName || session.providerCompany) : (userInfo.role === 'customer' ? session.providerCompany : session.customerCompany)}
                     currentUserType={userInfo.role === 'customer' ? 'customer' : 'provider'}
                     currentUserName={userInfo.firstName || 'User'}
                     isProviderOnline={otherPartyStatus.isOnline}
