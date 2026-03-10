@@ -35,6 +35,15 @@ interface CompanyPlaybook {
     rulesCount: number
 }
 
+interface ContractTemplate {
+    templateId: string
+    templateName: string
+    contractType: string
+    clauseCount: number
+    description: string
+    isSystem: boolean
+}
+
 interface OptionButton {
     label: string
     value: string
@@ -110,14 +119,16 @@ function TrainingStudioPage() {
     const [chatInput, setChatInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
-    // Playbooks
+    // Playbooks & Templates
     const [companyPlaybooks, setCompanyPlaybooks] = useState<CompanyPlaybook[]>([])
+    const [templates, setTemplates] = useState<ContractTemplate[]>([])
 
     // Collected preferences
     const [selectedPath, setSelectedPath] = useState<'dynamic' | 'playbook' | 'quick' | null>(null)
     const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(preselectedPlaybookId)
     const [selectedContractType, setSelectedContractType] = useState<string | null>(null)
     const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null)
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
 
     // Generated data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,6 +196,32 @@ function TrainingStudioPage() {
 
             setCompanyPlaybooks(playbooksWithCounts)
             return playbooksWithCounts
+        } catch {
+            return []
+        }
+    }, [supabase])
+
+    const loadTemplates = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from('contract_templates')
+                .select('template_id, template_name, contract_type, clause_count, description, is_system')
+                .eq('is_active', true)
+                .order('template_name', { ascending: true })
+
+            if (error || !data) return []
+
+            const mapped: ContractTemplate[] = data.map((t: Record<string, unknown>) => ({
+                templateId: t.template_id as string,
+                templateName: t.template_name as string,
+                contractType: (t.contract_type as string) || 'custom',
+                clauseCount: (t.clause_count as number) || 0,
+                description: (t.description as string) || '',
+                isSystem: (t.is_system as boolean) || false,
+            }))
+
+            setTemplates(mapped)
+            return mapped
         } catch {
             return []
         }
@@ -288,7 +325,10 @@ function TrainingStudioPage() {
             const user = await loadUserInfo()
             if (!user || !mounted) return
 
-            const playbooks = user.companyId ? await loadPlaybooks(user.companyId) : []
+            const [playbooks] = await Promise.all([
+                user.companyId ? loadPlaybooks(user.companyId) : Promise.resolve([]),
+                loadTemplates(),
+            ])
 
             // If playbook pre-selected via URL, skip to playbook path
             if (preselectedPlaybookId && playbooks.find(p => p.playbookId === preselectedPlaybookId)) {
@@ -376,6 +416,21 @@ function TrainingStudioPage() {
             }
         }
 
+        // Phase: Template selection (after scenario generated)
+        if (phase === 'ready' && value.startsWith('template:')) {
+            const templateId = value.replace('template:', '')
+            const template = templates.find(t => t.templateId === templateId)
+            setSelectedTemplateId(templateId)
+            if (template) {
+                addMessage({
+                    type: 'clarence',
+                    content: `**${template.templateName}** — ${template.clauseCount} clauses. Ready to begin?`,
+                    actionButton: { label: 'Start Session', actionId: 'start-session' },
+                })
+            }
+            return
+        }
+
         // Phase: Preferences gathering
         if (phase === 'preferences') {
             // Playbook selection (from multi-playbook list)
@@ -421,7 +476,7 @@ function TrainingStudioPage() {
                 return
             }
         }
-    }, [phase, selectedPath, selectedPlaybookId, selectedContractType, selectedDifficulty, companyPlaybooks, addMessage])
+    }, [phase, selectedPath, selectedPlaybookId, selectedContractType, selectedDifficulty, companyPlaybooks, templates, addMessage])
 
     // ========================================================================
     // SECTION 9: GENERATE SESSION
@@ -491,9 +546,49 @@ function TrainingStudioPage() {
 
             addMessage({
                 type: 'clarence',
-                content: sc.userBrief || `You'll be negotiating with **${agent.persona.name}**, ${agent.persona.title} at **${agent.persona.company}**. ${sc.narrative}\n\nReady to begin?`,
-                actionButton: { label: 'Start Session', actionId: 'start-session' },
+                content: sc.userBrief || `You'll be negotiating with **${agent.persona.name}**, ${agent.persona.title} at **${agent.persona.company}**. ${sc.narrative}`,
             })
+
+            // Find matching templates for the contract type
+            const contractType = sc.contractType || ''
+            const matchingTemplates = templates.filter(t => {
+                const typeMatch = t.contractType?.toLowerCase() === contractType.toLowerCase()
+                const nameMatch = t.templateName?.toLowerCase().includes(contractType.toLowerCase().replace(/_/g, ' '))
+                return typeMatch || nameMatch
+            })
+
+            // Use all templates if no matches found
+            const templatesToShow = matchingTemplates.length > 0 ? matchingTemplates : templates
+
+            if (templatesToShow.length === 1) {
+                // Only one template — auto-select and go straight to Start
+                setSelectedTemplateId(templatesToShow[0].templateId)
+                addMessage({
+                    type: 'clarence',
+                    content: `I'll use the **${templatesToShow[0].templateName}** template (${templatesToShow[0].clauseCount} clauses) for the contract structure. Ready to begin?`,
+                    actionButton: { label: 'Start Session', actionId: 'start-session' },
+                })
+            } else if (templatesToShow.length > 0) {
+                // Multiple templates — let user choose
+                addMessage({
+                    type: 'clarence',
+                    content: 'Which contract template would you like to use for the clause structure?',
+                    options: templatesToShow.map(t => ({
+                        label: t.templateName,
+                        value: `template:${t.templateId}`,
+                        icon: '📄',
+                        description: `${t.clauseCount} clauses | ${t.contractType.replace(/_/g, ' ')}`,
+                    })),
+                })
+            } else {
+                // No templates at all — this won't work well, warn the user
+                addMessage({
+                    type: 'clarence',
+                    content: 'No contract templates are available yet. Please ask your administrator to set up templates before starting a training session.',
+                })
+                setPhase('error')
+                return
+            }
 
             setPhase('ready')
         } catch (err) {
@@ -510,14 +605,14 @@ function TrainingStudioPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [userInfo, selectedPlaybookId, addMessage])
+    }, [userInfo, selectedPlaybookId, templates, addMessage])
 
     // ========================================================================
     // SECTION 10: ACTION BUTTON HANDLER (Start Session)
     // ========================================================================
 
     const handleActionClick = useCallback(async (actionId: string) => {
-        if (actionId === 'start-session' && scenario && agentConfig && userInfo) {
+        if (actionId === 'start-session' && scenario && agentConfig && userInfo && selectedTemplateId) {
             setPhase('launching')
             setIsLoading(true)
 
@@ -527,7 +622,7 @@ function TrainingStudioPage() {
             })
 
             try {
-                // Create session via n8n webhook
+                // Create session via n8n webhook WITH template so clauses are populated
                 const sessionResponse = await fetch(`${API_BASE}/session-create`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -538,11 +633,24 @@ function TrainingStudioPage() {
                         companyName: userInfo.company,
                         companyId: userInfo.companyId,
                         contractType: scenario.contractType,
+                        contract_type: scenario.contractType,
                         contractName: `Training: ${agentConfig.persona.company} — ${scenario.contractContext}`,
+                        contract_name: `Training: ${agentConfig.persona.company} — ${scenario.contractContext}`,
                         dealValue: scenario.dealValue,
                         dealCurrency: scenario.dealCurrency || 'GBP',
                         dealDuration: scenario.dealDurationMonths,
                         isTraining: true,
+                        // Template — this tells session-create to load clauses from the template
+                        template_source: 'existing_template',
+                        source_template_id: selectedTemplateId,
+                        assessment_completed: true,
+                        // AI counterpart info
+                        deal_context: {
+                            training_mode: 'dynamic',
+                            ai_character_name: agentConfig.persona.name,
+                            ai_company_name: agentConfig.persona.company,
+                            ai_personality: agentConfig.personalityTraits.style,
+                        },
                         aiCompanyName: agentConfig.persona.company,
                         aiPersonality: agentConfig.personalityTraits.style,
                         characterName: agentConfig.persona.name,
@@ -562,6 +670,32 @@ function TrainingStudioPage() {
                         .from('generated_agents')
                         .update({ session_id: sessionResult.sessionId })
                         .eq('agent_id', agentConfig.agentId)
+                }
+
+                // Apply agent's initial positions as provider positions
+                if (agentConfig.initialPositions) {
+                    const { data: positions } = await supabase
+                        .from('session_clause_positions')
+                        .select('position_id, clause_category')
+                        .eq('session_id', sessionResult.sessionId)
+
+                    if (positions && positions.length > 0) {
+                        const updates = positions.map((pos: Record<string, unknown>) => {
+                            const category = (pos.clause_category as string) || ''
+                            const agentPosition = agentConfig.initialPositions[category]
+                            if (agentPosition !== undefined) {
+                                return supabase
+                                    .from('session_clause_positions')
+                                    .update({ provider_position: agentPosition })
+                                    .eq('position_id', pos.position_id)
+                            }
+                            return null
+                        }).filter(Boolean)
+
+                        if (updates.length > 0) {
+                            await Promise.all(updates)
+                        }
+                    }
                 }
 
                 // Navigate to contract studio
@@ -595,7 +729,7 @@ function TrainingStudioPage() {
         if (actionId === 'back') {
             router.push('/auth/training')
         }
-    }, [scenario, agentConfig, userInfo, supabase, router, startConversation, companyPlaybooks, addMessage])
+    }, [scenario, agentConfig, userInfo, selectedTemplateId, supabase, router, startConversation, companyPlaybooks, addMessage])
 
     // ========================================================================
     // SECTION 11: CHAT INPUT (free-form messages to Clarence)
