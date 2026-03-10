@@ -42,6 +42,9 @@ interface ContractTemplate {
     clauseCount: number
     description: string
     isSystem: boolean
+    isPublic: boolean
+    companyId: string | null
+    createdByUserId: string | null
 }
 
 interface OptionButton {
@@ -201,27 +204,37 @@ function TrainingStudioPage() {
         }
     }, [supabase])
 
-    const loadTemplates = useCallback(async () => {
+    const loadTemplates = useCallback(async (companyId?: string, userId?: string) => {
         try {
             const { data, error } = await supabase
                 .from('contract_templates')
-                .select('template_id, template_name, contract_type, clause_count, description, is_system')
+                .select('template_id, template_name, contract_type, clause_count, description, is_system, is_public, company_id, created_by_user_id')
                 .eq('is_active', true)
+                .eq('is_system', false)
                 .order('template_name', { ascending: true })
 
             if (error || !data) return []
 
-            const mapped: ContractTemplate[] = data.map((t: Record<string, unknown>) => ({
+            const allTemplates: ContractTemplate[] = data.map((t: Record<string, unknown>) => ({
                 templateId: t.template_id as string,
                 templateName: t.template_name as string,
                 contractType: (t.contract_type as string) || 'custom',
                 clauseCount: (t.clause_count as number) || 0,
                 description: (t.description as string) || '',
                 isSystem: (t.is_system as boolean) || false,
+                isPublic: (t.is_public as boolean) || false,
+                companyId: (t.company_id as string) || null,
+                createdByUserId: (t.created_by_user_id as string) || null,
             }))
 
-            setTemplates(mapped)
-            return mapped
+            // Filter by ownership: company templates (public + same company) + user's own templates
+            const owned = allTemplates.filter(t =>
+                (t.isPublic && companyId && t.companyId === companyId) ||
+                (userId && t.createdByUserId === userId)
+            )
+
+            setTemplates(owned)
+            return owned
         } catch {
             return []
         }
@@ -327,7 +340,7 @@ function TrainingStudioPage() {
 
             const [playbooks] = await Promise.all([
                 user.companyId ? loadPlaybooks(user.companyId) : Promise.resolve([]),
-                loadTemplates(),
+                loadTemplates(user.companyId, user.userId),
             ])
 
             // If playbook pre-selected via URL, skip to playbook path
@@ -476,7 +489,17 @@ function TrainingStudioPage() {
                 return
             }
         }
-    }, [phase, selectedPath, selectedPlaybookId, selectedContractType, selectedDifficulty, companyPlaybooks, templates, addMessage])
+
+        // Navigation options (available from error/ready states)
+        if (value === 'goto-templates') {
+            router.push('/auth/contracts')
+            return
+        }
+        if (value === 'back') {
+            router.push('/auth/training')
+            return
+        }
+    }, [phase, selectedPath, selectedPlaybookId, selectedContractType, selectedDifficulty, companyPlaybooks, templates, addMessage, router])
 
     // ========================================================================
     // SECTION 9: GENERATE SESSION
@@ -581,10 +604,14 @@ function TrainingStudioPage() {
                     })),
                 })
             } else {
-                // No templates at all — this won't work well, warn the user
+                // No templates — direct user to create one first
                 addMessage({
                     type: 'clarence',
-                    content: 'No contract templates are available yet. Please ask your administrator to set up templates before starting a training session.',
+                    content: 'You don\'t have any contract templates yet. Templates provide the clause structure for your training sessions.\n\nHead over to your **Templates** page to create or import one, then come back here to start training.',
+                    options: [
+                        { label: 'Go to Templates', value: 'goto-templates', icon: '📄', description: 'Create a contract template first' },
+                        { label: 'Back to Dashboard', value: 'back', icon: '←', description: 'Return to training dashboard' },
+                    ],
                 })
                 setPhase('error')
                 return
