@@ -7432,6 +7432,46 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
+                        {/* Centre: Session Context (compact inline) */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-slate-400">Session</span>
+                                <span className="text-sm font-mono text-white">{session.sessionNumber}</span>
+                            </div>
+                            <div className="h-4 w-px bg-slate-600"></div>
+                            {isCustomer ? (
+                                <button
+                                    onClick={openDealContextEditor}
+                                    className="flex items-center gap-1.5 group hover:bg-slate-700/50 px-2 py-0.5 rounded transition"
+                                    title="Click to edit deal context"
+                                >
+                                    <span className="text-xs text-slate-400">Deal</span>
+                                    <span className={`text-sm font-semibold ${accentColor}`}>{session.dealValue || 'Not set'}</span>
+                                    <svg className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-slate-400">Deal</span>
+                                    <span className={`text-sm font-semibold ${accentColor}`}>{session.dealValue || 'Not set'}</span>
+                                </div>
+                            )}
+                            {!isTrainingMode && (() => {
+                                const activeBid = availableProviders?.[0]
+                                if (!hasProviderInvited) {
+                                    return <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded">Provider: Not Invited</span>
+                                }
+                                if (activeBid?.questionnaireComplete) {
+                                    return <span className="text-xs text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded">Provider: Ready</span>
+                                }
+                                if (activeBid?.intakeComplete) {
+                                    return <span className="text-xs text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">Provider: Assessment</span>
+                                }
+                                return <span className="text-xs text-purple-400 bg-purple-500/20 px-2 py-0.5 rounded">Provider: Awaiting</span>
+                            })()}
+                        </div>
+
                         {/* Right: Feedback + Preview Contract + Documents Centre Buttons */}
                         <div className="flex items-center gap-2">
                             {/* Feedback Button */}
@@ -7477,312 +7517,197 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 </div>
 
                 {/* ============================================================ */}
-                {/* ROW 2: Session Context Row */}
+                {/* ROW 2: Party Bar — Provider (blue, LEFT) | Chat | Customer (emerald, RIGHT) */}
+                {/* Matches position bar orientation: Provider LEFT ← → Customer RIGHT */}
                 {/* ============================================================ */}
-                <div className="px-6 py-3">
-                    <div className="flex items-center justify-between">
-                        {/* Left: Customer Info (always on left) */}
-                        <div className="flex items-center gap-3 min-w-[200px]">
-                            <div className={`w-3 h-3 rounded-full ${isCustomer
-                                ? `${dotColor} animate-pulse`
-                                : (otherPartyStatus.isOnline ? dotColor : 'bg-slate-500')
-                                }`}></div>
-                            <div>
-                                <div className="text-xs text-slate-400">Customer</div>
-                                <div className={`text-sm font-medium ${accentColor}`}>{customerCompany}</div>
-                                <div className="text-xs text-slate-500">
-                                    {isCustomer
-                                        ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || session.customerContactName || 'Contact'
-                                        : session.customerContactName || 'Contact'
-                                    }
-                                </div>
-                            </div>
-                            {isCustomer && (
-                                <span className={`text-xs ${youBadgeBg} px-2 py-0.5 rounded`}>
-                                    You
+                <div className={`relative flex items-center px-6 py-2 border-t ${borderColor}`}>
+
+                    {/* LEFT: Provider / AI Opponent — right-aligned toward centre */}
+                    <div className="flex-1 flex justify-end pr-3">
+                        {isTrainingMode ? (
+                            /* Training: AI Opponent (amber pill) */
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse flex-shrink-0"></div>
+                                <span className="text-xs font-medium text-amber-300 truncate max-w-[140px]">
+                                    {trainingAvatarInfo?.companyName || providerCompany}
                                 </span>
-                            )}
-                        </div>
-
-                        {/* Center: Session Details (truly centered) */}
-                        <div className="flex items-center gap-6">
-                            {/* Session Number */}
-                            <div className="text-center">
-                                <div className="text-xs text-slate-400">Session</div>
-                                <div className="text-sm font-mono text-white">{session.sessionNumber}</div>
+                                <span className="text-xs text-amber-400/70 truncate max-w-[100px]">
+                                    · {trainingAvatarInfo?.characterName || session.providerContactName || 'AI Negotiator'}
+                                </span>
                             </div>
-
-                            {/* Deal Value - Editable by Customer only */}
-                            {isCustomer ? (
+                        ) : isCustomer && !hasProviderInvited ? (
+                            /* Live: No provider invited */
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <div className="w-2 h-2 bg-slate-500 rounded-full flex-shrink-0"></div>
+                                <span className="text-xs font-medium text-slate-400">Awaiting Provider</span>
                                 <button
-                                    onClick={openDealContextEditor}
-                                    className="text-center group hover:bg-slate-700/50 px-3 py-1 rounded transition"
-                                    title="Click to edit deal context"
+                                    onClick={() => router.push(`/auth/provider-invite?session_id=${session.sessionId}`)}
+                                    className="ml-1 px-2 py-0.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition"
                                 >
-                                    <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-                                        Deal Value
-                                        <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                        </svg>
-                                    </div>
-                                    <div className={`text-sm font-semibold ${accentColor}`}>
-                                        {session.dealValue || 'Not set'}
-                                    </div>
+                                    Invite
                                 </button>
-                            ) : (
-                                <div className="text-center px-3 py-1">
-                                    <div className="text-xs text-slate-400">Deal Value</div>
-                                    <div className={`text-sm font-semibold ${accentColor}`}>
-                                        {session.dealValue || 'Not set'}
-                                    </div>
-                                </div>
-                            )}
+                            </div>
+                        ) : isCustomer ? (
+                            /* Live: Provider present — customer sees dropdown */
+                            <div className="relative" ref={providerDropdownRef}>
+                                <button
+                                    onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition"
+                                >
+                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${otherPartyStatus.isOnline ? 'bg-blue-400' : 'bg-slate-500'}`}></div>
+                                    <span className="text-xs font-medium text-blue-300 truncate max-w-[140px]">{providerCompany}</span>
+                                    <span className="text-xs text-blue-400/70 truncate max-w-[100px]">
+                                        · {session.providerContactName || 'Contact'}
+                                    </span>
+                                    <svg className={`w-3 h-3 text-blue-400 transition-transform flex-shrink-0 ${showProviderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
 
-                            {/* Provider Status Indicator */}
-                            {!isTrainingMode && (
-                                (() => {
-                                    const activeBid = availableProviders?.[0]
-                                    if (!hasProviderInvited) {
-                                        return (
-                                            <div className="text-center px-3 py-1 bg-amber-500/20 rounded-lg">
-                                                <div className="text-xs text-amber-400">Provider</div>
-                                                <div className="text-sm font-medium text-amber-300">Not Invited</div>
-                                            </div>
-                                        )
-                                    }
-                                    if (activeBid?.questionnaireComplete) {
-                                        return (
-                                            <div className="text-center px-3 py-1 bg-emerald-500/20 rounded-lg">
-                                                <div className="text-xs text-emerald-400">Provider</div>
-                                                <div className="text-sm font-medium text-emerald-300">Ready</div>
-                                            </div>
-                                        )
-                                    }
-                                    if (activeBid?.intakeComplete) {
-                                        return (
-                                            <div className="text-center px-3 py-1 bg-blue-500/20 rounded-lg">
-                                                <div className="text-xs text-blue-400">Provider</div>
-                                                <div className="text-sm font-medium text-blue-300">Completing Assessment</div>
-                                            </div>
-                                        )
-                                    }
-                                    return (
-                                        <div className="text-center px-3 py-1 bg-purple-500/20 rounded-lg">
-                                            <div className="text-xs text-purple-400">Provider</div>
-                                            <div className="text-sm font-medium text-purple-300">Invited - Awaiting Response</div>
+                                {/* Provider Dropdown — opens left since provider is on the left */}
+                                {showProviderDropdown && (
+                                    <div className="absolute left-0 top-full mt-1 w-72 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                                        <div className="p-2 border-b border-slate-700">
+                                            <div className="text-xs text-slate-400 px-2">Select Provider</div>
                                         </div>
-                                    )
-                                })()
-                            )}
-                        </div>
 
-                        {/* Right: Provider Info with Dropdown (customers) or Static (providers) + Party Chat */}
-                        <div className="flex items-center gap-3 min-w-[280px] justify-end">
-                            {!isCustomer && (
-                                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
-                                    You
+                                        {isLoadingProviders ? (
+                                            <div className="p-4 text-center text-slate-400 text-sm">Loading providers...</div>
+                                        ) : availableProviders.length === 0 ? (
+                                            <div className="p-4 text-center text-slate-400 text-sm">No providers invited yet</div>
+                                        ) : (
+                                            <div className="max-h-64 overflow-y-auto">
+                                                {availableProviders.map((provider) => (
+                                                    <button
+                                                        key={provider.bidId}
+                                                        onClick={() => {
+                                                            if (provider.questionnaireComplete && provider.providerId) {
+                                                                switchProvider(provider.providerId, provider.providerCompany)
+                                                            } else {
+                                                                alert(`${provider.providerCompany} has not completed their intake yet.`)
+                                                            }
+                                                        }}
+                                                        className="w-full px-3 py-2 text-left hover:bg-slate-700 transition flex items-center justify-between"
+                                                    >
+                                                        <div>
+                                                            <div className="text-sm font-medium text-white">{provider.providerCompany}</div>
+                                                            <div className="text-xs text-slate-400">{provider.providerContactEmail}</div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {provider.providerCompany === providerCompany && (
+                                                                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Active</span>
+                                                            )}
+                                                            <span className={`text-xs px-2 py-0.5 rounded ${provider.questionnaireComplete
+                                                                ? 'bg-emerald-500/20 text-emerald-400'
+                                                                : provider.intakeComplete
+                                                                    ? 'bg-amber-500/20 text-amber-400'
+                                                                    : 'bg-slate-500/20 text-slate-400'
+                                                                }`}>
+                                                                {provider.questionnaireComplete ? 'Ready' : provider.intakeComplete ? 'Intake Done' : 'Invited'}
+                                                            </span>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="border-t border-slate-700 p-2">
+                                            <button
+                                                onClick={() => {
+                                                    const sessionNum = session?.sessionNumber || ''
+                                                    router.push(`/auth/invite-providers?session_id=${session?.sessionId}&session_number=${sessionNum}`)
+                                                }}
+                                                className="w-full px-3 py-2 text-sm text-purple-400 hover:bg-purple-500/10 rounded transition flex items-center gap-2 justify-center"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                </svg>
+                                                Invite New Provider
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            /* Provider's own view */
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse flex-shrink-0"></div>
+                                <span className="text-xs font-medium text-blue-300 truncate max-w-[140px]">{providerCompany}</span>
+                                <span className="text-xs text-blue-400/70 truncate max-w-[100px]">
+                                    · {`${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'}
+                                </span>
+                                <span className="text-[10px] text-blue-400 font-medium">(You)</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* CENTRE: Party Chat Toggle — anchored at exact centre */}
+                    <div className="flex-shrink-0">
+                        <button
+                            onClick={() => setIsChatOpen(true)}
+                            className={`relative p-2.5 rounded-full transition shadow-sm group ${
+                                isTrainingMode
+                                    ? 'bg-slate-700 border border-amber-500/30 hover:border-amber-400/50 hover:bg-amber-900/30'
+                                    : 'bg-slate-700 border border-slate-600 hover:border-slate-500 hover:bg-slate-600'
+                            }`}
+                            title={
+                                isTrainingMode
+                                    ? `Chat with ${trainingAvatarInfo?.characterName || 'AI Opponent'}`
+                                    : isCustomer
+                                        ? `Chat with ${providerCompany}`
+                                        : `Chat with ${customerCompany}`
+                            }
+                        >
+                            <svg
+                                className={`w-5 h-5 transition ${
+                                    isTrainingMode
+                                        ? 'text-amber-400 group-hover:text-amber-300'
+                                        : 'text-slate-400 group-hover:text-emerald-400'
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                />
+                            </svg>
+
+                            {/* Unread Badge */}
+                            {chatUnreadCount > 0 && (
+                                <span className={`absolute -top-1 -right-1 w-5 h-5 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse ${
+                                    isTrainingMode ? 'bg-amber-500' : 'bg-red-500'
+                                }`}>
+                                    {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
                                 </span>
                             )}
+                        </button>
+                    </div>
 
-                            {/* TRAINING MODE: Show AI Opponent indicator */}
-                            {isTrainingMode ? (
-                                <div className="text-right">
-                                    <div className="text-xs text-slate-400">AI Opponent</div>
-                                    <div className="text-sm font-medium text-amber-400 flex items-center gap-1 justify-end">
-                                        <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-                                        {trainingAvatarInfo?.companyName || providerCompany}
-                                    </div>
-                                    <div className="text-xs text-slate-500">{trainingAvatarInfo?.characterName || session.providerContactName || 'AI Negotiator'}</div>
-                                </div>
-                            ) : isCustomer && !hasProviderInvited ? (
-                                /* No provider invited yet - show invite prompt */
-                                <div className="text-right">
-                                    <div className="text-xs text-slate-400">Provider</div>
-                                    <div className="text-sm font-medium text-slate-500">Awaiting Provider</div>
-                                    <button
-                                        onClick={() => router.push(`/auth/provider-invite?session_id=${session.sessionId}`)}
-                                        className="mt-1 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition"
-                                    >
-                                        Invite Provider
-                                    </button>
-                                </div>
-                            ) : isCustomer ? (
-                                /* Customer sees provider dropdown */
-                                <div className="relative" ref={providerDropdownRef}>
-                                    <button
-                                        onClick={() => setShowProviderDropdown(!showProviderDropdown)}
-                                        className="flex items-center gap-2 text-right hover:bg-slate-700/50 px-2 py-1 rounded transition"
-                                    >
-                                        <div>
-                                            <div className="text-xs text-slate-400">Provider</div>
-                                            <div className="text-sm font-medium text-blue-400 flex items-center gap-1">
-                                                {providerCompany}
-                                                <svg className={`w-3 h-3 transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                            <div className="text-xs text-slate-500">
-                                                {isCustomer
-                                                    ? session.providerContactName || 'Contact'
-                                                    : `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || session.providerContactName || 'Contact'
-                                                }
-                                            </div>
-                                        </div>
-                                    </button>
-
-                                    {/* Provider Dropdown */}
-                                    {showProviderDropdown && (
-                                        <div className="absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
-                                            <div className="p-2 border-b border-slate-700">
-                                                <div className="text-xs text-slate-400 px-2">Select Provider</div>
-                                            </div>
-
-                                            {isLoadingProviders ? (
-                                                <div className="p-4 text-center text-slate-400 text-sm">
-                                                    Loading providers...
-                                                </div>
-                                            ) : availableProviders.length === 0 ? (
-                                                <div className="p-4 text-center text-slate-400 text-sm">
-                                                    No providers invited yet
-                                                </div>
-                                            ) : (
-                                                <div className="max-h-64 overflow-y-auto">
-                                                    {availableProviders.map((provider) => (
-                                                        <button
-                                                            key={provider.bidId}
-                                                            onClick={() => {
-                                                                if (provider.questionnaireComplete && provider.providerId) {
-                                                                    switchProvider(provider.providerId, provider.providerCompany)
-                                                                } else {
-                                                                    alert(`${provider.providerCompany} has not completed their intake yet.`)
-                                                                }
-                                                            }}
-                                                            className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition flex items-center justify-between`}
-                                                        >
-                                                            <div>
-                                                                <div className="text-sm font-medium text-white">{provider.providerCompany}</div>
-                                                                <div className="text-xs text-slate-400">{provider.providerContactEmail}</div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {provider.providerCompany === providerCompany && (
-                                                                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Active</span>
-                                                                )}
-                                                                <span className={`text-xs px-2 py-0.5 rounded ${provider.questionnaireComplete
-                                                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                                                    : provider.intakeComplete
-                                                                        ? 'bg-amber-500/20 text-amber-400'
-                                                                        : 'bg-slate-500/20 text-slate-400'
-                                                                    }`}>
-                                                                    {provider.questionnaireComplete ? 'Ready' : provider.intakeComplete ? 'Intake Done' : 'Invited'}
-                                                                </span>
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {/* Invite New Provider Button */}
-                                            <div className="border-t border-slate-700 p-2">
-                                                <button
-                                                    onClick={() => {
-                                                        const sessionNum = session?.sessionNumber || ''
-                                                        router.push(`/auth/invite-providers?session_id=${session?.sessionId}&session_number=${sessionNum}`)
-                                                    }}
-                                                    className="w-full px-3 py-2 text-sm text-purple-400 hover:bg-purple-500/10 rounded transition flex items-center gap-2 justify-center"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                                    </svg>
-                                                    Invite New Provider
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                /* Provider sees simple static display */
-                                <div className="text-right">
-                                    <div className="text-xs text-slate-400">Provider</div>
-                                    <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
-                                    <div className="text-xs text-slate-500">
-                                        {`${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Online indicator and Party Chat - NOW VISIBLE in training mode with amber styling */}
-                            {isTrainingMode ? (
-                                <>
-                                    {/* Training Mode: Amber indicator for AI opponent */}
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 bg-amber-400 rounded-full animate-pulse"></div>
-                                        <span className="text-xs text-amber-400">AI Active</span>
-                                    </div>
-
-                                    {/* Training Mode Chat Button - Amber themed */}
-                                    <button
-                                        onClick={() => setIsChatOpen(true)}
-                                        className="relative ml-2 p-2 hover:bg-amber-900/30 rounded-lg transition group"
-                                        title={`Chat with ${session.providerContactName || 'AI Opponent'}`}
-                                    >
-                                        <svg
-                                            className="w-5 h-5 text-amber-400 group-hover:text-amber-300 transition"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                            />
-                                        </svg>
-
-                                        {/* Unread Badge - Amber for training */}
-                                        {chatUnreadCount > 0 && (
-                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                                {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                                            </span>
-                                        )}
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    {/* Live Mode: Original green indicator */}
-                                    <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
-
-                                    {/* Party Chat Toggle Button - Available to BOTH parties */}
-                                    <button
-                                        onClick={() => setIsChatOpen(true)}
-                                        className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
-                                        title={isCustomer ? `Chat with ${providerCompany}` : `Chat with ${customerCompany}`}
-                                    >
-                                        <svg
-                                            className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                            />
-                                        </svg>
-
-                                        {/* Unread Badge */}
-                                        {chatUnreadCount > 0 && (
-                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                                {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                                            </span>
-                                        )}
-                                    </button>
-                                </>
+                    {/* RIGHT: Customer — left-aligned from centre */}
+                    <div className="flex-1 flex justify-start pl-3">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                isCustomer
+                                    ? `${isTrainingMode ? 'bg-emerald-400' : 'bg-emerald-400'} animate-pulse`
+                                    : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')
+                            }`}></div>
+                            <span className="text-xs font-medium text-emerald-300 truncate max-w-[140px]">{customerCompany}</span>
+                            <span className="text-xs text-emerald-400/70 truncate max-w-[100px]">
+                                · {isCustomer
+                                    ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || session.customerContactName || 'Contact'
+                                    : session.customerContactName || 'Contact'
+                                }
+                            </span>
+                            {isCustomer && (
+                                <span className="text-[10px] text-emerald-400 font-medium">(You)</span>
                             )}
                         </div>
                     </div>
+
                 </div>
                 {/* Deal Context Edit Modal */}
                 {isEditingDealContext && (
