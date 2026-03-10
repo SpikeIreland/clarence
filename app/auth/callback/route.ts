@@ -308,8 +308,8 @@ export async function GET(request: Request) {
                     }
                     return NextResponse.redirect(`${origin}/provider`)
                 } else {
-                    // Customer users go to dashboard
-                    return NextResponse.redirect(`${origin}/auth/dashboard`)
+                    // Customer users go to home
+                    return NextResponse.redirect(`${origin}/auth/home`)
                 }
             }
         } catch (err) {

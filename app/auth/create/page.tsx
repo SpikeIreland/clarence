@@ -13,8 +13,8 @@
 // ARCHITECTURE:
 //   This is a lightweight gateway page, NOT a full dashboard.
 //   Each pathway card links to its own dedicated dashboard:
-//     - Quick Create    → /auth/quick-contract (existing QC Dashboard)
-//     - Contract Create → /auth/contracts-dashboard (existing Contracts Dashboard)
+//     - Quick Create    → /auth/create-contract?pathway=quick_create
+//     - Contract Create → /auth/create-contract?pathway=contract_create
 //     - Co-Create       → /auth/create-contract?pathway=co_create
 //
 // AUTH PATTERN:
@@ -256,10 +256,10 @@ export default function CreateGatewayPage() {
 
                     {/* ============================================================ */}
                     {/* SECTION 13A: QUICK CREATE CARD */}
-                    {/* Links to existing QC Dashboard at /auth/quick-contract */}
+                    {/* Goes straight to creation flow */}
                     {/* ============================================================ */}
                     <Link
-                        href="/auth/quick-contract"
+                        href="/auth/create-contract?pathway=quick_create"
                         className="group block bg-white rounded-2xl border-2 border-slate-200 hover:border-emerald-400 p-8 transition-all hover:shadow-xl hover:shadow-emerald-500/10 relative overflow-hidden"
                     >
                         {/* Accent bar */}
@@ -315,10 +315,10 @@ export default function CreateGatewayPage() {
 
                     {/* ============================================================ */}
                     {/* SECTION 13B: CONTRACT CREATE CARD */}
-                    {/* Links to existing Contracts Dashboard */}
+                    {/* Goes straight to creation flow */}
                     {/* ============================================================ */}
                     <Link
-                        href="/auth/contracts-dashboard"
+                        href="/auth/create-contract?pathway=contract_create"
                         className="group block bg-white rounded-2xl border-2 border-slate-200 hover:border-slate-400 p-8 transition-all hover:shadow-xl hover:shadow-slate-500/10 relative overflow-hidden"
                     >
                         {/* Accent bar */}
