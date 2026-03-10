@@ -149,10 +149,10 @@ export async function POST(request: NextRequest) {
         }
 
         // ------------------------------------------------------------------
-        // ACTION: link — Link a generated agent to a session (service role)
+        // ACTION: link — Link a generated agent to a session + write leverage
         // ------------------------------------------------------------------
         if (action === 'link') {
-            const { agentId, sessionId } = body
+            const { agentId, sessionId, leverageResult } = body
 
             if (!agentId || !sessionId) {
                 return NextResponse.json(
@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
                 )
             }
 
+            // Link the agent to the session
             const { error: linkError } = await supabase
                 .from('generated_agents')
                 .update({ session_id: sessionId })
@@ -172,6 +173,42 @@ export async function POST(request: NextRequest) {
                     { error: 'Failed to link agent to session', success: false },
                     { status: 500 }
                 )
+            }
+
+            // Write leverage scores if provided
+            if (leverageResult?.customerLeverage != null) {
+                const custLev = Math.round(leverageResult.customerLeverage)
+                const provLev = Math.round(leverageResult.providerLeverage)
+
+                // Update session baseline leverage
+                await supabase
+                    .from('sessions')
+                    .update({
+                        customer_leverage: custLev,
+                        provider_leverage: provLev,
+                        leverage_tracker_customer: custLev,
+                        leverage_tracker_provider: provLev,
+                    })
+                    .eq('session_id', sessionId)
+
+                // Insert leverage_calculations row so contract-studio API picks it up
+                await supabase
+                    .from('leverage_calculations')
+                    .upsert({
+                        session_id: sessionId,
+                        bid_id: sessionId, // Use session_id as bid_id for training
+                        leverage_type: 'master',
+                        customer_leverage: custLev,
+                        provider_leverage: provLev,
+                        alignment_percentage: 0,
+                        is_aligned: false,
+                        leverage_factors_breakdown: leverageResult.breakdown || {},
+                        calculated_at: new Date().toISOString(),
+                        version: 1,
+                        calculation_trigger: 'training_orchestrator',
+                    }, { onConflict: 'session_id,bid_id,leverage_type' })
+
+                console.log(`[TrainingOrchestrator API] Leverage written: ${custLev}/${provLev}`)
             }
 
             console.log(`[TrainingOrchestrator API] Agent ${agentId} linked to session ${sessionId}`)
@@ -209,6 +246,7 @@ export async function POST(request: NextRequest) {
             // Delete related records then the session
             await supabase.from('training_session_results').delete().eq('session_id', sessionId)
             await supabase.from('generated_agents').delete().eq('session_id', sessionId)
+            await supabase.from('leverage_calculations').delete().eq('session_id', sessionId)
             await supabase.from('session_clause_positions').delete().eq('session_id', sessionId)
             await supabase.from('session_clauses').delete().eq('session_id', sessionId)
             await supabase.from('party_chat_messages').delete().eq('session_id', sessionId)

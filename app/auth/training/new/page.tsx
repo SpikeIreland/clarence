@@ -691,7 +691,7 @@ function TrainingStudioPage() {
                     throw new Error('No session ID returned')
                 }
 
-                // Link generated agent to the session (via API route — service role bypasses RLS)
+                // Link generated agent to the session + write leverage (via API route — service role bypasses RLS)
                 if (agentConfig.agentId) {
                     await fetch('/api/agents/training-orchestrator', {
                         method: 'POST',
@@ -701,6 +701,7 @@ function TrainingStudioPage() {
                             userId: userInfo.userId,
                             agentId: agentConfig.agentId,
                             sessionId: sessionResult.sessionId,
+                            leverageResult: agentConfig.leverageResult || null,
                         }),
                     })
                 }
