@@ -725,9 +725,14 @@ function TrainingStudioPage() {
                         const shift = shiftRange.min + Math.floor(Math.random() * (shiftRange.max - shiftRange.min + 1))
                         // Provider pushes position lower (more favourable to them), clamped to 1-10
                         const provPos = Math.max(1, Math.min(10, custPos - shift))
+                        // Clarence recommendation = fair midpoint between the two positions
+                        const clarenceRec = Math.round(((custPos + provPos) / 2) * 10) / 10
                         return supabase
                             .from('session_clause_positions')
-                            .update({ provider_position: provPos })
+                            .update({
+                                provider_position: provPos,
+                                ai_suggested_compromise: clarenceRec,
+                            })
                             .eq('position_id', pos.position_id)
                     })
                     await Promise.all(updates)

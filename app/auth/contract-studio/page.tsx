@@ -3412,7 +3412,7 @@ function ContractStudioContent() {
             const providerIdFromUrl = searchParams.get('provider_id')
 
             if (!sessionId) {
-                router.push('/auth/contracts-dashboard')
+                router.push('/auth/home')
                 return
             }
 
@@ -5919,7 +5919,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="text-center">
                     <p className="text-red-600 mb-4">Failed to load contract data</p>
                     <button
-                        onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
+                        onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/home')}
                         className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
                     >
                         {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
@@ -7405,7 +7405,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             {userInfo?.role !== 'provider' && (
                                 <>
                                     <button
-                                        onClick={() => router.push('/auth/contracts-dashboard')}
+                                        onClick={() => router.push('/auth/home')}
                                         className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -9620,7 +9620,7 @@ function PendingProviderView({
                         </div>
                     </div>
                     <button
-                        onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
+                        onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/home')}
                         className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                     >
                         {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
@@ -9667,7 +9667,7 @@ function PendingProviderView({
 
                         {(sessionStatus === 'provider_invited' || inviteSent) && (
                             <button
-                                onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
+                                onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/home')}
                                 className="text-slate-400 hover:text-white transition"
                             >
                                 {userInfo?.role === 'provider' ? '← Sign Out' : '← Back to Dashboard'}
