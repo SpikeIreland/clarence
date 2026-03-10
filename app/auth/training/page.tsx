@@ -271,6 +271,33 @@ function TrainingDashboardPage() {
         router.push('/auth/training/new')
     }
 
+    const handleDeleteSession = async (sessionId: string) => {
+        if (!confirm('Delete this training session? This cannot be undone.')) return
+
+        const auth = localStorage.getItem('clarence_auth')
+        if (!auth) return
+        const authData = JSON.parse(auth)
+        const userId = authData.userInfo?.userId
+
+        try {
+            const res = await fetch('/api/agents/training-orchestrator', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete-session', userId, sessionId }),
+            })
+            const result = await res.json()
+
+            if (result.success) {
+                setSessions(prev => prev.filter(s => s.sessionId !== sessionId))
+            } else {
+                alert('Failed to delete the session. Please try again.')
+            }
+        } catch (err) {
+            console.error('Error deleting session:', err)
+            alert('Failed to delete the session. Please try again.')
+        }
+    }
+
     // ========================================================================
     // SECTION 9: RENDER - LOADING
     // ========================================================================
@@ -479,12 +506,21 @@ function TrainingDashboardPage() {
                                                         {badge.label}
                                                     </span>
 
-                                                    {/* Action Button */}
+                                                    {/* Action Buttons */}
                                                     <button
                                                         onClick={() => handleContinueSession(session.sessionId)}
                                                         className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
                                                     >
                                                         {isCompleted ? 'Review' : 'Continue'}
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.sessionId) }}
+                                                        className="px-2.5 py-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Delete session"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
                                                     </button>
                                                 </div>
                                             </div>

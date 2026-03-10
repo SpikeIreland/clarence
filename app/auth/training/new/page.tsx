@@ -555,8 +555,8 @@ function TrainingStudioPage() {
                 dealCurrency: sc.dealCurrency || 'GBP',
                 dealDurationMonths: sc.dealDurationMonths,
                 keyDynamics: sc.keyDynamics || [],
-                leverageCustomer: leverage?.customerPower || 50,
-                leverageProvider: leverage?.providerPower || 50,
+                leverageCustomer: leverage?.customerLeverage || 50,
+                leverageProvider: leverage?.providerLeverage || 50,
                 agentStyle: agent.personalityTraits.style,
                 greetingMessage: agent.greetingMessage,
             }
@@ -691,12 +691,18 @@ function TrainingStudioPage() {
                     throw new Error('No session ID returned')
                 }
 
-                // Link generated agent to the session
+                // Link generated agent to the session (via API route — service role bypasses RLS)
                 if (agentConfig.agentId) {
-                    await supabase
-                        .from('generated_agents')
-                        .update({ session_id: sessionResult.sessionId })
-                        .eq('agent_id', agentConfig.agentId)
+                    await fetch('/api/agents/training-orchestrator', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'link',
+                            userId: userInfo.userId,
+                            agentId: agentConfig.agentId,
+                            sessionId: sessionResult.sessionId,
+                        }),
+                    })
                 }
 
                 // Apply agent's initial positions as provider positions

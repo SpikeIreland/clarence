@@ -148,8 +148,78 @@ export async function POST(request: NextRequest) {
             })
         }
 
+        // ------------------------------------------------------------------
+        // ACTION: link — Link a generated agent to a session (service role)
+        // ------------------------------------------------------------------
+        if (action === 'link') {
+            const { agentId, sessionId } = body
+
+            if (!agentId || !sessionId) {
+                return NextResponse.json(
+                    { error: 'agentId and sessionId are required', success: false },
+                    { status: 400 }
+                )
+            }
+
+            const { error: linkError } = await supabase
+                .from('generated_agents')
+                .update({ session_id: sessionId })
+                .eq('agent_id', agentId)
+
+            if (linkError) {
+                console.error('[TrainingOrchestrator API] Failed to link agent:', linkError.message)
+                return NextResponse.json(
+                    { error: 'Failed to link agent to session', success: false },
+                    { status: 500 }
+                )
+            }
+
+            console.log(`[TrainingOrchestrator API] Agent ${agentId} linked to session ${sessionId}`)
+            return NextResponse.json({ success: true })
+        }
+
+        // ------------------------------------------------------------------
+        // ACTION: delete-session — Delete a training session and all related data
+        // ------------------------------------------------------------------
+        if (action === 'delete-session') {
+            const { sessionId } = body
+
+            if (!sessionId) {
+                return NextResponse.json(
+                    { error: 'sessionId is required', success: false },
+                    { status: 400 }
+                )
+            }
+
+            // Verify the session belongs to this user
+            const { data: sessionCheck } = await supabase
+                .from('sessions')
+                .select('session_id')
+                .eq('session_id', sessionId)
+                .eq('customer_id', userId)
+                .single()
+
+            if (!sessionCheck) {
+                return NextResponse.json(
+                    { error: 'Session not found or not owned by user', success: false },
+                    { status: 404 }
+                )
+            }
+
+            // Delete related records then the session
+            await supabase.from('training_session_results').delete().eq('session_id', sessionId)
+            await supabase.from('generated_agents').delete().eq('session_id', sessionId)
+            await supabase.from('session_clause_positions').delete().eq('session_id', sessionId)
+            await supabase.from('session_clauses').delete().eq('session_id', sessionId)
+            await supabase.from('party_chat_messages').delete().eq('session_id', sessionId)
+            await supabase.from('sessions').delete().eq('session_id', sessionId)
+
+            console.log(`[TrainingOrchestrator API] Deleted training session ${sessionId}`)
+            return NextResponse.json({ success: true })
+        }
+
         return NextResponse.json(
-            { error: `Unknown action: ${action}. Valid actions: assess, design, generate`, success: false },
+            { error: `Unknown action: ${action}. Valid actions: assess, design, generate, link, delete-session`, success: false },
             { status: 400 }
         )
 
