@@ -154,25 +154,23 @@ export async function POST(request: NextRequest) {
         if (action === 'link') {
             const { agentId, sessionId, leverageResult } = body
 
-            if (!agentId || !sessionId) {
+            if (!sessionId) {
                 return NextResponse.json(
-                    { error: 'agentId and sessionId are required', success: false },
+                    { error: 'sessionId is required', success: false },
                     { status: 400 }
                 )
             }
 
-            // Link the agent to the session
-            const { error: linkError } = await supabase
-                .from('generated_agents')
-                .update({ session_id: sessionId })
-                .eq('agent_id', agentId)
+            // Link the agent to the session (if agentId provided)
+            if (agentId) {
+                const { error: linkError } = await supabase
+                    .from('generated_agents')
+                    .update({ session_id: sessionId })
+                    .eq('agent_id', agentId)
 
-            if (linkError) {
-                console.error('[TrainingOrchestrator API] Failed to link agent:', linkError.message)
-                return NextResponse.json(
-                    { error: 'Failed to link agent to session', success: false },
-                    { status: 500 }
-                )
+                if (linkError) {
+                    console.error('[TrainingOrchestrator API] Failed to link agent:', linkError.message)
+                }
             }
 
             // Write leverage scores if provided
@@ -209,6 +207,69 @@ export async function POST(request: NextRequest) {
                     }, { onConflict: 'session_id,bid_id,leverage_type' })
 
                 console.log(`[TrainingOrchestrator API] Leverage written: ${custLev}/${provLev}`)
+            }
+
+            // Diverge provider positions from customer to create negotiation gaps
+            // This MUST run server-side with service role because:
+            //   1. n8n may not have finished populating positions yet (race condition)
+            //   2. RLS may block client-side updates on session_clause_positions
+            const difficulty = body.difficulty || 'balanced'
+            const shiftRange = difficulty === 'cooperative' ? { min: 2, max: 3 }
+                : difficulty === 'aggressive' ? { min: 3, max: 5 }
+                : { min: 2, max: 4 } // balanced
+
+            const highWeightCategories = ['liability', 'indemnification', 'limitation of liability', 'termination', 'payment', 'pricing', 'intellectual property', 'data protection', 'confidentiality', 'insurance', 'warranties']
+            const lowWeightCategories = ['notices', 'definitions', 'general provisions', 'governing law', 'amendments', 'severability', 'entire agreement', 'assignment', 'waiver']
+
+            // Retry up to 5 times waiting for n8n to finish creating clause positions
+            let positions: Record<string, unknown>[] | null = null
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const { data } = await supabase
+                    .from('session_clause_positions')
+                    .select('position_id, customer_position, clause_category')
+                    .eq('session_id', sessionId)
+
+                if (data && data.length > 0) {
+                    positions = data
+                    console.log(`[TrainingOrchestrator API] Found ${data.length} positions on attempt ${attempt + 1}`)
+                    break
+                }
+                console.log(`[TrainingOrchestrator API] No positions yet, waiting... (attempt ${attempt + 1}/5)`)
+                await new Promise(resolve => setTimeout(resolve, 2000))
+            }
+
+            if (positions && positions.length > 0) {
+                const updates = positions.map((pos: Record<string, unknown>) => {
+                    const custPos = (pos.customer_position as number) || 5
+                    const category = ((pos.clause_category as string) || '').toLowerCase()
+
+                    const shift = shiftRange.min + Math.floor(Math.random() * (shiftRange.max - shiftRange.min + 1))
+                    const provPos = Math.max(1, Math.min(10, custPos - shift))
+                    const clarenceRec = Math.round(((custPos + provPos) / 2) * 10) / 10
+
+                    let weight: number
+                    if (highWeightCategories.some(c => category.includes(c))) {
+                        weight = 7 + Math.floor(Math.random() * 3) // 7-9
+                    } else if (lowWeightCategories.some(c => category.includes(c))) {
+                        weight = 2 + Math.floor(Math.random() * 2) // 2-3
+                    } else {
+                        weight = 4 + Math.floor(Math.random() * 3) // 4-6
+                    }
+
+                    return supabase
+                        .from('session_clause_positions')
+                        .update({
+                            provider_position: provPos,
+                            ai_suggested_compromise: clarenceRec,
+                            customer_weight: weight,
+                            provider_weight: Math.max(1, Math.min(10, weight + (Math.random() > 0.5 ? 1 : -1))),
+                        })
+                        .eq('position_id', pos.position_id)
+                })
+                await Promise.all(updates)
+                console.log(`[TrainingOrchestrator API] Diverged ${positions.length} positions (difficulty: ${difficulty})`)
+            } else {
+                console.warn(`[TrainingOrchestrator API] WARNING: No positions found after 5 retries for session ${sessionId}`)
             }
 
             console.log(`[TrainingOrchestrator API] Agent ${agentId} linked to session ${sessionId}`)

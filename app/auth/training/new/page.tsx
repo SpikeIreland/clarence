@@ -694,70 +694,22 @@ function TrainingStudioPage() {
                     throw new Error('No session ID returned')
                 }
 
-                // Link generated agent to the session + write leverage (via API route — service role bypasses RLS)
-                if (agentConfig.agentId) {
-                    await fetch('/api/agents/training-orchestrator', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action: 'link',
-                            userId: userInfo.userId,
-                            agentId: agentConfig.agentId,
-                            sessionId: sessionResult.sessionId,
-                            leverageResult: agentConfig.leverageResult || null,
-                        }),
-                    })
-                }
+                // Link agent + diverge positions + write leverage (server-side with service role + retry)
+                await fetch('/api/agents/training-orchestrator', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'link',
+                        userId: userInfo.userId,
+                        agentId: agentConfig.agentId || null,
+                        sessionId: sessionResult.sessionId,
+                        leverageResult: agentConfig.leverageResult || null,
+                        difficulty: agentConfig.personalityTraits?.style || 'balanced',
+                    }),
+                })
 
-                // Diverge provider positions from customer to create negotiation gaps
-                // Difficulty determines how far apart positions start
-                const difficulty = agentConfig.personalityTraits?.style || 'balanced'
-                const shiftRange = difficulty === 'cooperative' ? { min: 2, max: 3 }
-                    : difficulty === 'aggressive' ? { min: 3, max: 5 }
-                    : { min: 2, max: 4 } // balanced
-
-                const { data: positions } = await supabase
-                    .from('session_clause_positions')
-                    .select('position_id, customer_position, clause_category')
-                    .eq('session_id', sessionResult.sessionId)
-
-                if (positions && positions.length > 0) {
-                    // Assign varied weights: higher for critical categories, lower for administrative
-                    const highWeightCategories = ['liability', 'indemnification', 'limitation of liability', 'termination', 'payment', 'pricing', 'intellectual property', 'data protection', 'confidentiality', 'insurance', 'warranties']
-                    const lowWeightCategories = ['notices', 'definitions', 'general provisions', 'governing law', 'amendments', 'severability', 'entire agreement', 'assignment', 'waiver']
-
-                    const updates = positions.map((pos: Record<string, unknown>) => {
-                        const custPos = (pos.customer_position as number) || 5
-                        const category = ((pos.clause_category as string) || '').toLowerCase()
-
-                        // Shift provider position away from customer
-                        const shift = shiftRange.min + Math.floor(Math.random() * (shiftRange.max - shiftRange.min + 1))
-                        const provPos = Math.max(1, Math.min(10, custPos - shift))
-                        // Clarence recommendation = fair midpoint
-                        const clarenceRec = Math.round(((custPos + provPos) / 2) * 10) / 10
-
-                        // Assign weight based on category importance (1-10 scale)
-                        let weight: number
-                        if (highWeightCategories.some(c => category.includes(c))) {
-                            weight = 7 + Math.floor(Math.random() * 3) // 7-9
-                        } else if (lowWeightCategories.some(c => category.includes(c))) {
-                            weight = 2 + Math.floor(Math.random() * 2) // 2-3
-                        } else {
-                            weight = 4 + Math.floor(Math.random() * 3) // 4-6
-                        }
-
-                        return supabase
-                            .from('session_clause_positions')
-                            .update({
-                                provider_position: provPos,
-                                ai_suggested_compromise: clarenceRec,
-                                customer_weight: weight,
-                                provider_weight: Math.max(1, Math.min(10, weight + (Math.random() > 0.5 ? 1 : -1))),
-                            })
-                            .eq('position_id', pos.position_id)
-                    })
-                    await Promise.all(updates)
-                }
+                // Position divergence + weights now handled server-side in the link action
+                // (with retry to wait for n8n to finish populating clause positions)
 
                 // Navigate to contract studio
                 router.push(`/auth/contract-studio?session_id=${sessionResult.sessionId}`)
