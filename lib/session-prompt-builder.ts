@@ -264,10 +264,62 @@ ${trainingSection}`
         ).join('\n\n')
     }
 
-    // Playbook
+    // Playbook — now includes actual rules
     let playbookText = ''
     if (ctx.playbook.hasPlaybook) {
-        playbookText = `\n=== PLAYBOOK GUIDANCE ===\n${ctx.viewer.company} has an active negotiation playbook: "${ctx.playbook.playbookName}"\nTotal rules: ${ctx.playbook.totalRules}\nConsider their company policies when advising.\n`
+        playbookText = `\n=== PLAYBOOK GUIDANCE ===\n${ctx.viewer.company} has an active negotiation playbook: "${ctx.playbook.playbookName}"\n`
+        if (ctx.playbook.activeRules.length > 0) {
+            playbookText += `\nActive Rules (${ctx.playbook.activeRules.length}):\n`
+            for (const rule of ctx.playbook.activeRules) {
+                playbookText += `- ${rule.clauseName} (${rule.category}): `
+                if (rule.idealPosition) playbookText += `Ideal position: ${rule.idealPosition}/10`
+                if (rule.minimumPosition) playbookText += `, Minimum: ${rule.minimumPosition}/10`
+                if (rule.isDealBreaker) playbookText += ' [DEAL BREAKER]'
+                if (rule.isNonNegotiable) playbookText += ' [NON-NEGOTIABLE]'
+                playbookText += '\n'
+                if (rule.rationale) playbookText += `  Rationale: ${rule.rationale}\n`
+                if (rule.negotiationTips) playbookText += `  Tips: ${rule.negotiationTips}\n`
+            }
+        }
+        playbookText += `\nReference these rules when advising on relevant clauses. Flag any deal breakers or non-negotiable positions immediately.\n`
+    }
+
+    // Party-to-party chat
+    let partyChatText = ''
+    if (ctx.partyChat.length > 0) {
+        partyChatText = `\n=== PARTY-TO-PARTY MESSAGES ===\nRecent messages between ${userPartyName} and ${otherPartyName}:\n`
+        for (const msg of ctx.partyChat.slice(0, 10)) {
+            const senderLabel = msg.senderType === ctx.viewer.role ? 'YOU' : otherPartyName.toUpperCase()
+            partyChatText += `- [${senderLabel}]: ${msg.message}${msg.relatedClauseId ? ' (related to a clause)' : ''}\n`
+        }
+        partyChatText += `\nIMPORTANT: Consider what the parties have already discussed when giving advice. Do not contradict agreements they have already reached in chat.\n`
+    }
+
+    // Focused clause context
+    let focusedClauseText = ''
+    if (ctx.clauseContext) {
+        const cc = ctx.clauseContext
+        const viewerPos = isCustomerViewer ? cc.customerPosition : cc.providerPosition
+        const otherPos = isCustomerViewer ? cc.providerPosition : cc.customerPosition
+
+        focusedClauseText = `\n=== FOCUSED CLAUSE ===\nClause: "${cc.clauseName}" (${cc.category})\n`
+        if (viewerPos !== null) focusedClauseText += `Your position: ${viewerPos}/10\n`
+        if (otherPos !== null) focusedClauseText += `${otherPartyName}'s position: ${otherPos}/10\n`
+        if (cc.gapSize !== null && cc.gapSize > 0) focusedClauseText += `Gap: ${cc.gapSize}\n`
+        if (cc.status) focusedClauseText += `Status: ${cc.status}\n`
+
+        if (cc.positionLabels) {
+            focusedClauseText += `\nPosition Labels for this clause:\n`
+            if (cc.positionLabels.position_1_label) focusedClauseText += `- Position 1 (${roleLabels.providing}-favourable): ${cc.positionLabels.position_1_label}\n`
+            if (cc.positionLabels.position_5_label) focusedClauseText += `- Position 5 (balanced): ${cc.positionLabels.position_5_label}\n`
+            if (cc.positionLabels.position_10_label) focusedClauseText += `- Position 10 (${roleLabels.protected}-favourable): ${cc.positionLabels.position_10_label}\n`
+            focusedClauseText += `CRITICAL: Use these EXACT labels when discussing this clause. Do NOT invent alternative terms.\n`
+        }
+
+        if (cc.clauseContent) {
+            focusedClauseText += `\nSource Clause Text:\n${cc.clauseContent.substring(0, 3000)}\n`
+            focusedClauseText += `\nWhen explaining this clause, reference the ACTUAL text above. Do not invent terms that are not in the document.\n`
+        }
     }
 
     // Strategic insights
@@ -325,11 +377,15 @@ ${biggestGapsText ? `### Biggest Gaps (Priority Items)\nIf position labels are p
 
 ${recentMovesText ? `### Recent Position Changes\n${recentMovesText}\n` : ''}
 
+${focusedClauseText}
+
 ${strategicText}
 
 ${playbookText}
 
-${recentChatText ? `=== RECENT CONVERSATION ===\n${recentChatText}\n` : ''}
+${partyChatText}
+
+${recentChatText ? `=== RECENT CLARENCE CONVERSATION ===\n${recentChatText}\n` : ''}
 
 === CURRENT USER MESSAGE ===
 ${ctx.touchpoint.userMessage}
@@ -340,9 +396,12 @@ Based on the negotiation context above, respond to the user's message while:
 2. Referring to the other party as ${otherPartyName} or "the ${otherRoleLabel}"
 3. Referencing specific data from the context (leverage, positions, gaps)
 4. If position labels are provided for a clause, use the ACTUAL TERMS to describe positions
-5. Use "Clause Alignment" (${ctx.positions.alignmentPercentage}%) when discussing how close the parties are to agreement
-6. Maintaining continuity with recent conversation
-7. Being helpful, strategic, and moving the negotiation forward
+5. If a focused clause is provided, reference its ACTUAL TEXT — never invent contract terms
+6. If playbook rules apply to the clause, reference them and flag deal breakers
+7. Use "Clause Alignment" (${ctx.positions.alignmentPercentage}%) when discussing how close the parties are to agreement
+8. If the parties have discussed this in their direct messages, acknowledge what was already discussed
+9. Maintaining continuity with recent conversation
+10. Being helpful, strategic, and moving the negotiation forward
 
 Respond naturally and conversationally.`
 

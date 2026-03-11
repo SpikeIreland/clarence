@@ -56,10 +56,13 @@ export interface SessionContext {
         lastMoves: PositionMove[]
         recentChatMessages: ChatMsg[]
     }
+    partyChat: PartyChatMsg[]
+    clauseContext: ClauseContext | null
     playbook: {
         hasPlaybook: boolean
         playbookName: string | null
         totalRules: number
+        activeRules: PlaybookRule[]
         activeAlerts: unknown[]
     }
     touchpoint: {
@@ -105,6 +108,45 @@ interface ChatMsg {
     messageText: string
 }
 
+interface PartyChatMsg {
+    sender: string
+    senderType: string
+    message: string
+    relatedClauseId: string | null
+    timestamp: string
+}
+
+interface ClauseContext {
+    clauseId: string
+    clauseNumber: number
+    clauseName: string
+    category: string
+    clauseContent: string | null
+    customerPosition: number | null
+    providerPosition: number | null
+    gapSize: number | null
+    status: string | null
+    positionLabels: {
+        position_1_label: string | null
+        position_5_label: string | null
+        position_10_label: string | null
+    } | null
+}
+
+interface PlaybookRule {
+    ruleId: string
+    clauseName: string
+    category: string
+    idealPosition: number | null
+    minimumPosition: number | null
+    maximumPosition: number | null
+    rationale: string | null
+    negotiationTips: string | null
+    importanceLevel: string | null
+    isDealBreaker: boolean
+    isNonNegotiable: boolean
+}
+
 // ============================================================================
 // SECTION 2: PHASE MAP
 // ============================================================================
@@ -132,6 +174,7 @@ export async function buildSessionContext(
         clauseId?: string | null
         clauseName?: string | null
         alignmentScore?: number | null
+        viewerCompanyId?: string | null
     }
 ): Promise<{ success: boolean; context: SessionContext | null; buildTime: number }> {
     const start = Date.now()
@@ -162,7 +205,7 @@ export async function buildSessionContext(
         // ------------------------------------------------------------------
         // QUERY 2-5: Parallel queries
         // ------------------------------------------------------------------
-        const [crResult, pbResult, posResult, chatResult, leverageResult] = await Promise.all([
+        const [crResult, pbResult, posResult, chatResult, leverageResult, partyMsgResult, posHistResult] = await Promise.all([
             // Customer requirements
             supabase
                 .from('customer_requirements')
@@ -180,7 +223,7 @@ export async function buildSessionContext(
                 .limit(1)
                 .single(),
 
-            // Clause positions with clause details
+            // Clause positions with clause details + clause content
             supabase
                 .from('session_clause_positions')
                 .select(`
@@ -189,7 +232,7 @@ export async function buildSessionContext(
                     gap_size, gap_severity, status,
                     customer_weight, provider_weight,
                     is_deal_breaker_customer, is_deal_breaker_provider,
-                    category
+                    category, clause_content
                 `)
                 .eq('session_id', sessionId)
                 .order('clause_number', { ascending: true }),
@@ -210,6 +253,22 @@ export async function buildSessionContext(
                 .order('calculated_at', { ascending: false })
                 .limit(1)
                 .single(),
+
+            // Party-to-party messages (what parties discussed directly)
+            supabase
+                .from('party_messages')
+                .select('sender_type, sender_name, message_text, related_clause_id, created_at')
+                .eq('session_id', sessionId)
+                .order('created_at', { ascending: false })
+                .limit(15),
+
+            // Position change history (recent moves)
+            supabase
+                .from('position_change_history')
+                .select('clause_name, clause_number, party, changed_by_name, old_position, new_position, changed_at')
+                .eq('session_id', sessionId)
+                .order('changed_at', { ascending: false })
+                .limit(20),
         ])
 
         const cr = crResult.data
@@ -217,6 +276,109 @@ export async function buildSessionContext(
         const positions = posResult.data || []
         const chatMessages = chatResult.data || []
         const leverageCalc = leverageResult.data
+        const partyMessages = partyMsgResult.data || []
+        const positionHistory = posHistResult.data || []
+
+        // ------------------------------------------------------------------
+        // QUERY 6: Playbook (requires viewerCompanyId)
+        // ------------------------------------------------------------------
+        let playbookData: { playbook_name: string; playbook_id: string } | null = null
+        let playbookRules: PlaybookRule[] = []
+
+        if (passedContext?.viewerCompanyId) {
+            const { data: pbk } = await supabase
+                .from('company_playbooks')
+                .select('playbook_id, playbook_name')
+                .eq('company_id', passedContext.viewerCompanyId)
+                .eq('is_active', true)
+                .limit(1)
+                .maybeSingle()
+
+            if (pbk) {
+                playbookData = pbk
+                const { data: rules } = await supabase
+                    .from('playbook_rules')
+                    .select(`
+                        rule_id, clause_name, category,
+                        ideal_position, minimum_position, maximum_position,
+                        rationale, negotiation_tips,
+                        importance_level, is_deal_breaker, is_non_negotiable
+                    `)
+                    .eq('playbook_id', pbk.playbook_id)
+                    .eq('is_active', true)
+                    .order('category')
+                    .limit(15)
+
+                if (rules) {
+                    playbookRules = rules.map((r: Record<string, unknown>) => ({
+                        ruleId: r.rule_id as string,
+                        clauseName: r.clause_name as string,
+                        category: r.category as string,
+                        idealPosition: r.ideal_position as number | null,
+                        minimumPosition: r.minimum_position as number | null,
+                        maximumPosition: r.maximum_position as number | null,
+                        rationale: r.rationale as string | null,
+                        negotiationTips: r.negotiation_tips as string | null,
+                        importanceLevel: r.importance_level as string | null,
+                        isDealBreaker: !!r.is_deal_breaker,
+                        isNonNegotiable: !!r.is_non_negotiable,
+                    }))
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // QUERY 7: Position labels for ALL clauses
+        // ------------------------------------------------------------------
+        const allClauseIds = positions
+            .map((p: Record<string, unknown>) => p.clause_id)
+            .filter(Boolean) as string[]
+
+        let allPositionLabels: Record<string, { position_1_label: string | null; position_5_label: string | null; position_10_label: string | null }> = {}
+
+        if (allClauseIds.length > 0) {
+            const { data: allLabels } = await supabase
+                .from('clause_range_mappings')
+                .select('clause_id, position_1_label, position_5_label, position_10_label')
+                .in('clause_id', allClauseIds)
+
+            if (allLabels) {
+                for (const label of allLabels) {
+                    allPositionLabels[label.clause_id as string] = {
+                        position_1_label: label.position_1_label as string | null,
+                        position_5_label: label.position_5_label as string | null,
+                        position_10_label: label.position_10_label as string | null,
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // QUERY 8: Specific clause detail (when clauseId provided)
+        // ------------------------------------------------------------------
+        let clauseContext: ClauseContext | null = null
+
+        if (passedContext?.clauseId) {
+            const matchingPosition = positions.find(
+                (p: Record<string, unknown>) => p.clause_id === passedContext.clauseId
+            )
+
+            if (matchingPosition) {
+                const labels = allPositionLabels[passedContext.clauseId] || null
+                clauseContext = {
+                    clauseId: matchingPosition.clause_id as string,
+                    clauseNumber: matchingPosition.clause_number as number,
+                    clauseName: (matchingPosition.clause_name as string) || passedContext.clauseName || 'Unknown',
+                    category: (matchingPosition.category as string) || 'General',
+                    clauseContent: (matchingPosition.clause_content as string) || null,
+                    customerPosition: matchingPosition.customer_position as number | null,
+                    providerPosition: matchingPosition.provider_position as number | null,
+                    gapSize: matchingPosition.gap_size as number | null,
+                    status: matchingPosition.status as string | null,
+                    positionLabels: labels,
+                }
+            }
+        }
 
         // ------------------------------------------------------------------
         // COMPUTE POSITION STATS
@@ -241,54 +403,26 @@ export async function buildSessionContext(
             ? Math.round(((maxTotalGap - totalGap) / maxTotalGap) * 100)
             : 0
 
-        // Biggest gaps (top 5)
+        // Biggest gaps (top 5) — use pre-fetched position labels
         const biggestGaps: BiggestGap[] = positions
             .filter((p: Record<string, unknown>) => (p.gap_size as number) > 0)
             .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
                 (b.gap_size as number) - (a.gap_size as number))
             .slice(0, 5)
-            .map((p: Record<string, unknown>) => ({
-                clause_name: p.clause_name as string || `Clause ${p.clause_number}`,
-                customer_position: (p.customer_position as number) || 5,
-                provider_position: (p.provider_position as number) || 5,
-                gap_size: (p.gap_size as number) || 0,
-                position_1_label: null,
-                position_5_label: null,
-                position_10_label: null,
-                customer_position_meaning: null,
-                provider_position_meaning: null,
-            }))
-
-        // Try to load position labels for biggest gaps
-        if (biggestGaps.length > 0) {
-            const clauseIds = biggestGaps.map(g => {
-                const pos = positions.find((p: Record<string, unknown>) =>
-                    (p.clause_name as string) === g.clause_name)
-                return pos?.clause_id
-            }).filter(Boolean)
-
-            if (clauseIds.length > 0) {
-                const { data: labels } = await supabase
-                    .from('clause_range_mappings')
-                    .select('clause_id, position_1_label, position_5_label, position_10_label')
-                    .in('clause_id', clauseIds)
-
-                if (labels) {
-                    for (const gap of biggestGaps) {
-                        const pos = positions.find((p: Record<string, unknown>) =>
-                            (p.clause_name as string) === gap.clause_name)
-                        if (!pos) continue
-                        const label = labels.find((l: Record<string, unknown>) =>
-                            l.clause_id === pos.clause_id)
-                        if (label) {
-                            gap.position_1_label = label.position_1_label as string
-                            gap.position_5_label = label.position_5_label as string
-                            gap.position_10_label = label.position_10_label as string
-                        }
-                    }
+            .map((p: Record<string, unknown>) => {
+                const labels = allPositionLabels[p.clause_id as string] || null
+                return {
+                    clause_name: p.clause_name as string || `Clause ${p.clause_number}`,
+                    customer_position: (p.customer_position as number) || 5,
+                    provider_position: (p.provider_position as number) || 5,
+                    gap_size: (p.gap_size as number) || 0,
+                    position_1_label: labels?.position_1_label || null,
+                    position_5_label: labels?.position_5_label || null,
+                    position_10_label: labels?.position_10_label || null,
+                    customer_position_meaning: null,
+                    provider_position_meaning: null,
                 }
-            }
-        }
+            })
 
         // ------------------------------------------------------------------
         // DETERMINE PHASE
@@ -355,6 +489,36 @@ export async function buildSessionContext(
             }))
 
         // ------------------------------------------------------------------
+        // PARTY CHAT (party-to-party messages)
+        // ------------------------------------------------------------------
+        const partyChat: PartyChatMsg[] = (partyMessages || [])
+            .reverse()
+            .map((m: Record<string, unknown>) => ({
+                sender: m.sender_name as string || 'Unknown',
+                senderType: m.sender_type as string || 'unknown',
+                message: ((m.message_text as string) || '').substring(0, 300),
+                relatedClauseId: m.related_clause_id as string | null,
+                timestamp: m.created_at as string,
+            }))
+
+        // ------------------------------------------------------------------
+        // POSITION HISTORY (recent moves)
+        // ------------------------------------------------------------------
+        const lastMoves: PositionMove[] = (positionHistory || [])
+            .map((m: Record<string, unknown>) => {
+                const labels = allPositionLabels[m.clause_id as string] || null
+                return {
+                    partyRole: m.party as string,
+                    clauseName: m.clause_name as string || `Clause ${m.clause_number}`,
+                    fromPosition: m.old_position as number,
+                    toPosition: m.new_position as number,
+                    position_1_label: labels?.position_1_label || null,
+                    position_5_label: labels?.position_5_label || null,
+                    position_10_label: labels?.position_10_label || null,
+                }
+            })
+
+        // ------------------------------------------------------------------
         // BUILD CONTEXT
         // ------------------------------------------------------------------
         const context: SessionContext = {
@@ -394,13 +558,16 @@ export async function buildSessionContext(
                 biggestGaps,
             },
             recentHistory: {
-                lastMoves: [], // Position history would require another query — skip for now
+                lastMoves,
                 recentChatMessages,
             },
+            partyChat,
+            clauseContext,
             playbook: {
-                hasPlaybook: false,
-                playbookName: null,
-                totalRules: 0,
+                hasPlaybook: !!playbookData,
+                playbookName: playbookData?.playbook_name || null,
+                totalRules: playbookRules.length,
+                activeRules: playbookRules,
                 activeAlerts: [],
             },
             touchpoint: {
@@ -412,15 +579,16 @@ export async function buildSessionContext(
                 opponentPersonality,
             },
             strategicInsights: {
-                customerPriorities: null,
-                customerRedLines: null,
-                providerPriorities: null,
-                providerFlexibility: null,
+                customerPriorities: (cr as Record<string, unknown>)?.priorities || (cr as Record<string, unknown>)?.key_priorities || null,
+                customerRedLines: (cr as Record<string, unknown>)?.red_lines || (cr as Record<string, unknown>)?.deal_breakers || null,
+                providerPriorities: (pb as Record<string, unknown>)?.provider_priorities || (pb as Record<string, unknown>)?.key_priorities || null,
+                providerFlexibility: (pb as Record<string, unknown>)?.flexibility_areas || (pb as Record<string, unknown>)?.negotiation_flexibility || null,
             },
         }
 
         console.log('[ContextBuilder] Built context in', Date.now() - start, 'ms')
         console.log('[ContextBuilder] Session:', sessionRow.session_number, '| Clauses:', total, '| Alignment:', alignmentPercentage + '%')
+        console.log('[ContextBuilder] Party chat:', partyChat.length, '| Position history:', lastMoves.length, '| Playbook:', !!playbookData, '| Clause context:', !!clauseContext)
 
         return { success: true, context, buildTime: Date.now() - start }
 

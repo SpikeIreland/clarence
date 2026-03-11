@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
                     clauseId: body.clauseId || null,
                     clauseName: body.clauseName || null,
                     alignmentScore: body.alignmentScore || null,
+                    viewerCompanyId: body.viewerCompanyId || null,
                 }
             )
 
