@@ -9,9 +9,9 @@ import { getProductBySlug } from '@/app/lib/products'
 import { Zap, Upload, Send, CheckCircle } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'QuickCreate | CLARENCE - Rapid Agreement Creation',
+  title: 'QuickCreate | CLARENCE - Fast-Track Any Agreement',
   description:
-    'Choose a template, set your terms, and send. Clarence configures fair starting positions for rapid agreement creation.',
+    'Upload any contract — simple or complex — and get to agreement faster. Clarence configures fair starting positions so you can send with confidence.',
 }
 
 export default function QuickCreatePage() {
@@ -36,8 +36,8 @@ export default function QuickCreatePage() {
               QuickCreate
             </h1>
             <p className="text-xl text-emerald-100 max-w-2xl mx-auto leading-relaxed">
-              Agreements at the speed of trust. Choose a template, set your
-              terms, and send — without the back-and-forth.
+              Agreements at the speed of trust. Upload any contract — simple
+              or complex — set your terms, and get to agreement faster.
             </p>
 
             <div className="mt-10">
@@ -68,20 +68,20 @@ export default function QuickCreatePage() {
               {/* Features */}
               <div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-6">
-                  Send Agreements in Minutes, Not Days
+                  Any Contract. Faster to Agreement.
                 </h2>
                 <p className="text-slate-600 mb-8 text-lg leading-relaxed">
-                  QuickCreate strips the friction from routine agreements.
-                  Choose a template, let Clarence configure fair starting
-                  positions, and send to recipients — all in a streamlined
-                  workflow.
+                  QuickCreate is the fastest path from contract to agreement
+                  — regardless of complexity. Upload your template, let
+                  Clarence configure fair starting positions, and send to
+                  recipients — all in a streamlined workflow.
                 </p>
                 <ul className="space-y-3">
                   <FeatureListItem color="emerald">
-                    Template-based contract generation
+                    Upload any contract template — simple or complex
                   </FeatureListItem>
                   <FeatureListItem color="emerald">
-                    AI auto-configured clause positions
+                    Intelligently configured clause positions
                   </FeatureListItem>
                   <FeatureListItem color="emerald">
                     Multi-recipient sending and tracking
@@ -90,7 +90,7 @@ export default function QuickCreatePage() {
                     Status tracking from draft to signature
                   </FeatureListItem>
                   <FeatureListItem color="emerald">
-                    Support for NDAs, service agreements, leases, and more
+                    Works with any contract type, any industry
                   </FeatureListItem>
                   <FeatureListItem color="emerald">
                     Quick review and send workflow
@@ -110,7 +110,7 @@ export default function QuickCreatePage() {
               How QuickCreate Works
             </h2>
             <p className="text-slate-600 max-w-xl mx-auto">
-              Three simple steps from template to sent contract.
+              Three steps from any contract to sent agreement.
             </p>
           </div>
 
@@ -160,14 +160,14 @@ export default function QuickCreatePage() {
         <div className="container mx-auto px-6">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl font-bold text-slate-800 mb-8 text-center">
-              Best For
+              Built For
             </h2>
             <div className="grid md:grid-cols-2 gap-6">
               {[
-                'Routine agreements and renewals',
-                'NDAs and confidentiality agreements',
-                'Standard service terms',
-                'Employment and contractor agreements',
+                'High-volume contract programmes',
+                'Enterprise agreements and renewals',
+                'Procurement and vendor contracts',
+                'Any contract where speed to agreement matters',
               ].map((useCase) => (
                 <div
                   key={useCase}
@@ -203,8 +203,8 @@ export default function QuickCreatePage() {
       </section>
 
       <SectionCTA
-        title="Ready to Send Your First Agreement?"
-        subtitle="Start with a free trial and send your first QuickCreate agreement in minutes."
+        title="Ready to Fast-Track Your Agreements?"
+        subtitle="Any contract, any complexity. Start with a free trial and see how fast you can get to agreement."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
       />
