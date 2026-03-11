@@ -53,7 +53,7 @@ export default function HeroCTA() {
         return (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link
-                    href="/auth/contracts-dashboard"
+                    href="/auth/home"
                     className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-all shadow-lg shadow-emerald-600/25 hover:shadow-xl hover:shadow-emerald-600/30"
                 >
                     Go to Dashboard

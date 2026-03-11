@@ -94,14 +94,14 @@ type AdminTab = 'playbooks' | 'templates' | 'training' | 'users' | 'audit'
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 const CONTRACT_TYPE_OPTIONS = [
-    { value: 'bpo', label: 'BPO / Outsourcing' },
-    { value: 'saas', label: 'SaaS Agreement' },
-    { value: 'nda', label: 'NDA' },
-    { value: 'msa', label: 'Master Service Agreement' },
-    { value: 'employment', label: 'Employment Contract' },
-    { value: 'it_services', label: 'IT Services' },
-    { value: 'consulting', label: 'Consulting' },
-    { value: 'custom', label: 'Custom / Other' },
+    { value: 'bpo', label: 'BPO / Outsourcing', protectedPartyLabel: 'Customer', providingPartyLabel: 'Provider' },
+    { value: 'saas', label: 'SaaS Agreement', protectedPartyLabel: 'Subscriber', providingPartyLabel: 'Provider' },
+    { value: 'nda', label: 'NDA', protectedPartyLabel: 'Disclosing Party', providingPartyLabel: 'Receiving Party' },
+    { value: 'msa', label: 'Master Service Agreement', protectedPartyLabel: 'Customer', providingPartyLabel: 'Provider' },
+    { value: 'employment', label: 'Employment Contract', protectedPartyLabel: 'Employee', providingPartyLabel: 'Employer' },
+    { value: 'it_services', label: 'IT Services', protectedPartyLabel: 'Customer', providingPartyLabel: 'Provider' },
+    { value: 'consulting', label: 'Consulting', protectedPartyLabel: 'Client', providingPartyLabel: 'Consultant' },
+    { value: 'custom', label: 'Custom / Other', protectedPartyLabel: 'Customer', providingPartyLabel: 'Provider' },
 ]
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
@@ -515,6 +515,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                     </select>
                 </div>
                 {/* Playbook Perspective Selector */}
+                {(() => {
+                    const selectedType = CONTRACT_TYPE_OPTIONS.find(o => o.value === uploadContractType)
+                    const protectedLabel = selectedType?.protectedPartyLabel || 'Customer / Buyer'
+                    const providingLabel = selectedType?.providingPartyLabel || 'Provider / Supplier'
+                    return (
                 <div className="mb-4">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Playbook Perspective</label>
                     <div className="flex gap-3">
@@ -522,20 +527,22 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                             <input type="radio" name="perspective" value="customer" checked={uploadPerspective === 'customer'} onChange={() => setUploadPerspective('customer')} className="sr-only" />
                             <span className="text-lg">🛡️</span>
                             <div>
-                                <div className="text-sm font-medium text-slate-800">Customer / Buyer</div>
-                                <div className="text-[11px] text-slate-500">Higher positions = more customer protection</div>
+                                <div className="text-sm font-medium text-slate-800">{protectedLabel}</div>
+                                <div className="text-[11px] text-slate-500">Higher positions = more {protectedLabel.toLowerCase()} protection</div>
                             </div>
                         </label>
                         <label className={`flex-1 flex items-center gap-2 px-4 py-2.5 border rounded-lg cursor-pointer transition-all ${uploadPerspective === 'provider' ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-300 hover:border-slate-400'}`}>
                             <input type="radio" name="perspective" value="provider" checked={uploadPerspective === 'provider'} onChange={() => setUploadPerspective('provider')} className="sr-only" />
                             <span className="text-lg">🏢</span>
                             <div>
-                                <div className="text-sm font-medium text-slate-800">Provider / Supplier</div>
-                                <div className="text-[11px] text-slate-500">Higher positions = more provider protection</div>
+                                <div className="text-sm font-medium text-slate-800">{providingLabel}</div>
+                                <div className="text-[11px] text-slate-500">Higher positions = more {providingLabel.toLowerCase()} protection</div>
                             </div>
                         </label>
                     </div>
                 </div>
+                    )
+                })()}
                 <div
                     onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                     onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
@@ -640,9 +647,17 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         ) : (
                                             <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">General</span>
                                         )}
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${p.playbookPerspective === 'provider' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
-                                            {p.playbookPerspective === 'provider' ? 'Provider' : 'Customer'}
-                                        </span>
+                                        {(() => {
+                                            const ct = CONTRACT_TYPE_OPTIONS.find(o => o.value === p.contractTypeKey)
+                                            const perspLabel = p.playbookPerspective === 'provider'
+                                                ? (ct?.providingPartyLabel || 'Provider')
+                                                : (ct?.protectedPartyLabel || 'Customer')
+                                            return (
+                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${p.playbookPerspective === 'provider' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                                                    {perspLabel}
+                                                </span>
+                                            )
+                                        })()}
                                     </div>
                                     {/* Inline Change Type editor */}
                                     {editingTypeId === p.playbookId && (

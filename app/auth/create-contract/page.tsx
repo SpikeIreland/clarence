@@ -1163,6 +1163,7 @@ function ContractCreationContent() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    userId: userInfo.userId,
                     userEmail: userInfo.email,
                     companyName: userInfo.company,
                     userName: `${userInfo.firstName} ${userInfo.lastName}`,

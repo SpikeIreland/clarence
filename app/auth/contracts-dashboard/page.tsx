@@ -1218,6 +1218,7 @@ export default function ContractsDashboard() {
                                     <h3 className="text-lg font-semibold text-slate-800">
                                       {session.contractName || session.sessionNumber || session.sessionId.substring(0, 8)}
                                     </h3>
+                                    {/* Edit Name Button */}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation()
@@ -1226,61 +1227,62 @@ export default function ContractsDashboard() {
                                       className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-emerald-600 transition-all"
                                       title="Edit contract name"
                                     >
-                                      {/* Delete Button */}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setShowDeleteConfirm(session.sessionId)
-                                        }}
-                                        className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-red-600 transition-all"
-                                        title="Delete session"
-                                      >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                      </button>
-
-                                      {/* Delete Confirmation Popup */}
-                                      {showDeleteConfirm === session.sessionId && (
-                                        <div
-                                          className="absolute top-0 left-0 right-0 bg-white border border-red-200 rounded-lg shadow-lg p-4 z-20"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <p className="text-sm text-slate-700 mb-3">
-                                            Delete <strong>{session.contractName || session.sessionNumber}</strong>?
-                                          </p>
-                                          <p className="text-xs text-slate-500 mb-3">
-                                            This will permanently remove the session and all related data.
-                                          </p>
-                                          <div className="flex gap-2">
-                                            <button
-                                              onClick={() => handleDeleteSession(session.sessionId)}
-                                              disabled={deletingSessionId === session.sessionId}
-                                              className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 flex items-center gap-1"
-                                            >
-                                              {deletingSessionId === session.sessionId ? (
-                                                <>
-                                                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                                  </svg>
-                                                  Deleting...
-                                                </>
-                                              ) : 'Yes, Delete'}
-                                            </button>
-                                            <button
-                                              onClick={() => setShowDeleteConfirm(null)}
-                                              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
-                                            >
-                                              Cancel
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                       </svg>
                                     </button>
+
+                                    {/* Delete Button */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setShowDeleteConfirm(session.sessionId)
+                                      }}
+                                      className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-red-600 transition-all"
+                                      title="Delete session"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+
+                                    {/* Delete Confirmation Popup */}
+                                    {showDeleteConfirm === session.sessionId && (
+                                      <div
+                                        className="absolute top-0 left-0 right-0 bg-white border border-red-200 rounded-lg shadow-lg p-4 z-20"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <p className="text-sm text-slate-700 mb-3">
+                                          Delete <strong>{session.contractName || session.sessionNumber}</strong>?
+                                        </p>
+                                        <p className="text-xs text-slate-500 mb-3">
+                                          This will permanently remove the session and all related data.
+                                        </p>
+                                        <div className="flex gap-2">
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.sessionId) }}
+                                            disabled={deletingSessionId === session.sessionId}
+                                            className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 flex items-center gap-1"
+                                          >
+                                            {deletingSessionId === session.sessionId ? (
+                                              <>
+                                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                </svg>
+                                                Deleting...
+                                              </>
+                                            ) : 'Yes, Delete'}
+                                          </button>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(null) }}
+                                            className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>

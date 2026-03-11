@@ -650,6 +650,7 @@ function HomePageInner() {
                     status,
                     alignment_percentage,
                     is_training,
+                    mediation_type,
                     created_at,
                     updated_at,
                     customer_id,
@@ -699,7 +700,11 @@ function HomePageInner() {
                     progressSummary = 'Completing contract preparation'
                 }
 
-                const pathway = isTraining ? 'training' : 'contract_create'
+                const pathway = isTraining
+                    ? 'training'
+                    : session.mediation_type === 'co_create'
+                        ? 'co_create'
+                        : 'contract_create'
 
                 return {
                     id: session.session_id,
@@ -707,7 +712,7 @@ function HomePageInner() {
                     contractType: '',
                     contractTypeKey: session.contract_type_key || null,
                     initiatorPartyRole: session.initiator_party_role || null,
-                    pathway: pathway as 'contract_create' | 'training',
+                    pathway: pathway as 'contract_create' | 'co_create' | 'training',
                     relationship: isInitiator ? 'initiator' as const : 'respondent' as const,
                     status: session.status || 'draft',
                     statusLabel,
