@@ -222,13 +222,18 @@ export async function POST(request: NextRequest) {
             const lowWeightCategories = ['notices', 'definitions', 'general provisions', 'governing law', 'amendments', 'severability', 'entire agreement', 'assignment', 'waiver']
 
             // Retry up to 5 times waiting for n8n to finish creating clause positions
+            // NOTE: session_clause_positions does NOT have a category column —
+            // category lives on uploaded_contract_clauses/master_clauses/contract_clauses
             let positions: Record<string, unknown>[] | null = null
             for (let attempt = 0; attempt < 5; attempt++) {
-                const { data } = await supabase
+                const { data, error: posError } = await supabase
                     .from('session_clause_positions')
-                    .select('position_id, customer_position, clause_category')
+                    .select('position_id, customer_position, clause_id')
                     .eq('session_id', sessionId)
 
+                if (posError) {
+                    console.error(`[TrainingOrchestrator API] Position query error:`, posError.message)
+                }
                 if (data && data.length > 0) {
                     positions = data
                     console.log(`[TrainingOrchestrator API] Found ${data.length} positions on attempt ${attempt + 1}`)
@@ -239,9 +244,23 @@ export async function POST(request: NextRequest) {
             }
 
             if (positions && positions.length > 0) {
+                // Look up categories from uploaded_contract_clauses (where n8n copies template clauses)
+                const clauseIds = positions.map(p => p.clause_id as string).filter(Boolean)
+                const categoryMap = new Map<string, string>()
+                if (clauseIds.length > 0) {
+                    const { data: clauseData } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('clause_id, category')
+                        .in('clause_id', clauseIds)
+                    clauseData?.forEach((c: Record<string, unknown>) => {
+                        categoryMap.set(c.clause_id as string, ((c.category as string) || '').toLowerCase())
+                    })
+                    console.log(`[TrainingOrchestrator API] Loaded ${categoryMap.size} categories from uploaded_contract_clauses`)
+                }
+
                 const updates = positions.map((pos: Record<string, unknown>) => {
                     const custPos = (pos.customer_position as number) || 5
-                    const category = ((pos.clause_category as string) || '').toLowerCase()
+                    const category = categoryMap.get(pos.clause_id as string) || ''
 
                     const shift = shiftRange.min + Math.floor(Math.random() * (shiftRange.max - shiftRange.min + 1))
                     const provPos = Math.max(1, Math.min(10, custPos - shift))
