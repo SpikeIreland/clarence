@@ -268,11 +268,11 @@ export async function POST(request: NextRequest) {
 
                     let weight: number
                     if (highWeightCategories.some(c => category.includes(c))) {
-                        weight = 7 + Math.floor(Math.random() * 3) // 7-9
+                        weight = 4 + Math.floor(Math.random() * 2) // 4-5
                     } else if (lowWeightCategories.some(c => category.includes(c))) {
-                        weight = 2 + Math.floor(Math.random() * 2) // 2-3
+                        weight = 1 + Math.floor(Math.random() * 2) // 1-2
                     } else {
-                        weight = 4 + Math.floor(Math.random() * 3) // 4-6
+                        weight = 2 + Math.floor(Math.random() * 2) // 2-3
                     }
 
                     return supabase
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
                             provider_position: provPos,
                             ai_suggested_compromise: clarenceRec,
                             customer_weight: weight,
-                            provider_weight: Math.max(1, Math.min(10, weight + (Math.random() > 0.5 ? 1 : -1))),
+                            provider_weight: Math.max(1, Math.min(5, weight + (Math.random() > 0.5 ? 1 : -1))),
                         })
                         .eq('position_id', pos.position_id)
                 })
