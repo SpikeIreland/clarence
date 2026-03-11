@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createClient } from '@/lib/supabase'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -57,8 +58,8 @@ interface ToastNotification {
     timestamp: Date
 }
 
-// API Response types
-interface ApiMessageResponse {
+// DB row type (matches party_messages table schema)
+interface PartyMessageRow {
     message_id: string
     session_id: string
     provider_id?: string
@@ -73,10 +74,8 @@ interface ApiMessageResponse {
 }
 
 // ============================================================================
-// SECTION 2: API CONFIGURATION
+// SECTION 2: SUPABASE CLIENT
 // ============================================================================
-
-const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
 // SECTION 2A: AI GREETING MESSAGES (NEW)
@@ -271,7 +270,7 @@ function TypingIndicator({ name, isAI = false }: { name: string; isAI?: boolean 
 // SECTION 7: HELPER FUNCTION - Transform API Response
 // ============================================================================
 
-function transformApiMessage(apiMsg: ApiMessageResponse): PartyMessage {
+function transformApiMessage(apiMsg: PartyMessageRow): PartyMessage {
     return {
         messageId: apiMsg.message_id,
         sessionId: apiMsg.session_id,
@@ -340,7 +339,6 @@ export function PartyChatPanel({
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
-    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
     const panelRef = useRef<HTMLDivElement>(null)
 
     // ========================================================================
@@ -433,61 +431,55 @@ export function PartyChatPanel({
     }
 
     // ============================================================================
-    // SECTION 8B: API FUNCTIONS (REAL MODE)
+    // SECTION 8B: SUPABASE FUNCTIONS (REAL MODE)
     // ============================================================================
+
+    const supabase = createClient()
 
     const fetchMessages = useCallback(async () => {
         // Skip fetching in AI mode - messages are local only
         if (isAIOpponent) return
 
         try {
-            console.log('[PartyChat] Fetching messages for session:', sessionId)
+            const { data, error } = await supabase
+                .from('party_messages')
+                .select('*')
+                .eq('session_id', sessionId)
+                .order('created_at', { ascending: true })
+                .limit(100)
 
-            const response = await fetch(
-                `${API_BASE}/party-chat-messages?session_id=${sessionId}&limit=100`
-            )
-
-            if (!response.ok) {
-                console.error('[PartyChat] Response not OK:', response.status)
-                throw new Error('Failed to fetch messages')
+            if (error) {
+                console.error('[PartyChat] Supabase fetch error:', error)
+                return
             }
 
-            const data = await response.json()
-            console.log('[PartyChat] Raw API response:', data)
+            if (data) {
+                const transformedMessages = data.map(transformApiMessage)
 
-            // Handle response - could be { success, messages } or direct array
-            const apiMessages: ApiMessageResponse[] = Array.isArray(data) ? data : (data.messages || [])
-            console.log('[PartyChat] Parsed messages count:', apiMessages.length)
+                // Check for new messages (for toast notifications)
+                if (transformedMessages.length > lastMessageCount && lastMessageCount > 0) {
+                    const newMessages = transformedMessages.slice(lastMessageCount)
+                    newMessages.forEach(msg => {
+                        if (msg.senderType !== currentUserType && !isOpen) {
+                            addToast(msg)
+                        }
+                    })
+                }
+                setLastMessageCount(transformedMessages.length)
 
-            // Transform API response to our interface
-            const transformedMessages = apiMessages.map(transformApiMessage)
-            console.log('[PartyChat] Transformed messages:', transformedMessages)
+                setMessages(transformedMessages)
 
-            // Check for new messages (for toast notifications)
-            if (transformedMessages.length > lastMessageCount && lastMessageCount > 0) {
-                const newMessages = transformedMessages.slice(lastMessageCount)
-                newMessages.forEach(msg => {
-                    if (msg.senderType !== currentUserType && !isOpen) {
-                        addToast(msg)
-                    }
-                })
+                // Calculate unread count (messages from other party that are unread)
+                const unread = transformedMessages.filter(
+                    m => !m.isRead && m.senderType !== currentUserType
+                ).length
+                setUnreadCount(unread)
+                onUnreadCountChange?.(unread)
             }
-            setLastMessageCount(transformedMessages.length)
-
-            setMessages(transformedMessages)
-
-            // Calculate unread count (messages from other party that are unread)
-            const unread = transformedMessages.filter(
-                m => !m.isRead && m.senderType !== currentUserType
-            ).length
-            console.log('[PartyChat] Unread count:', unread)
-            setUnreadCount(unread)
-            onUnreadCountChange?.(unread)
-
         } catch (error) {
             console.error('[PartyChat] Failed to fetch messages:', error)
         }
-    }, [sessionId, currentUserType, onUnreadCountChange, isOpen, lastMessageCount, isAIOpponent])
+    }, [sessionId, currentUserType, onUnreadCountChange, isOpen, lastMessageCount, isAIOpponent, supabase])
 
     const sendMessage = async () => {
         if (!inputText.trim() || isSending) return
@@ -509,41 +501,30 @@ export function PartyChatPanel({
         const messageText = inputText.trim()
         setInputText('') // Clear input immediately for better UX
 
-        console.log('[PartyChat] Sending message:', {
-            session_id: sessionId,
-            sender_type: currentUserType,
-            sender_name: currentUserName,
-            message_text: messageText
-        })
-
         try {
-            const response = await fetch(`${API_BASE}/party-chat-send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+            const { error } = await supabase
+                .from('party_messages')
+                .insert({
                     session_id: sessionId,
                     provider_id: providerId || null,
                     sender_type: currentUserType,
                     sender_user_id: currentUserId || null,
                     sender_name: currentUserName,
-                    message_text: messageText
+                    message_text: messageText,
+                    is_read: false
                 })
-            })
 
-            if (!response.ok) {
-                console.error('[PartyChat] Send response not OK:', response.status)
-                throw new Error('Failed to send message')
+            if (error) {
+                console.error('[PartyChat] Supabase insert error:', error)
+                setInputText(messageText)
+                return
             }
-
-            const data = await response.json()
-            console.log('[PartyChat] Send response:', data)
 
             // Refetch all messages to ensure consistency
             await fetchMessages()
 
         } catch (error) {
             console.error('[PartyChat] Failed to send message:', error)
-            // Restore the input text if send failed
             setInputText(messageText)
         } finally {
             setIsSending(false)
@@ -617,32 +598,10 @@ export function PartyChatPanel({
                 }
             } else {
                 // ============================================================
-                // Legacy: Use n8n training-party-chat webhook
+                // Fallback: Use local AI responses (no n8n dependency)
                 // ============================================================
-                const response = await fetch(`${API_BASE}/training-party-chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: sessionId,
-                        userMessage: messageText,
-                        aiPersonality: aiPersonality,
-                        avatarName: displayName,
-                        chatHistory: messages.slice(-10).map(m => ({
-                            sender: m.senderType,
-                            message: m.messageText
-                        }))
-                    })
-                })
-
-                // Simulate natural typing delay
                 await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1500))
-
-                if (response.ok) {
-                    const result = await response.json()
-                    aiResponseText = result.aiResponse || getFallbackResponse(aiPersonality)
-                } else {
-                    aiResponseText = getFallbackResponse(aiPersonality)
-                }
+                aiResponseText = getFallbackResponse(aiPersonality)
             }
 
             // Add AI response
@@ -712,18 +671,12 @@ export function PartyChatPanel({
         if (unreadCount === 0 || isAIOpponent) return
 
         try {
-            const response = await fetch(`${API_BASE}/party-chat-mark-read`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: sessionId,
-                    reader_type: currentUserType
-                })
-            })
-
-            if (!response.ok) {
-                throw new Error('Failed to mark messages as read')
-            }
+            await supabase
+                .from('party_messages')
+                .update({ is_read: true, read_at: new Date().toISOString() })
+                .eq('session_id', sessionId)
+                .neq('sender_type', currentUserType)
+                .eq('is_read', false)
 
             // Update local state
             setMessages(prev => prev.map(m => ({
@@ -739,7 +692,7 @@ export function PartyChatPanel({
         } catch (error) {
             console.error('Failed to mark messages as read:', error)
         }
-    }, [sessionId, currentUserType, onUnreadCountChange, unreadCount, isAIOpponent])
+    }, [sessionId, currentUserType, onUnreadCountChange, unreadCount, isAIOpponent, supabase])
 
     // ============================================================================
     // SECTION 8C: TOAST MANAGEMENT
@@ -799,25 +752,48 @@ export function PartyChatPanel({
         }
     }, [isOpen, isAIOpponent])
 
-    // Polling for new messages (REAL MODE ONLY)
+    // Supabase Realtime subscription for live updates (REAL MODE ONLY)
     useEffect(() => {
-        // Skip polling in AI mode
         if (isAIOpponent) return
 
-        // Clear any existing interval
-        if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current)
-        }
+        const channel = supabase
+            .channel(`party-chat-${sessionId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'party_messages',
+                    filter: `session_id=eq.${sessionId}`
+                },
+                (payload) => {
+                    const newMsg = payload.new as PartyMessageRow
+                    const mapped = transformApiMessage(newMsg)
 
-        const pollInterval = isOpen ? 10000 : 30000 // 10s when open, 30s when closed
-        pollingIntervalRef.current = setInterval(fetchMessages, pollInterval)
+                    // Only add if it's from the other party (our own inserts are handled by fetchMessages)
+                    if (mapped.senderType !== currentUserType) {
+                        setMessages(prev => {
+                            if (prev.some(m => m.messageId === mapped.messageId)) return prev
+                            return [...prev, mapped]
+                        })
+
+                        if (!isOpen) {
+                            addToast(mapped)
+                            setUnreadCount(prev => {
+                                const next = prev + 1
+                                onUnreadCountChange?.(next)
+                                return next
+                            })
+                        }
+                    }
+                }
+            )
+            .subscribe()
 
         return () => {
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current)
-            }
+            supabase.removeChannel(channel)
         }
-    }, [isOpen, fetchMessages, isAIOpponent])
+    }, [sessionId, currentUserType, isOpen, isAIOpponent, supabase])
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {

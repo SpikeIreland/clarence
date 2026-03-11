@@ -1183,30 +1183,35 @@ async function addSubClause(
 
 async function fetchClauseChat(sessionId: string, positionId: string | null): Promise<ClauseChatMessage[]> {
     try {
-        const url = positionId
-            ? `${API_BASE}/clause-chat-api-get?session_id=${sessionId}&position_id=${positionId}`
-            : `${API_BASE}/clause-chat-api-get?session_id=${sessionId}&general=true`
-        const response = await fetch(url)
-        if (!response.ok) throw new Error('Failed to fetch clause chat')
+        const supabase = createClient()
+        let query = supabase
+            .from('clause_chat_messages')
+            .select('*')
+            .eq('session_id', sessionId)
+            .order('created_at', { ascending: true })
 
-        // Handle empty response body (n8n returns empty 200 when a node errors)
-        const text = await response.text()
-        if (!text) return []
-        const data = JSON.parse(text)
+        if (positionId) {
+            query = query.eq('position_id', positionId)
+        }
 
-        const messages = Array.isArray(data) ? data : (data.messages || [])
+        const { data, error } = await query
 
-        return messages.map((m: ApiMessageResponse) => ({
-            messageId: m.messageId || m.message_id,
-            sessionId: m.sessionId || m.session_id,
-            positionId: m.positionId || m.position_id,
-            sender: m.sender,
-            senderUserId: m.senderUserId || m.sender_user_id,
-            message: m.message,
-            messageType: m.messageType || m.message_type || 'discussion',
-            relatedPositionChange: m.relatedPositionChange || m.related_position_change || false,
-            triggeredBy: m.triggeredBy || m.triggered_by,
-            createdAt: m.createdAt || m.created_at
+        if (error) {
+            console.error('[ClauseChat] Supabase fetch error:', error)
+            return []
+        }
+
+        return (data || []).map((m: Record<string, unknown>): ClauseChatMessage => ({
+            messageId: m.message_id as string,
+            sessionId: m.session_id as string,
+            positionId: (m.position_id as string) || null,
+            sender: m.sender as ClauseChatMessage['sender'],
+            senderUserId: (m.sender_user_id as string) || null,
+            message: m.message as string,
+            messageType: (m.message_type as ClauseChatMessage['messageType']) || 'discussion',
+            relatedPositionChange: (m.related_position_change as boolean) || false,
+            triggeredBy: (m.triggered_by as string) || null,
+            createdAt: m.created_at as string
         }))
     } catch (error) {
         console.error('Error fetching clause chat:', error)
@@ -5392,6 +5397,25 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         setClauseTree(toggleExpanded(clauseTree))
     }
 
+    // Helper: persist a clause chat message to Supabase (fire-and-forget)
+    const persistClauseChatMessage = async (msg: ClauseChatMessage) => {
+        try {
+            const supabase = createClient()
+            await supabase.from('clause_chat_messages').insert({
+                session_id: msg.sessionId,
+                position_id: msg.positionId || null,
+                sender: msg.sender,
+                sender_user_id: msg.senderUserId || null,
+                message: msg.message,
+                message_type: msg.messageType,
+                related_position_change: msg.relatedPositionChange,
+                triggered_by: msg.triggeredBy || null,
+            })
+        } catch (err) {
+            console.error('[ClauseChat] Failed to persist message:', err)
+        }
+    }
+
     const handleSendMessage = async () => {
         if (!chatInput.trim() || !session || !userInfo) return
 
@@ -5415,6 +5439,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
 
         setChatMessages(prev => [...prev, newMessage])
         setChatInput('')
+
+        // Persist user message to DB
+        persistClauseChatMessage(newMessage)
 
         // Start working overlay
         startWorking('chat_response')
@@ -5447,6 +5474,8 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 }
 
                 setChatMessages(prev => [...prev, clarenceResponse])
+                // Persist CLARENCE response to DB
+                persistClauseChatMessage(clarenceResponse)
                 stopWorking()
             } else {
                 // Add error message to chat but don't show error overlay
