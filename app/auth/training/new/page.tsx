@@ -718,23 +718,41 @@ function TrainingStudioPage() {
 
                 const { data: positions } = await supabase
                     .from('session_clause_positions')
-                    .select('position_id, customer_position')
+                    .select('position_id, customer_position, clause_category')
                     .eq('session_id', sessionResult.sessionId)
 
                 if (positions && positions.length > 0) {
+                    // Assign varied weights: higher for critical categories, lower for administrative
+                    const highWeightCategories = ['liability', 'indemnification', 'limitation of liability', 'termination', 'payment', 'pricing', 'intellectual property', 'data protection', 'confidentiality', 'insurance', 'warranties']
+                    const lowWeightCategories = ['notices', 'definitions', 'general provisions', 'governing law', 'amendments', 'severability', 'entire agreement', 'assignment', 'waiver']
+
                     const updates = positions.map((pos: Record<string, unknown>) => {
                         const custPos = (pos.customer_position as number) || 5
-                        // Shift provider position away from customer (provider favours lower values)
+                        const category = ((pos.clause_category as string) || '').toLowerCase()
+
+                        // Shift provider position away from customer
                         const shift = shiftRange.min + Math.floor(Math.random() * (shiftRange.max - shiftRange.min + 1))
-                        // Provider pushes position lower (more favourable to them), clamped to 1-10
                         const provPos = Math.max(1, Math.min(10, custPos - shift))
-                        // Clarence recommendation = fair midpoint between the two positions
+                        // Clarence recommendation = fair midpoint
                         const clarenceRec = Math.round(((custPos + provPos) / 2) * 10) / 10
+
+                        // Assign weight based on category importance (1-10 scale)
+                        let weight: number
+                        if (highWeightCategories.some(c => category.includes(c))) {
+                            weight = 7 + Math.floor(Math.random() * 3) // 7-9
+                        } else if (lowWeightCategories.some(c => category.includes(c))) {
+                            weight = 2 + Math.floor(Math.random() * 2) // 2-3
+                        } else {
+                            weight = 4 + Math.floor(Math.random() * 3) // 4-6
+                        }
+
                         return supabase
                             .from('session_clause_positions')
                             .update({
                                 provider_position: provPos,
                                 ai_suggested_compromise: clarenceRec,
+                                customer_weight: weight,
+                                provider_weight: Math.max(1, Math.min(10, weight + (Math.random() > 0.5 ? 1 : -1))),
                             })
                             .eq('position_id', pos.position_id)
                     })

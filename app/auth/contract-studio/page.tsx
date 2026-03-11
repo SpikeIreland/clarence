@@ -1324,13 +1324,13 @@ function recalculateLeverageTracker(
 
             // Customer moving DOWN = accommodating toward agreement = CUSTOMER GAINS
             if (custDelta < 0) {
-                const impact = Math.abs(custDelta) * (weight / 5) * 1.0
+                const impact = Math.min(2, Math.abs(custDelta) * (weight / 5) * 0.5)
                 customerLeverageShift += impact  // Customer GAINS
                 console.log(`${clause.clauseName}: Customer moved toward agreement (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
             }
             // Customer moving UP = moving away from agreement = CUSTOMER LOSES
             if (custDelta > 0) {
-                const impact = Math.abs(custDelta) * (weight / 5) * 1.0
+                const impact = Math.min(2, Math.abs(custDelta) * (weight / 5) * 0.5)
                 customerLeverageShift -= impact  // Customer LOSES
                 console.log(`${clause.clauseName}: Customer moved away from agreement (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Customer loses -${impact.toFixed(2)} (weight ${weight})`)
             }
@@ -1346,13 +1346,13 @@ function recalculateLeverageTracker(
 
             // Provider moving UP = accommodating toward agreement = PROVIDER GAINS (customer loses)
             if (provDelta > 0) {
-                const impact = provDelta * (weight / 5) * 1.0
+                const impact = Math.min(2, provDelta * (weight / 5) * 0.5)
                 customerLeverageShift -= impact  // Customer LOSES (provider gained)
                 console.log(`${clause.clauseName}: Provider moved toward agreement (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
             }
             // Provider moving DOWN = moving away from agreement = PROVIDER LOSES (customer gains)
             if (provDelta < 0) {
-                const impact = Math.abs(provDelta) * (weight / 5) * 1.0
+                const impact = Math.min(2, Math.abs(provDelta) * (weight / 5) * 0.5)
                 customerLeverageShift += impact  // Customer GAINS (provider lost)
                 console.log(`${clause.clauseName}: Provider moved away from agreement (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Provider loses -${impact.toFixed(2)} (weight ${weight})`)
             }
@@ -1455,6 +1455,17 @@ function buildClauseTree(clauses: ContractClause[], preserveExpandedFrom?: Contr
             rootClauses.push(current)
         }
     })
+
+    // Sort by displayOrder at every level
+    const sortByDisplayOrder = (items: ContractClause[]) => {
+        items.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+        items.forEach(item => {
+            if (item.children && item.children.length > 0) {
+                sortByDisplayOrder(item.children)
+            }
+        })
+    }
+    sortByDisplayOrder(rootClauses)
 
     return rootClauses
 }
@@ -8667,7 +8678,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                         selectedClause.status}
                                         </span>
                                     </div>
-                                    <p className="text-sm text-slate-500 mt-1">{selectedClause.description}</p>
+                                    {selectedClause.description && (
+                                        <p className="text-sm text-slate-500 mt-1 line-clamp-2">
+                                            {selectedClause.description.length > 150
+                                                ? selectedClause.description.substring(0, 150) + '...'
+                                                : selectedClause.description}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Tab bar — hidden in solo prep (only clause review available) */}
