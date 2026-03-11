@@ -18,6 +18,7 @@ export interface PlaybookRangeContext {
 export interface PlaybookRule {
     rule_id: string
     playbook_id: string
+    clause_code?: string
     clause_name: string
     category: string
     ideal_position: number
@@ -34,6 +35,10 @@ export interface PlaybookRule {
     rationale: string | null
     negotiation_tips: string | null
     range_context: PlaybookRangeContext | null
+    source_quote: string | null
+    quality_flags: string[] | null
+    display_order?: number
+    updated_at?: string | null
 }
 
 export interface ContractClause {

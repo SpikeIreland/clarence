@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
-import { PlaybookRule, normaliseCategory, getCategoryDisplayName, getEffectiveRangeContext, translateRulePosition } from '@/lib/playbook-compliance'
+import { PlaybookRule, PlaybookRangeContext, normaliseCategory, getCategoryDisplayName, getEffectiveRangeContext, translateRulePosition } from '@/lib/playbook-compliance'
 import jsPDF from 'jspdf'
 import FeedbackButton from '@/app/components/FeedbackButton'
 
@@ -202,6 +202,86 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [loadedRules, setLoadedRules] = useState<Record<string, PlaybookRule[]>>({})
     const [rulesLoading, setRulesLoading] = useState<string | null>(null)
     const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+
+    // --- Rule editing state ---
+    const [editingRule, setEditingRule] = useState<PlaybookRule | null>(null)
+    const [editDraft, setEditDraft] = useState<Partial<PlaybookRule>>({})
+    const [savingRule, setSavingRule] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
+
+    const handleEditRule = (rule: PlaybookRule) => {
+        setEditingRule(rule)
+        setEditDraft({
+            ideal_position: rule.ideal_position,
+            minimum_position: rule.minimum_position,
+            maximum_position: rule.maximum_position,
+            fallback_position: rule.fallback_position,
+            importance_level: rule.importance_level,
+            is_deal_breaker: rule.is_deal_breaker,
+            is_non_negotiable: rule.is_non_negotiable,
+            rationale: rule.rationale,
+            negotiation_tips: rule.negotiation_tips,
+            escalation_trigger: rule.escalation_trigger,
+            escalation_contact: rule.escalation_contact,
+            requires_approval_below: rule.requires_approval_below,
+            range_context: rule.range_context ? { ...rule.range_context } : null,
+        })
+        setSaveError(null)
+    }
+
+    const handleSaveRule = async () => {
+        if (!editingRule) return
+        setSavingRule(true)
+        setSaveError(null)
+        try {
+            const response = await fetch(`/api/playbooks/${editingRule.playbook_id}/rules/${editingRule.rule_id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editDraft)
+            })
+            if (!response.ok) {
+                const errData = await response.json()
+                throw new Error(errData.error || 'Failed to save')
+            }
+            const { rule: updatedRule } = await response.json()
+            // Update local state
+            setLoadedRules(prev => {
+                const playbookRules = prev[editingRule.playbook_id] || []
+                return {
+                    ...prev,
+                    [editingRule.playbook_id]: playbookRules.map(r =>
+                        r.rule_id === editingRule.rule_id ? { ...r, ...updatedRule } : r
+                    )
+                }
+            })
+            setEditingRule(null)
+            setEditDraft({})
+        } catch (e) {
+            setSaveError(e instanceof Error ? e.message : 'Save failed')
+        } finally {
+            setSavingRule(false)
+        }
+    }
+
+    const getQualityFlags = (rule: PlaybookRule): string[] => {
+        if (!rule.quality_flags) return []
+        if (Array.isArray(rule.quality_flags)) return rule.quality_flags
+        if (typeof rule.quality_flags === 'string') {
+            try { return JSON.parse(rule.quality_flags) } catch { return [] }
+        }
+        return []
+    }
+
+    const qualityFlagLabel = (flag: string): string => {
+        const labels: Record<string, string> = {
+            duplicate_range_in_category: 'Duplicate range in category',
+            mixed_value_types: 'Mixed value types in scale',
+            duplicate_positions_in_category: 'Duplicate positions in category',
+            missing_range_context: 'Missing range context',
+            non_monotonic_scale: 'Non-monotonic scale values',
+        }
+        return labels[flag] || flag
+    }
 
     const handleToggleRules = async (playbookId: string) => {
         if (expandedPlaybookId === playbookId) {
@@ -818,7 +898,9 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 
                                                         {isOpen && (
                                                             <div className="border-t border-slate-100 divide-y divide-slate-100">
-                                                                {group.rules.map((rule) => (
+                                                                {group.rules.map((rule) => {
+                                                                    const flags = getQualityFlags(rule)
+                                                                    return (
                                                                     <div key={rule.rule_id} className="px-4 py-3">
                                                                         <div className="flex items-center gap-2 mb-1.5">
                                                                             <span className="text-sm font-medium text-slate-800">{rule.clause_name}</span>
@@ -828,13 +910,29 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                                             {rule.is_non_negotiable && (
                                                                                 <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">Non-Negotiable</span>
                                                                             )}
+                                                                            {flags.length > 0 && (
+                                                                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-600 rounded cursor-help"
+                                                                                    title={flags.map(f => qualityFlagLabel(f)).join(', ')}>
+                                                                                    {flags.length} issue{flags.length !== 1 ? 's' : ''}
+                                                                                </span>
+                                                                            )}
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); handleEditRule(rule) }}
+                                                                                className="ml-auto p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition"
+                                                                                title="Edit rule"
+                                                                            >
+                                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                                                </svg>
+                                                                            </button>
                                                                         </div>
                                                                         <RulePositionBar rule={rule} />
                                                                         {rule.rationale && (
                                                                             <p className="mt-1.5 text-xs text-slate-400 italic">{rule.rationale}</p>
                                                                         )}
                                                                     </div>
-                                                                ))}
+                                                                    )
+                                                                })}
                                                             </div>
                                                         )}
                                                     </div>
@@ -846,6 +944,252 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                             )}
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* RULE EDIT DRAWER — Slide-out panel for editing individual rules */}
+            {/* ============================================================ */}
+            {editingRule && (
+                <div className="fixed inset-0 z-50 flex">
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/30" onClick={() => { setEditingRule(null); setEditDraft({}) }} />
+                    {/* Drawer */}
+                    <div className="absolute right-0 top-0 bottom-0 w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 z-10">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-800">{editingRule.clause_name}</h3>
+                                    <span className="text-xs text-slate-500">{getCategoryDisplayName(normaliseCategory(editingRule.category))}</span>
+                                    {getQualityFlags(editingRule).length > 0 && (
+                                        <div className="flex gap-1 mt-1">
+                                            {getQualityFlags(editingRule).map(flag => (
+                                                <span key={flag} className="px-1.5 py-0.5 text-[10px] bg-amber-50 text-amber-600 rounded">
+                                                    {qualityFlagLabel(flag)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <button onClick={() => { setEditingRule(null); setEditDraft({}) }}
+                                    className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-6">
+                            {/* Source Quote (read-only) */}
+                            {editingRule.source_quote && (
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Source Quote</label>
+                                    <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 border border-slate-200 italic">
+                                        &ldquo;{editingRule.source_quote}&rdquo;
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Live Position Bar Preview */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-2">Position Preview</label>
+                                <RulePositionBar rule={{ ...editingRule, ...editDraft } as PlaybookRule} />
+                            </div>
+
+                            {/* Position Inputs */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-2">Positions (1-10)</label>
+                                <div className="grid grid-cols-4 gap-3">
+                                    {(['minimum_position', 'fallback_position', 'ideal_position', 'maximum_position'] as const).map(field => (
+                                        <div key={field}>
+                                            <label className="block text-[10px] text-slate-400 mb-0.5 capitalize">
+                                                {field.replace('_position', '')}
+                                            </label>
+                                            <input
+                                                type="number" min={1} max={10}
+                                                value={editDraft[field] ?? ''}
+                                                onChange={e => setEditDraft(prev => ({ ...prev, [field]: parseInt(e.target.value) || 1 }))}
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Range Context */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-2">Range Context</label>
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] text-slate-400 mb-0.5">Value Type</label>
+                                            <select
+                                                value={editDraft.range_context?.value_type || ''}
+                                                onChange={e => setEditDraft(prev => ({
+                                                    ...prev,
+                                                    range_context: {
+                                                        ...(prev.range_context || { range_unit: null, scale_points: [], source: 'manual' as const }),
+                                                        value_type: e.target.value as PlaybookRangeContext['value_type'],
+                                                    } as PlaybookRangeContext
+                                                }))}
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="">Select...</option>
+                                                <option value="duration">Duration</option>
+                                                <option value="percentage">Percentage</option>
+                                                <option value="currency">Currency</option>
+                                                <option value="count">Count</option>
+                                                <option value="boolean">Boolean</option>
+                                                <option value="text">Text/Scope</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-slate-400 mb-0.5">Range Unit</label>
+                                            <input
+                                                type="text"
+                                                value={editDraft.range_context?.range_unit || ''}
+                                                onChange={e => setEditDraft(prev => ({
+                                                    ...prev,
+                                                    range_context: {
+                                                        ...(prev.range_context || { value_type: null, scale_points: [], source: 'manual' as const }),
+                                                        range_unit: e.target.value,
+                                                    } as PlaybookRangeContext
+                                                }))}
+                                                placeholder="e.g. years, % of fees, days"
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    {/* Scale Points (1, 5, 10) */}
+                                    <div>
+                                        <label className="block text-[10px] text-slate-400 mb-1">Scale Points</label>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {[1, 5, 10].map(pos => {
+                                                const sp = (editDraft.range_context?.scale_points || []).find(p => p.position === pos)
+                                                return (
+                                                    <div key={pos} className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+                                                        <div className="text-[10px] font-medium text-indigo-500 mb-1">Position {pos}</div>
+                                                        <input
+                                                            type="text"
+                                                            value={sp?.label || ''}
+                                                            onChange={e => {
+                                                                const currentPoints = [...(editDraft.range_context?.scale_points || [])]
+                                                                const idx = currentPoints.findIndex(p => p.position === pos)
+                                                                const newPoint = { position: pos, label: e.target.value, value: sp?.value || 0 }
+                                                                if (idx >= 0) currentPoints[idx] = newPoint
+                                                                else currentPoints.push(newPoint)
+                                                                setEditDraft(prev => ({
+                                                                    ...prev,
+                                                                    range_context: {
+                                                                        ...(prev.range_context || { value_type: null, range_unit: null, source: 'manual' as const }),
+                                                                        scale_points: currentPoints.sort((a, b) => a.position - b.position),
+                                                                    } as PlaybookRangeContext
+                                                                }))
+                                                            }}
+                                                            placeholder="Label"
+                                                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500"
+                                                        />
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Details */}
+                            <div className="grid grid-cols-1 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Rationale</label>
+                                    <textarea
+                                        value={editDraft.rationale || ''}
+                                        onChange={e => setEditDraft(prev => ({ ...prev, rationale: e.target.value }))}
+                                        rows={2}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Negotiation Tips</label>
+                                    <textarea
+                                        value={editDraft.negotiation_tips || ''}
+                                        onChange={e => setEditDraft(prev => ({ ...prev, negotiation_tips: e.target.value }))}
+                                        rows={2}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Importance */}
+                            <div>
+                                <label className="block text-xs font-medium text-slate-500 mb-1">
+                                    Importance Level: {editDraft.importance_level || 5}/10
+                                </label>
+                                <input
+                                    type="range" min={1} max={10}
+                                    value={editDraft.importance_level || 5}
+                                    onChange={e => setEditDraft(prev => ({ ...prev, importance_level: parseInt(e.target.value) }))}
+                                    className="w-full accent-indigo-600"
+                                />
+                            </div>
+
+                            {/* Flags */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={editDraft.is_deal_breaker || false}
+                                        onChange={e => setEditDraft(prev => ({ ...prev, is_deal_breaker: e.target.checked }))}
+                                        className="rounded border-slate-300 text-red-600 focus:ring-red-500" />
+                                    <span className="text-sm text-slate-700">Deal Breaker</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={editDraft.is_non_negotiable || false}
+                                        onChange={e => setEditDraft(prev => ({ ...prev, is_non_negotiable: e.target.checked }))}
+                                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
+                                    <span className="text-sm text-slate-700">Non-Negotiable</span>
+                                </label>
+                            </div>
+
+                            {/* Escalation */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Escalation Threshold</label>
+                                    <input type="number" min={1} max={10}
+                                        value={editDraft.requires_approval_below ?? ''}
+                                        onChange={e => setEditDraft(prev => ({ ...prev, requires_approval_below: e.target.value ? parseInt(e.target.value) : null }))}
+                                        placeholder="Position"
+                                        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Escalation Contact</label>
+                                    <input type="text"
+                                        value={editDraft.escalation_contact || ''}
+                                        onChange={e => setEditDraft(prev => ({ ...prev, escalation_contact: e.target.value || null }))}
+                                        placeholder="e.g. Legal Director"
+                                        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                                </div>
+                            </div>
+
+                            {/* Save Error */}
+                            {saveError && (
+                                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
+                                    {saveError}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => { setEditingRule(null); setEditDraft({}) }}
+                                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                            >Cancel</button>
+                            <button
+                                onClick={handleSaveRule}
+                                disabled={savingRule}
+                                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition disabled:opacity-50"
+                            >{savingRule ? 'Saving...' : 'Save Changes'}</button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

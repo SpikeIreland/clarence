@@ -1,6 +1,9 @@
 // ============================================================================
-// SMART PLAYBOOK EXTRACTION - Aligned to actual playbook_rules schema
-// V5: Rule count fix, range differentiation, provider perspective support
+// PLAYBOOK EXTRACTION — PASS 1: CLAUSE INVENTORY
+// Location: n8n-workflows/parse-playbook-prepare-prompt.js
+// V6: Two-pass architecture. Pass 1 extracts clause inventory with source
+//     quotes and units of measurement. Pass 2 (separate file) extracts
+//     positions and range_context anchored to these quotes.
 // ============================================================================
 
 const playbookData = $("Get Playbook Metadata").first().json;
@@ -19,18 +22,12 @@ if (!extractedText || extractedText.length < 100) {
 // ============================================================================
 // PLAYBOOK PERSPECTIVE — customer or provider?
 // ============================================================================
-// Determines how positions are interpreted. If the playbook was uploaded by
-// a provider company, the positions represent the provider's goals (lower
-// numbers = stronger provider position). If customer, higher = stronger.
 
 const perspective = playbookData.playbook_perspective || "customer";
 
 // ============================================================================
 // SMART EXTRACTION: Find and keep sections with negotiation rules
 // ============================================================================
-// Set to 80K: large enough to capture most playbooks in full, while the
-// reduced output fields (dropped talking_points, common_objections,
-// counter_arguments) keep total response within timeout.
 
 const MAX_CHARS = 80000;
 const originalLength = extractedText.length;
@@ -43,57 +40,18 @@ if (extractedText.length > MAX_CHARS) {
   wasTruncated = true;
 
   const importantKeywords = [
-    "position",
-    "limit",
-    "threshold",
-    "escalat",
-    "approv",
-    "accept",
-    "red line",
-    "redline",
-    "non-negotiable",
-    "mandatory",
-    "must not",
-    "minimum",
-    "maximum",
-    "range",
-    "cap",
-    "ceiling",
-    "floor",
-    "liability",
-    "indemnit",
-    "warrant",
-    "terminat",
-    "payment",
-    "intellectual property",
-    "confidential",
-    "data protection",
-    "service level",
-    "sla",
-    "penalty",
-    "breach",
-    "remedy",
-    "insurance",
-    "force majeure",
-    "governance",
-    "audit",
-    "preferred",
-    "ideal",
-    "fallback",
-    "walk away",
-    "deal breaker",
-    "negotiate",
-    "concession",
-    "trade-off",
-    "compromise",
-    "employment",
-    "tupe",
-    "benchmarking",
-    "change control",
-    "dispute",
-    "exit",
-    "transition",
-    "subcontract",
+    "position", "limit", "threshold", "escalat", "approv", "accept",
+    "red line", "redline", "non-negotiable", "mandatory", "must not",
+    "minimum", "maximum", "range", "cap", "ceiling", "floor",
+    "liability", "indemnit", "warrant", "terminat", "payment",
+    "intellectual property", "confidential", "data protection",
+    "service level", "sla", "penalty", "breach", "remedy", "insurance",
+    "force majeure", "governance", "audit", "preferred", "ideal",
+    "fallback", "walk away", "deal breaker", "negotiate", "concession",
+    "trade-off", "compromise", "employment", "tupe", "benchmarking",
+    "change control", "dispute", "exit", "transition", "subcontract",
+    "nda", "mutual", "non-disclosure", "confidentiality period",
+    "term", "duration", "survival", "return", "destruction",
   ];
 
   const sections = extractedText.split(/\n{2,}|\r\n{2,}/);
@@ -153,168 +111,125 @@ if (extractedText.length > MAX_CHARS) {
 }
 
 // ============================================================================
-// Build perspective-aware scale definition
-// ============================================================================
-
-const scaleDefinition =
-  perspective === "provider"
-    ? `═══════════════════════════════════════════════════
-POSITION SCALE (1-10) — PROVIDER PERSPECTIVE
-═══════════════════════════════════════════════════
-
-THIS IS A PROVIDER/SUPPLIER PLAYBOOK. Positions represent what the PROVIDER wants.
-
-Position 1  = Weakest position for this provider (maximum concession to customer)
-Position 5  = Balanced / Market standard
-Position 10 = Strongest position for this provider (maximum protection for provider)
-
-The scale is oriented so that:
-- Higher number = MORE favourable for the PROVIDER (supplier, vendor)
-- Lower number  = MORE concession to the CUSTOMER (buyer, tenant)
-
-Example: A provider wanting long payment terms (90 days) would set ideal_position HIGH (8-9).
-A provider accepting short payment terms (7 days) would set minimum_position LOW (2-3).`
-    : `═══════════════════════════════════════════════════
-POSITION SCALE (1-10) — CUSTOMER PERSPECTIVE
-═══════════════════════════════════════════════════
-
-THIS IS A CUSTOMER/BUYER PLAYBOOK. Positions represent what the CUSTOMER wants.
-
-Position 1  = Maximum flexibility for the PROVIDING party (supplier, vendor, landlord, licensor)
-Position 5  = Balanced / Market standard
-Position 10 = Maximum protection for the PROTECTED party (customer, tenant, buyer, licensee)
-
-The scale is oriented so that:
-- Higher number = MORE protection for the customer/buyer
-- Lower number  = MORE flexibility for the supplier/provider
-
-Example: A customer wanting short payment terms (7 days) would set ideal_position HIGH (8-9).
-A customer accepting long payment terms (90 days) would set minimum_position LOW (2-3).`;
-
-// ============================================================================
-// PROMPT V5 — Perspective-aware, range-differentiated, output-optimised
+// PASS 1 PROMPT — Clause Inventory (no positions, no ranges)
 // ============================================================================
 
 const systemPrompt = `You are an expert at extracting negotiation rules from corporate contract playbooks.
 
-CRITICAL INSTRUCTION: You MUST extract EVERY negotiation rule, position, red line, escalation trigger, and policy directive from the document. Do NOT summarise, consolidate, or skip rules. A large corporate playbook may contain 80-150+ rules. If you extract fewer than 30, you have almost certainly missed rules.
-
-${scaleDefinition}
-
-═══════════════════════════════════════════════════
-FOUR POSITION VALUES PER RULE
-═══════════════════════════════════════════════════
-
-- ideal_position: The company's PREFERRED opening position (where they want to start).
-- minimum_position: The absolute FLOOR. Below this is unacceptable.
-- maximum_position: Best case / aspirational ceiling.
-- fallback_position: Compromise if ideal is rejected. Between minimum and ideal.
-
-RULES:
-- minimum_position <= fallback_position <= ideal_position <= maximum_position
-- All four values MUST be different from each other when the playbook provides enough context.
-- Use the FULL 1-10 range. Do not cluster everything around 5-6.
+YOUR TASK (PASS 1 OF 2): Identify EVERY negotiation rule, clause, and policy directive in this playbook. For each one, extract:
+1. The clause name and category
+2. A VERBATIM quote from the document (the exact text that defines this rule)
+3. The correct unit of measurement for THIS specific clause
+4. Whether it is a deal breaker or non-negotiable
 
 ═══════════════════════════════════════════════════
-CRITICAL — EVERY RULE MUST HAVE UNIQUE POSITIONS
+CRITICAL: SOURCE QUOTES
 ═══════════════════════════════════════════════════
 
-WRONG — identical positions across rules in a category:
-  "Liability Cap":       ideal=8, min=6, max=10, fallback=7
-  "Consequential Loss":  ideal=8, min=6, max=10, fallback=7  ← WRONG: copied
-  "Indemnity Scope":     ideal=8, min=6, max=10, fallback=7  ← WRONG: copied
+For each rule, you MUST include a "source_quote" field containing the EXACT text from the playbook document that defines this rule. This quote will be used in Pass 2 to ensure accurate position mapping.
 
-RIGHT — each rule reflects its SPECIFIC playbook guidance:
-  "Liability Cap":       ideal=8, min=5, max=10, fallback=7  (% of fees — cap at 150%)
-  "Consequential Loss":  ideal=9, min=7, max=10, fallback=8  (scope — must exclude)
-  "Indemnity Scope":     ideal=7, min=4, max=9,  fallback=6  (scope — IP indemnity only)
-
-Every clause deals with a DIFFERENT aspect — even within the same category. Read the playbook text for EACH clause and assign positions based on what IT says, not what the category says.
-
-Each clause also has its OWN unit of measurement:
-- "Liability Cap" → % of fees
-- "Consequential Loss" → scope (broad to narrow)
-- "Indemnity Period" → months
-- "Service Credits" → % of monthly charges
-Do NOT apply one measure to all clauses in a section.
+RULES for source_quote:
+- Copy the text VERBATIM from the document — do NOT paraphrase, summarise, or invent text
+- Include enough context to understand the rule (typically 1-3 sentences, max 150 words)
+- If the document says "1-5 years", the quote must say "1-5 years" — not "1-3 years" or "up to 5 years"
+- If you cannot find explicit text for a rule, set source_quote to null and mark it as inferred
 
 ═══════════════════════════════════════════════════
-CATEGORY MEASURE GUIDE
+UNIT OF MEASUREMENT — CRITICAL
 ═══════════════════════════════════════════════════
 
-Use the correct unit for each clause. Override when the clause clearly deals with something different.
+Each clause has its OWN unit. Even within the same category, different clauses measure different things:
 
-liability: % of annual fees (caps), scope (exclusions), months (indemnity periods)
-payment: days (terms), % (interest rates), days (dispute windows)
-termination: months (notice), scope (rights), days (cure periods)
-confidentiality: years (duration), scope (definition breadth)
-service_levels: % uptime, % monthly charges (credits), scope (remedies)
-insurance: GBP/USD coverage amounts
-data_protection: hours (breach notification), scope (audit rights), days (data return)
-intellectual_property: years (licence), scope (ownership)
+liability category:
+  - "Liability Cap" → % of annual fees
+  - "Consequential Loss" → scope (excluded to included)
+  - "Indemnity Scope" → scope (narrow to broad)
+  - "Indemnity Period" → months
 
-═══════════════════════════════════════════════════
-RANGE CONTEXT — REQUIRED FOR EACH RULE
-═══════════════════════════════════════════════════
+confidentiality category:
+  - "Confidentiality Duration" → years
+  - "Definition of Confidential Information" → scope (narrow to broad)
+  - "Permitted Disclosure" → scope (restricted to broad)
+  - "Return/Destruction of Information" → days
 
-"range_context": {
-  "value_type": "duration" | "percentage" | "currency" | "count" | "boolean" | "text",
-  "range_unit": "<e.g. '% of annual fees', 'months notice', 'GBP', 'days'>",
-  "scale_points": [
-    { "position": 1, "label": "<value at pos 1>", "value": <number> },
-    { "position": 5, "label": "<value at pos 5>", "value": <number> },
-    { "position": 10, "label": "<value at pos 10>", "value": <number> }
-  ],
-  "source": "parsed"
-}
+termination category:
+  - "Notice Period" → months
+  - "Termination for Convenience" → scope (restricted to unrestricted)
+  - "Cure Period" → days
 
-- EXACTLY 3 scale_points: positions 1, 5, and 10.
-- Each rule's range_context MUST match THAT rule's unit, not the category default.
-- For qualitative clauses, use value_type "text" and descriptive labels.
+payment category:
+  - "Payment Terms" → days
+  - "Late Payment Interest" → % per annum
+  - "Invoice Dispute Window" → days
 
-═══════════════════════════════════════════════════
-OTHER FIELDS — KEEP TEXT SHORT (max 12 words)
-═══════════════════════════════════════════════════
+NDA-specific clauses:
+  - "NDA Term/Duration" → years
+  - "Survival Period" → years after termination
+  - "Non-Solicitation Period" → months
+  - "Residual Knowledge" → scope (excluded to included)
 
-- clause_code: Short ID (e.g. "LIA-001", "TERM-002")
-- clause_name: Specific title (e.g. "Liability Cap", not just "Liability")
-- category: One of: liability, termination, payment, intellectual_property, confidentiality, data_protection, service_levels, warranties, indemnification, insurance, governance, employment, audit, benchmarking, dispute_resolution, change_control, exit_transition, subcontracting, force_majeure, other
-- rationale: Why this matters (max 12 words)
-- negotiation_tips: Key tactic (max 12 words)
-- escalation_trigger: What triggers escalation (max 12 words, or null)
-- escalation_contact: Role to escalate to (e.g. "Legal Director")
-- requires_approval_below: Position needing approval (integer 1-10, or null)
-- importance_level: Criticality 1-10
-- is_deal_breaker: true if walking away is required when breached
-- is_non_negotiable: true if position cannot change at all
+Do NOT apply a single unit to all clauses in a category. Read each clause individually.
 
 ═══════════════════════════════════════════════════
-QUALITY CHECKS — VERIFY BEFORE RETURNING
+CATEGORIES
 ═══════════════════════════════════════════════════
 
-1. DIFFERENTIATION: Scan your output. If ANY 2 rules in the same category share the SAME ideal_position AND minimum_position, go back and fix them. Each rule MUST have unique position values.
-2. FULL RANGE: Across all rules, positions should span at least 3 to 9.
-3. CORRECT MEASURES: Each rule's range_context.range_unit must match THAT clause's unit.
-4. POSITION ORDER: minimum <= fallback <= ideal <= maximum for every rule.
-5. COMPLETENESS: Count your rules. This playbook may contain 80-150 rules. Extract ALL of them.
+Use one of: liability, termination, payment, intellectual_property, confidentiality, data_protection, service_levels, warranties, indemnification, insurance, governance, employment, audit, benchmarking, dispute_resolution, change_control, exit_transition, subcontracting, force_majeure, other
 
-IMPORTANT OUTPUT RULES:
-1. Number clause_codes sequentially within each category
-2. Return ONLY valid JSON, no markdown backticks
+═══════════════════════════════════════════════════
+VALUE TYPES
+═══════════════════════════════════════════════════
+
+Choose the correct value_type for each clause:
+- "duration" — time periods (days, months, years)
+- "percentage" — percentages of fees, charges, etc.
+- "currency" — monetary amounts (GBP, USD, EUR)
+- "count" — numeric counts
+- "boolean" — yes/no, included/excluded
+- "text" — qualitative scope (narrow/broad, restricted/unrestricted)
+
+═══════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════
+
+Return ONLY valid JSON (no markdown backticks):
 
 {
-  "playbook_summary": "...",
+  "playbook_summary": "Brief summary of the playbook (1-2 sentences)",
   "playbook_perspective": "${perspective}",
   "extraction_confidence": 0.85,
   "total_rules_extracted": 45,
-  "rules": [{ ... }]
-}`;
+  "clause_inventory": [
+    {
+      "clause_code": "LIA-001",
+      "clause_name": "Liability Cap",
+      "category": "liability",
+      "source_quote": "The Provider's aggregate liability under this Agreement shall not exceed 150% of the annual charges paid or payable in the preceding 12-month period.",
+      "unit_of_measurement": "% of annual fees",
+      "value_type": "percentage",
+      "is_deal_breaker": false,
+      "is_non_negotiable": false,
+      "escalation_trigger": "Below 100% of annual fees",
+      "escalation_contact": "Legal Director",
+      "requires_approval_below": null,
+      "importance_level": 9
+    }
+  ]
+}
 
-const userPrompt = `Extract ALL negotiation rules from this ${perspective === "provider" ? "PROVIDER" : "CUSTOMER"} playbook. Be thorough — extract every rule, red line, position directive, escalation trigger, and approval threshold.
+═══════════════════════════════════════════════════
+COMPLETENESS CHECK
+═══════════════════════════════════════════════════
 
-This playbook is written from the ${perspective === "provider" ? "PROVIDER/SUPPLIER" : "CUSTOMER/BUYER"} perspective. Position values should reflect what the ${perspective === "provider" ? "provider" : "customer"} wants.
+A large corporate playbook may contain 80-150+ rules. If you extract fewer than 30, you have almost certainly missed rules. Count your output and verify completeness.
 
-IMPORTANT: Each clause MUST have its own unique position values and unit of measurement. Do NOT copy positions across clauses in the same category.
+Number clause_codes sequentially within each category (LIA-001, LIA-002, TERM-001, etc.).`;
+
+const userPrompt = `Identify ALL negotiation rules in this ${perspective === "provider" ? "PROVIDER" : "CUSTOMER"} playbook. This is Pass 1 of 2 — extract the clause inventory with VERBATIM source quotes. Do NOT assign position values yet.
+
+This playbook is written from the ${perspective === "provider" ? "PROVIDER/SUPPLIER" : "CUSTOMER/BUYER"} perspective.
+
+CRITICAL: For each rule's source_quote, copy the EXACT text from the document. If the document says "1-5 years", write "1-5 years" — not "1-3 years" or any other value. Accuracy of quotes is essential for Pass 2.
 
 PLAYBOOK: ${playbookData.playbook_name}
 ${wasTruncated ? `[Note: Key sections extracted via ${extractionMethod}. Focus on extracting rules from ALL sections provided.]` : ""}
@@ -323,7 +238,7 @@ ${wasTruncated ? `[Note: Key sections extracted via ${extractionMethod}. Focus o
 ${processedText}
 ---
 
-Extract EVERY rule with unique positions and per-clause range_context. Count them — aim for completeness. Keep text fields under 12 words. Return ONLY the JSON object.`;
+Extract EVERY rule with accurate source quotes and per-clause units. Count them — aim for completeness. Return ONLY the JSON object.`;
 
 return {
   playbookId: playbookData.playbook_id,
@@ -336,4 +251,6 @@ return {
   processedLength: processedText.length,
   wasTruncated,
   extractionMethod,
+  // Pass through for Pass 2
+  extractedText: processedText,
 };
