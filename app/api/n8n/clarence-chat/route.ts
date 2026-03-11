@@ -1,21 +1,20 @@
 // ============================================================================
 // FILE: app/api/n8n/clarence-chat/route.ts
 // PURPOSE: Unified API route for ALL CLARENCE chat touchpoints
-// VERSION: 4.0 - Dual-path routing: session-based (Contract Studio) vs
-//                contract-based (QC Studio)
+// VERSION: 5.0 - Session path now calls Claude directly (bypasses broken n8n
+//                Build Context sub-workflow). QC path unchanged.
 //
-// CHANGES in v4.0:
-// - FIX: Contract Studio was routing to clarence-qc-chat instead of
-//   clarence-chat, causing context builder to skip (no contractId)
-// - Added SESSION_CHAT_WEBHOOK for session-based Contract Studio path
-// - Route detection: sessionId (no contractId) → session path
-//                    contractId → QC path
-// - Session path maps viewerRole back to customer/provider for the
-//   original clarence-chat workflow
+// CHANGES in v5.0:
+// - Session path: build context server-side → call Claude API directly
+//   (fixes "Workflow does not exist" error from n8n Build Context node)
+// - Removed SESSION_CHAT_WEBHOOK dependency
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getRoleContext, type PartyRole } from '@/lib/role-matrix'
+import Anthropic from '@anthropic-ai/sdk'
+import { buildSessionContext } from '@/lib/session-context-builder'
+import { buildSessionPrompts } from '@/lib/session-prompt-builder'
 
 // ============================================================================
 // SECTION 1: TYPES
@@ -56,12 +55,13 @@ interface ClarenceChatRequest {
 const N8N_BASE_URL = process.env.N8N_WEBHOOK_URL
     || 'https://spikeislandstudios.app.n8n.cloud'
 
-// QC Studio path: contract-based, uses QC context builder
+// QC Studio path: contract-based, uses QC context builder (still via n8n)
 const QC_CHAT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-chat`
 const QC_CONTEXT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-context-builder`
 
-// Contract Studio path: session-based, has its own context builder
-const SESSION_CHAT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-chat`
+// Session path: Claude model config (matches n8n workflow)
+const SESSION_MODEL = 'claude-sonnet-4-20250514'
+const SESSION_MAX_TOKENS = 1500
 
 // ============================================================================
 // SECTION 3: POST HANDLER
@@ -96,19 +96,19 @@ export async function POST(request: NextRequest) {
         }
 
         // ================================================================
-        // SESSION PATH: Contract Studio → clarence-chat workflow
+        // SESSION PATH: Contract Studio → Direct Claude API call
+        // (Replaces broken n8n clarence-chat workflow whose Build Context
+        //  sub-workflow was never created)
         // ================================================================
         if (isSessionPath) {
-            console.log('Routing to SESSION workflow (clarence-chat)')
+            console.log('Routing to SESSION path (direct Claude API)')
 
-            // Map viewerRole to customer/provider for the session workflow
-            // Contract Studio may send initiator/respondent — convert back
-            let sessionViewerRole = body.viewerRole || 'customer'
-            if (sessionViewerRole === 'initiator') sessionViewerRole = 'customer'
-            if (sessionViewerRole === 'respondent') sessionViewerRole = 'provider'
+            // Map viewerRole to customer/provider
+            let sessionViewerRole: 'customer' | 'provider' = (body.viewerRole as 'customer' | 'provider') || 'customer'
+            if (body.viewerRole === 'initiator') sessionViewerRole = 'customer'
+            if (body.viewerRole === 'respondent') sessionViewerRole = 'provider'
 
-            // Derive roleContext server-side (same as QC path) so the
-            // n8n workflow uses canonical Role Matrix labels
+            // Derive roleContext server-side for prompt builder
             let sessionRoleContext = null
             if (body.contractTypeKey && body.initiatorPartyRole) {
                 const isInitiator = sessionViewerRole === 'customer'
@@ -120,55 +120,74 @@ export async function POST(request: NextRequest) {
                 console.log('Session role context derived:', sessionRoleContext.userRoleLabel, 'vs', sessionRoleContext.counterpartyRoleLabel)
             }
 
-            const n8nResponse = await fetch(SESSION_CHAT_WEBHOOK, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: body.message,
-                    userId: body.viewerUserId || null,
-                    sessionId: body.sessionId,
-                    viewerRole: sessionViewerRole,
-                    companyId: body.viewerCompanyId || null,
-                    // Role Matrix context — canonical party labels
-                    roleContext: sessionRoleContext,
-                    // Pass through optional fields
+            // STEP 1: Build context from Supabase
+            const contextResult = await buildSessionContext(
+                body.sessionId!,
+                sessionViewerRole,
+                body.message,
+                {
+                    contractTypeKey: body.contractTypeKey || null,
+                    initiatorPartyRole: body.initiatorPartyRole as string || null,
                     clauseId: body.clauseId || null,
                     clauseName: body.clauseName || null,
-                    clauseCategory: body.clauseCategory || null,
-                    context: body.context || 'contract_studio',
-                    contractTypeKey: body.contractTypeKey || null,
-                    initiatorPartyRole: body.initiatorPartyRole || null,
-                    providerId: body.providerId || null,
-                    currentPhase: body.currentPhase || null,
                     alignmentScore: body.alignmentScore || null,
-                    negotiationContext: body.negotiationContext || null,
-                    // Dashboard fields (for general mode fallthrough)
-                    dashboardData: body.dashboardData || null,
-                })
-            })
+                }
+            )
 
-            console.log('Session chat response status:', n8nResponse.status)
-
-            if (!n8nResponse.ok) {
-                const errorText = await n8nResponse.text()
-                console.error('Session chat webhook error:', n8nResponse.status, errorText)
+            if (!contextResult.success || !contextResult.context) {
+                console.error('Session context build failed')
                 return NextResponse.json(
                     {
-                        error: 'Failed to get response from CLARENCE',
+                        error: 'Failed to build negotiation context',
                         success: false,
-                        response: 'I apologize, but I encountered an issue connecting to the service. Please try again.'
+                        response: 'I apologize, but I could not load the negotiation context. Please refresh and try again.'
                     },
                     { status: 502 }
                 )
             }
 
-            const data = await n8nResponse.json()
-            console.log('Session response received, length:', (data.response || data.message || '').length)
+            // STEP 2: Build prompts
+            const { systemPrompt, userPrompt } = buildSessionPrompts(
+                contextResult.context,
+                sessionRoleContext
+            )
+
+            console.log('Session prompt built, system:', systemPrompt.length, 'chars, user:', userPrompt.length, 'chars')
+
+            // STEP 3: Call Claude API directly
+            const apiKey = process.env.ANTHROPIC_API_KEY
+            if (!apiKey) {
+                console.error('ANTHROPIC_API_KEY not set')
+                return NextResponse.json(
+                    {
+                        error: 'CLARENCE AI service not configured',
+                        success: false,
+                        response: 'I apologize, but the AI service is not configured. Please contact support.'
+                    },
+                    { status: 503 }
+                )
+            }
+
+            const anthropic = new Anthropic({ apiKey })
+            const claudeResponse = await anthropic.messages.create({
+                model: SESSION_MODEL,
+                max_tokens: SESSION_MAX_TOKENS,
+                temperature: 0,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userPrompt }],
+            })
+
+            const responseText = claudeResponse.content
+                .filter(block => block.type === 'text')
+                .map(block => block.type === 'text' ? block.text : '')
+                .join('')
+
+            console.log('Session Claude response received, length:', responseText.length, 'tokens:', claudeResponse.usage?.output_tokens)
 
             return NextResponse.json({
-                response: data.response || data.message || data.text || '',
-                message: data.response || data.message || data.text || '',
-                success: true
+                response: responseText,
+                message: responseText,
+                success: true,
             })
         }
 

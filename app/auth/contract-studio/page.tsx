@@ -3331,6 +3331,9 @@ function ContractStudioContent() {
                 setChatMessages(prev => [welcomeMessage, ...prev])
                 setClarenceWelcomeLoaded(true)
                 stopWorking() // Ensure spinner stops after welcome loads
+            } else {
+                // callClarenceAI returns null on error (doesn't throw) — show fallback
+                throw new Error('CLARENCE AI returned null or unsuccessful response')
             }
         } catch (error) {
             console.error('Failed to load CLARENCE welcome:', error)

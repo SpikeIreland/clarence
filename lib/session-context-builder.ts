@@ -1,0 +1,431 @@
+// ============================================================================
+// FILE: lib/session-context-builder.ts
+// PURPOSE: Build negotiation context for CLARENCE AI from Supabase data
+//          Replaces the broken n8n "Build Context" sub-workflow
+// ============================================================================
+
+import { createServiceRoleClient } from '@/lib/supabase'
+import { getRoleContext, type PartyRole } from '@/lib/role-matrix'
+
+// ============================================================================
+// SECTION 1: TYPES
+// ============================================================================
+
+export interface SessionContext {
+    session: {
+        contractTypeKey: string | null
+        contractType: string
+        currentPhase: number
+        phaseName: string
+        dealValue: number
+        currency: string
+        industry: string
+        status: string
+        sessionNumber: string
+        initiatorPartyRole: string | null
+    }
+    viewer: {
+        role: 'customer' | 'provider'
+        company: string
+        name: string
+    }
+    parties: {
+        customer: { companyName: string; name: string; email: string }
+        provider: { companyName: string; name: string; email: string }
+    }
+    leverage: {
+        tracker: { customer: number; provider: number }
+        leverageBalance: number
+        factors: {
+            marketDynamics: { score: number; rationale: string }
+            economicFactors: { score: number; rationale: string }
+            strategicPosition: { score: number; rationale: string }
+            batna: { score: number; rationale: string }
+        }
+    }
+    positions: {
+        total: number
+        agreed: number
+        aligned: number
+        disputed: number
+        alignmentPercentage: number
+        averageGapSize: number
+        biggestGaps: BiggestGap[]
+    }
+    recentHistory: {
+        lastMoves: PositionMove[]
+        recentChatMessages: ChatMsg[]
+    }
+    playbook: {
+        hasPlaybook: boolean
+        playbookName: string | null
+        totalRules: number
+        activeAlerts: unknown[]
+    }
+    touchpoint: {
+        userMessage: string
+    }
+    mode: {
+        isTraining: boolean
+        trainingOpponentType: string | null
+        opponentPersonality: string | null
+    }
+    strategicInsights: {
+        customerPriorities: unknown
+        customerRedLines: unknown
+        providerPriorities: unknown
+        providerFlexibility: unknown
+    }
+}
+
+interface BiggestGap {
+    clause_name: string
+    customer_position: number
+    provider_position: number
+    gap_size: number
+    position_1_label: string | null
+    position_5_label: string | null
+    position_10_label: string | null
+    customer_position_meaning: string | null
+    provider_position_meaning: string | null
+}
+
+interface PositionMove {
+    partyRole: string
+    clauseName: string
+    fromPosition: number
+    toPosition: number
+    position_1_label: string | null
+    position_5_label: string | null
+    position_10_label: string | null
+}
+
+interface ChatMsg {
+    senderRole: string
+    messageText: string
+}
+
+// ============================================================================
+// SECTION 2: PHASE MAP
+// ============================================================================
+
+const PHASE_NAMES: Record<number, string> = {
+    0: 'Pre-Negotiation',
+    1: 'Initial Positions',
+    2: 'Active Negotiation',
+    3: 'Convergence',
+    4: 'Final Alignment',
+    5: 'Agreement',
+}
+
+// ============================================================================
+// SECTION 3: BUILD CONTEXT
+// ============================================================================
+
+export async function buildSessionContext(
+    sessionId: string,
+    viewerRole: 'customer' | 'provider',
+    userMessage: string,
+    passedContext?: {
+        contractTypeKey?: string | null
+        initiatorPartyRole?: string | null
+        clauseId?: string | null
+        clauseName?: string | null
+        alignmentScore?: number | null
+    }
+): Promise<{ success: boolean; context: SessionContext | null; buildTime: number }> {
+    const start = Date.now()
+
+    try {
+        const supabase = createServiceRoleClient()
+
+        // ------------------------------------------------------------------
+        // QUERY 1: Session + customer_requirements + provider_bids
+        // ------------------------------------------------------------------
+        const { data: sessionRow, error: sessErr } = await supabase
+            .from('sessions')
+            .select(`
+                session_id, session_number, customer_company, status,
+                currency, is_training, notes,
+                contract_type_key, initiator_party_role,
+                leverage_tracker_customer, leverage_tracker_provider,
+                leverage_tracker_calculated_at
+            `)
+            .eq('session_id', sessionId)
+            .single()
+
+        if (sessErr || !sessionRow) {
+            console.error('[ContextBuilder] Session not found:', sessErr)
+            return { success: false, context: null, buildTime: Date.now() - start }
+        }
+
+        // ------------------------------------------------------------------
+        // QUERY 2-5: Parallel queries
+        // ------------------------------------------------------------------
+        const [crResult, pbResult, posResult, chatResult, leverageResult] = await Promise.all([
+            // Customer requirements
+            supabase
+                .from('customer_requirements')
+                .select('deal_value, service_required, industry, contact_name, contact_email, company_name')
+                .eq('session_id', sessionId)
+                .limit(1)
+                .single(),
+
+            // Provider bids (first active one)
+            supabase
+                .from('provider_bids')
+                .select('provider_company, provider_contact_name, provider_contact_email, provider_id')
+                .eq('session_id', sessionId)
+                .order('invited_at', { ascending: false })
+                .limit(1)
+                .single(),
+
+            // Clause positions with clause details
+            supabase
+                .from('session_clause_positions')
+                .select(`
+                    position_id, clause_id, clause_number, clause_name,
+                    customer_position, provider_position,
+                    gap_size, gap_severity, status,
+                    customer_weight, provider_weight,
+                    is_deal_breaker_customer, is_deal_breaker_provider,
+                    category
+                `)
+                .eq('session_id', sessionId)
+                .order('clause_number', { ascending: true }),
+
+            // Recent chat messages
+            supabase
+                .from('clause_chat_messages')
+                .select('sender, message, created_at')
+                .eq('session_id', sessionId)
+                .order('created_at', { ascending: false })
+                .limit(5),
+
+            // Leverage calculations
+            supabase
+                .from('leverage_calculations')
+                .select('customer_leverage, provider_leverage, alignment_percentage, leverage_factors_breakdown, calculated_at')
+                .eq('session_id', sessionId)
+                .order('calculated_at', { ascending: false })
+                .limit(1)
+                .single(),
+        ])
+
+        const cr = crResult.data
+        const pb = pbResult.data
+        const positions = posResult.data || []
+        const chatMessages = chatResult.data || []
+        const leverageCalc = leverageResult.data
+
+        // ------------------------------------------------------------------
+        // COMPUTE POSITION STATS
+        // ------------------------------------------------------------------
+        const total = positions.length
+        const agreed = positions.filter((p: Record<string, unknown>) =>
+            (p.status === 'agreed') ||
+            (p.customer_position && p.provider_position && p.customer_position === p.provider_position)
+        ).length
+        const disputed = positions.filter((p: Record<string, unknown>) =>
+            (p.gap_severity === 'high') || ((p.gap_size as number) >= 3)
+        ).length
+        const aligned = total - disputed - agreed
+
+        const totalGap = positions.reduce((sum: number, p: Record<string, unknown>) =>
+            sum + ((p.gap_size as number) || 0), 0)
+        const averageGapSize = total > 0 ? +(totalGap / total).toFixed(1) : 0
+
+        // Max possible gap is 9 per clause (positions 1 vs 10)
+        const maxTotalGap = total * 9
+        const alignmentPercentage = maxTotalGap > 0
+            ? Math.round(((maxTotalGap - totalGap) / maxTotalGap) * 100)
+            : 0
+
+        // Biggest gaps (top 5)
+        const biggestGaps: BiggestGap[] = positions
+            .filter((p: Record<string, unknown>) => (p.gap_size as number) > 0)
+            .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+                (b.gap_size as number) - (a.gap_size as number))
+            .slice(0, 5)
+            .map((p: Record<string, unknown>) => ({
+                clause_name: p.clause_name as string || `Clause ${p.clause_number}`,
+                customer_position: (p.customer_position as number) || 5,
+                provider_position: (p.provider_position as number) || 5,
+                gap_size: (p.gap_size as number) || 0,
+                position_1_label: null,
+                position_5_label: null,
+                position_10_label: null,
+                customer_position_meaning: null,
+                provider_position_meaning: null,
+            }))
+
+        // Try to load position labels for biggest gaps
+        if (biggestGaps.length > 0) {
+            const clauseIds = biggestGaps.map(g => {
+                const pos = positions.find((p: Record<string, unknown>) =>
+                    (p.clause_name as string) === g.clause_name)
+                return pos?.clause_id
+            }).filter(Boolean)
+
+            if (clauseIds.length > 0) {
+                const { data: labels } = await supabase
+                    .from('clause_range_mappings')
+                    .select('clause_id, position_1_label, position_5_label, position_10_label')
+                    .in('clause_id', clauseIds)
+
+                if (labels) {
+                    for (const gap of biggestGaps) {
+                        const pos = positions.find((p: Record<string, unknown>) =>
+                            (p.clause_name as string) === gap.clause_name)
+                        if (!pos) continue
+                        const label = labels.find((l: Record<string, unknown>) =>
+                            l.clause_id === pos.clause_id)
+                        if (label) {
+                            gap.position_1_label = label.position_1_label as string
+                            gap.position_5_label = label.position_5_label as string
+                            gap.position_10_label = label.position_10_label as string
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // DETERMINE PHASE
+        // ------------------------------------------------------------------
+        let currentPhase = 1
+        if (alignmentPercentage >= 95) currentPhase = 5
+        else if (alignmentPercentage >= 80) currentPhase = 4
+        else if (alignmentPercentage >= 50) currentPhase = 3
+        else if (total > 0 && positions.some((p: Record<string, unknown>) =>
+            p.customer_position && p.provider_position)) currentPhase = 2
+        else currentPhase = 1
+
+        // ------------------------------------------------------------------
+        // LEVERAGE
+        // ------------------------------------------------------------------
+        const leverageTrackerCustomer = (sessionRow.leverage_tracker_customer as number) || 50
+        const leverageTrackerProvider = (sessionRow.leverage_tracker_provider as number) || 50
+        const leverageBalance = Math.round(100 - Math.abs(leverageTrackerCustomer - leverageTrackerProvider))
+
+        let leverageFactors = {
+            marketDynamics: { score: 50, rationale: 'Not assessed' },
+            economicFactors: { score: 50, rationale: 'Not assessed' },
+            strategicPosition: { score: 50, rationale: 'Not assessed' },
+            batna: { score: 50, rationale: 'Not assessed' },
+        }
+        if (leverageCalc?.leverage_factors_breakdown) {
+            try {
+                const breakdown = typeof leverageCalc.leverage_factors_breakdown === 'string'
+                    ? JSON.parse(leverageCalc.leverage_factors_breakdown)
+                    : leverageCalc.leverage_factors_breakdown
+                if (breakdown.marketDynamics) leverageFactors = breakdown
+            } catch { /* use defaults */ }
+        }
+
+        // ------------------------------------------------------------------
+        // TRAINING MODE
+        // ------------------------------------------------------------------
+        const isTraining = !!sessionRow.is_training
+        let trainingOpponentType: string | null = null
+        let opponentPersonality: string | null = null
+        if (isTraining && sessionRow.notes) {
+            const opponentMatch = (sessionRow.notes as string).match(/Opponent:\s*(.+)/i)
+            if (opponentMatch) trainingOpponentType = opponentMatch[1].trim()
+        }
+
+        // ------------------------------------------------------------------
+        // PARTY INFO
+        // ------------------------------------------------------------------
+        const customerCompany = (cr?.company_name as string) || (sessionRow.customer_company as string) || 'Customer'
+        const customerName = (cr?.contact_name as string) || 'Customer Contact'
+        const customerEmail = (cr?.contact_email as string) || ''
+        const providerCompany = (pb?.provider_company as string) || 'Provider'
+        const providerName = (pb?.provider_contact_name as string) || 'Provider Contact'
+        const providerEmail = (pb?.provider_contact_email as string) || ''
+
+        // ------------------------------------------------------------------
+        // RECENT CHAT
+        // ------------------------------------------------------------------
+        const recentChatMessages: ChatMsg[] = (chatMessages || [])
+            .reverse()
+            .map((m: Record<string, unknown>) => ({
+                senderRole: m.sender as string,
+                messageText: (m.message as string || '').substring(0, 200),
+            }))
+
+        // ------------------------------------------------------------------
+        // BUILD CONTEXT
+        // ------------------------------------------------------------------
+        const context: SessionContext = {
+            session: {
+                contractTypeKey: passedContext?.contractTypeKey || (sessionRow.contract_type_key as string) || null,
+                contractType: (cr?.service_required as string) || 'Service Agreement',
+                currentPhase,
+                phaseName: PHASE_NAMES[currentPhase] || 'Active Negotiation',
+                dealValue: (cr?.deal_value as number) || 0,
+                currency: (sessionRow.currency as string) || 'GBP',
+                industry: (cr?.industry as string) || 'Not specified',
+                status: (sessionRow.status as string) || 'active',
+                sessionNumber: (sessionRow.session_number as string) || sessionId.substring(0, 8),
+                initiatorPartyRole: passedContext?.initiatorPartyRole || (sessionRow.initiator_party_role as string) || null,
+            },
+            viewer: {
+                role: viewerRole,
+                company: viewerRole === 'customer' ? customerCompany : providerCompany,
+                name: viewerRole === 'customer' ? customerName : providerName,
+            },
+            parties: {
+                customer: { companyName: customerCompany, name: customerName, email: customerEmail },
+                provider: { companyName: providerCompany, name: providerName, email: providerEmail },
+            },
+            leverage: {
+                tracker: { customer: leverageTrackerCustomer, provider: leverageTrackerProvider },
+                leverageBalance,
+                factors: leverageFactors,
+            },
+            positions: {
+                total,
+                agreed,
+                aligned,
+                disputed,
+                alignmentPercentage: passedContext?.alignmentScore ?? alignmentPercentage,
+                averageGapSize,
+                biggestGaps,
+            },
+            recentHistory: {
+                lastMoves: [], // Position history would require another query — skip for now
+                recentChatMessages,
+            },
+            playbook: {
+                hasPlaybook: false,
+                playbookName: null,
+                totalRules: 0,
+                activeAlerts: [],
+            },
+            touchpoint: {
+                userMessage,
+            },
+            mode: {
+                isTraining,
+                trainingOpponentType,
+                opponentPersonality,
+            },
+            strategicInsights: {
+                customerPriorities: null,
+                customerRedLines: null,
+                providerPriorities: null,
+                providerFlexibility: null,
+            },
+        }
+
+        console.log('[ContextBuilder] Built context in', Date.now() - start, 'ms')
+        console.log('[ContextBuilder] Session:', sessionRow.session_number, '| Clauses:', total, '| Alignment:', alignmentPercentage + '%')
+
+        return { success: true, context, buildTime: Date.now() - start }
+
+    } catch (error) {
+        console.error('[ContextBuilder] Failed:', error)
+        return { success: false, context: null, buildTime: Date.now() - start }
+    }
+}
