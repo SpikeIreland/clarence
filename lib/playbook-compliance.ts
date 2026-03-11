@@ -315,6 +315,20 @@ export function getEffectivePosition(clause: ContractClause): number | null {
 }
 
 /**
+ * Returns only party-set positions (no CLARENCE fallback).
+ * Used by the compliance engine so that pre-negotiation state = 100% compliant.
+ * Once a party moves a position, that position drives compliance scoring.
+ */
+function getPartyPosition(clause: ContractClause): number | null {
+    if (clause.initiator_position != null && clause.respondent_position != null) {
+        return (clause.initiator_position + clause.respondent_position) / 2
+    }
+    if (clause.initiator_position != null) return clause.initiator_position
+    if (clause.customer_position != null) return clause.customer_position
+    return null
+}
+
+/**
  * Calculate average effective position for all clauses in a category
  */
 function getCategoryAveragePosition(
@@ -330,7 +344,7 @@ function getCategoryAveragePosition(
     }
 
     const positions = matchingClauses
-        .map(c => getEffectivePosition(c))
+        .map(c => getPartyPosition(c))
         .filter((p): p is number => p !== null)
 
     if (positions.length === 0) {
@@ -462,7 +476,21 @@ function analyseRedLines(
 
     return redLineRules.map(rule => {
         const normCat = normaliseCategory(rule.category)
-        const { avgPosition } = getCategoryAveragePosition(clauses, normCat)
+        const { avgPosition, matchedCount } = getCategoryAveragePosition(clauses, normCat)
+
+        // Pre-negotiation: clauses exist but no party has moved → not breached
+        if (avgPosition === null && matchedCount > 0) {
+            return {
+                rule,
+                status: 'clear' as const,
+                effectivePosition: null,
+                detail: 'Pre-negotiation — no positions set yet',
+                escalationTriggered: false,
+                escalationContact: rule.escalation_contact,
+                normalisedCategory: normCat,
+            }
+        }
+
         const pos = avgPosition !== null ? alignPosition(avgPosition, perspective) : null
 
         const isBreach = pos !== null && (
@@ -574,6 +602,19 @@ function aggregateByCategory(
         const { avgPosition, matchedCount } = getCategoryAveragePosition(clauses, normCat)
 
         const scoredRules: ScoredRule[] = catRules.map(rule => {
+            // Pre-negotiation: clauses exist but no party has moved → assume compliant
+            if (avgPosition === null && matchedCount > 0) {
+                return {
+                    rule,
+                    status: 'pass' as RuleStatus,
+                    score: 100,
+                    effectivePosition: null,
+                    matchedClauseCount: matchedCount,
+                    detail: 'Pre-negotiation — compliant with company playbook',
+                    normalisedCategory: normCat,
+                }
+            }
+
             const { status, score, detail } = scoreRule(rule, avgPosition, perspective)
             return {
                 rule,
