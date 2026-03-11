@@ -13,7 +13,9 @@ import {
     type MoveHistoryEntry,
     type NegotiationState,
     type ChatMessage,
+    type RoleLabels,
 } from '@/lib/agents/opponent-agent'
+import { getContractType } from '@/lib/role-matrix'
 
 
 // ============================================================================
@@ -63,6 +65,27 @@ export async function POST(request: NextRequest) {
             systemPrompt: agentRow.system_prompt,
         }
 
+        // Derive role labels from session contract type (if available)
+        let roleLabels: RoleLabels | undefined
+        if (body.roleLabels) {
+            roleLabels = body.roleLabels
+        } else if (sessionId) {
+            const { data: sessionRow } = await supabase
+                .from('sessions')
+                .select('contract_type_key')
+                .eq('session_id', sessionId)
+                .single()
+            if (sessionRow?.contract_type_key) {
+                const typeDef = getContractType(sessionRow.contract_type_key)
+                if (typeDef) {
+                    roleLabels = {
+                        protectedPartyLabel: typeDef.protectedPartyLabel,
+                        providingPartyLabel: typeDef.providingPartyLabel,
+                    }
+                }
+            }
+        }
+
         // ------------------------------------------------------------------
         // ACTION: counter-move — Respond to a user's position proposal
         // ------------------------------------------------------------------
@@ -80,7 +103,7 @@ export async function POST(request: NextRequest) {
 
             console.log(`[OpponentAgent API] Counter-move for clause ${clause.clauseName}, proposed=${clause.proposedPosition}`)
 
-            const result = await generateCounterMove(agentInput, clause, moveHistory, negotiationState)
+            const result = await generateCounterMove(agentInput, clause, moveHistory, negotiationState, roleLabels)
 
             console.log(`[OpponentAgent API] Result: action=${result.action}, counter=${result.counterPosition}`)
 
@@ -107,7 +130,7 @@ export async function POST(request: NextRequest) {
                 message: msg.message,
             }))
 
-            const result = await generateChatResponse(agentInput, userMessage, chatMessages, negotiationState)
+            const result = await generateChatResponse(agentInput, userMessage, chatMessages, negotiationState, roleLabels)
 
             console.log(`[OpponentAgent API] Chat sentiment: ${result.sentiment}`)
 

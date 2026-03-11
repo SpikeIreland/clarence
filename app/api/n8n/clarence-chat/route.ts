@@ -107,6 +107,19 @@ export async function POST(request: NextRequest) {
             if (sessionViewerRole === 'initiator') sessionViewerRole = 'customer'
             if (sessionViewerRole === 'respondent') sessionViewerRole = 'provider'
 
+            // Derive roleContext server-side (same as QC path) so the
+            // n8n workflow uses canonical Role Matrix labels
+            let sessionRoleContext = null
+            if (body.contractTypeKey && body.initiatorPartyRole) {
+                const isInitiator = sessionViewerRole === 'customer'
+                sessionRoleContext = getRoleContext(
+                    body.contractTypeKey,
+                    body.initiatorPartyRole as PartyRole,
+                    isInitiator
+                )
+                console.log('Session role context derived:', sessionRoleContext.userRoleLabel, 'vs', sessionRoleContext.counterpartyRoleLabel)
+            }
+
             const n8nResponse = await fetch(SESSION_CHAT_WEBHOOK, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -116,6 +129,8 @@ export async function POST(request: NextRequest) {
                     sessionId: body.sessionId,
                     viewerRole: sessionViewerRole,
                     companyId: body.viewerCompanyId || null,
+                    // Role Matrix context — canonical party labels
+                    roleContext: sessionRoleContext,
                     // Pass through optional fields
                     clauseId: body.clauseId || null,
                     clauseName: body.clauseName || null,

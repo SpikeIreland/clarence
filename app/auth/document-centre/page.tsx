@@ -19,6 +19,8 @@ import {
     type ComplianceResult,
 } from '@/lib/playbook-compliance'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import { useRoleContext } from '@/lib/useRoleContext'
+import type { RoleContext } from '@/lib/role-matrix'
 import RequestApprovalModal from '@/app/components/RequestApprovalModal'
 import SigningPanelNew from '@/app/components/SigningPanel'
 import EntityConfirmationModal from '@/app/components/EntityConfirmationModal'
@@ -565,9 +567,10 @@ interface DocumentActionHubProps {
     playbookCompliance?: PlaybookComplianceData
     onRequestApproval?: (doc: DocumentItem) => void
     approvalRequests?: InternalApprovalsViewProps['requests']
+    roleContext?: RoleContext | null
 }
 
-function DocumentActionHub({ document, session, quickContract, onGenerate, onDownload, isGenerating, playbookCompliance, onRequestApproval, approvalRequests }: DocumentActionHubProps) {
+function DocumentActionHub({ document, session, quickContract, onGenerate, onDownload, isGenerating, playbookCompliance, onRequestApproval, approvalRequests, roleContext }: DocumentActionHubProps) {
     const [showPdfViewer, setShowPdfViewer] = useState(false)
     const printIframeRef = useRef<HTMLIFrameElement>(null)
 
@@ -976,7 +979,7 @@ function DocumentActionHub({ document, session, quickContract, onGenerate, onDow
                 {document.id !== 'playbook-compliance' && document.id !== 'internal-approvals' && document.status !== 'generating' && !isReady && (
                     <div className="p-6">
                         <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                            <DocumentContentPreview document={document} session={session} quickContract={quickContract} />
+                            <DocumentContentPreview document={document} session={session} quickContract={quickContract} roleContext={roleContext} />
                         </div>
                     </div>
                 )}
@@ -1273,11 +1276,11 @@ function InternalApprovalsView({ requests = [] }: InternalApprovalsViewProps) {
 // SECTION 8: DOCUMENT VIEW SUB-COMPONENTS
 // ============================================================================
 
-function DocumentContentPreview({ document, session, quickContract }: { document: DocumentItem; session: Session | null; quickContract: QuickContractData | null }) {
+function DocumentContentPreview({ document, session, quickContract, roleContext }: { document: DocumentItem; session: Session | null; quickContract: QuickContractData | null; roleContext?: RoleContext | null }) {
     // Derive display values — prefer session (mediation) data, fall back to quickContract (QC) data
     const alignmentPct = session?.alignmentPercentage ?? quickContract?.alignmentPercentage ?? 0
-    const partyALabel = session ? 'Customer' : 'Initiator'
-    const partyBLabel = session ? 'Provider' : 'Respondent'
+    const partyALabel = roleContext?.protectedPartyLabel || (session ? 'Customer' : 'Initiator')
+    const partyBLabel = roleContext?.providingPartyLabel || (session ? 'Provider' : 'Respondent')
     const partyAName = session?.customerCompany || quickContract?.contractName || 'Party A'
     const partyBName = session?.providerCompany || 'Party B'
 
@@ -1811,9 +1814,10 @@ interface DocumentCentreHeaderProps {
     mode: DocumentCentreMode
     quickContract: QuickContractData | null
     onBackToStudio: () => void
+    roleContext?: RoleContext | null
 }
 
-function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackToStudio }: DocumentCentreHeaderProps) {
+function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackToStudio, roleContext }: DocumentCentreHeaderProps) {
     const isCustomer = userInfo?.role === 'customer'
 
     // Determine display values based on mode
@@ -1864,7 +1868,7 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                                 {userInfo?.firstName} {userInfo?.lastName}
                             </div>
                             <div className="text-xs text-slate-500">
-                                {mode === 'quick_contract' ? 'Document Centre' : (isCustomer ? 'Customer' : 'Provider')}
+                                {mode === 'quick_contract' ? 'Document Centre' : (roleContext?.userRoleLabel || (isCustomer ? 'Customer' : 'Provider'))}
                             </div>
                         </div>
                     </div>
@@ -1918,11 +1922,11 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                 ) : (
                     /* Mediation Context (original) */
                     <div className="flex items-center">
-                        {/* Customer */}
+                        {/* Protected Party (Customer) */}
                         <div className="flex-1 flex items-center gap-3">
                             <div className="w-3 h-3 rounded-full bg-emerald-400" />
                             <div>
-                                <div className="text-xs text-slate-400">Customer</div>
+                                <div className="text-xs text-slate-400">{roleContext?.protectedPartyLabel || 'Customer'}</div>
                                 <div className="text-sm font-medium text-emerald-400">{session?.customerCompany || '\u2014'}</div>
                             </div>
                         </div>
@@ -1948,10 +1952,10 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                             </div>
                         </div>
 
-                        {/* Provider */}
+                        {/* Providing Party (Provider) */}
                         <div className="flex-1 flex items-center justify-end gap-3">
                             <div className="text-right">
-                                <div className="text-xs text-slate-400">Provider</div>
+                                <div className="text-xs text-slate-400">{roleContext?.providingPartyLabel || 'Provider'}</div>
                                 <div className="text-sm font-medium text-blue-400">{session?.providerCompany || '\u2014'}</div>
                             </div>
                             <div className="w-3 h-3 rounded-full bg-blue-400" />
@@ -1996,7 +2000,12 @@ function DocumentCentreContent() {
         isLoading: false,
     })
 
-
+    // Role Matrix context — dynamic party labels for this contract type
+    const { roleContext } = useRoleContext({
+        sessionId: session?.sessionId,
+        contractId: quickContract?.contractId,
+        userId: userInfo?.userId,
+    })
 
     // SECTION 11B-PLAYBOOK: PLAYBOOK COMPLIANCE LOADER
     const loadPlaybookCompliance = useCallback(async (
@@ -2987,7 +2996,8 @@ function DocumentCentreContent() {
                     user_id: userInfo.userId,
                     mode: 'quick_contract',
                     format: 'pdf',
-                    regenerate: isRegeneration
+                    regenerate: isRegeneration,
+                    roleContext: roleContext || null,
                 }
                 : {
                     session_id: session?.sessionId,
@@ -2995,7 +3005,8 @@ function DocumentCentreContent() {
                     provider_id: session?.providerId,
                     mode: 'mediation',
                     format: 'pdf',
-                    regenerate: isRegeneration
+                    regenerate: isRegeneration,
+                    roleContext: roleContext || null,
                 }
 
             // Playbook compliance needs the computed compliance data in the payload
@@ -4512,6 +4523,7 @@ function DocumentCentreContent() {
                 mode={mode}
                 quickContract={quickContract}
                 onBackToStudio={handleBackToStudio}
+                roleContext={roleContext}
             />
 
             {/* Playbook Compliance Indicator — initiator only */}
@@ -4628,6 +4640,7 @@ function DocumentCentreContent() {
                         playbookCompliance={playbookCompliance}
                         onRequestApproval={openApprovalModal}
                         approvalRequests={approvalRequests}
+                        roleContext={roleContext}
                     />
                 </div>
 

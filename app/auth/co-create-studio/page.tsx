@@ -24,6 +24,7 @@ import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import type { TransitionConfig } from '@/lib/pathway-utils'
 import { eventLogger } from '@/lib/eventLogger'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import { useRoleContext } from '@/lib/useRoleContext'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -245,6 +246,9 @@ function CoCreateStudioContent() {
         if (!userInfo || !session) return true
         return userInfo.company === session.customerCompany
     }, [userInfo, session])
+
+    // Role Matrix context — dynamic party labels for this contract type
+    const { roleContext } = useRoleContext({ sessionId, userId: userInfo?.userId })
 
     const alignmentPercentage = useMemo(() => {
         const withPositions = clauses.filter(c => c.customerPosition !== null && c.providerPosition !== null)
@@ -1325,7 +1329,7 @@ function CoCreateStudioContent() {
                                                 <div
                                                     className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-xs font-bold text-white z-20 shadow"
                                                     style={{ left: `${((selectedClause.customerPosition - 1) / 9) * 100}%`, transform: 'translate(-50%, -50%)' }}
-                                                    title={`Customer: ${selectedClause.customerPosition}`}
+                                                    title={`${roleContext?.protectedPartyLabel || 'Customer'}: ${selectedClause.customerPosition}`}
                                                 >
                                                     C
                                                 </div>
@@ -1334,10 +1338,10 @@ function CoCreateStudioContent() {
                                         <div className="flex justify-between text-xs text-slate-500 mt-1">
                                             <span className="flex items-center gap-1">
                                                 <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                                                Provider-Friendly
+                                                {roleContext ? `${roleContext.providingPartyLabel}-Friendly` : 'Provider-Friendly'}
                                             </span>
                                             <span className="flex items-center gap-1">
-                                                Customer-Friendly
+                                                {roleContext ? `${roleContext.protectedPartyLabel}-Friendly` : 'Customer-Friendly'}
                                                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                                             </span>
                                         </div>

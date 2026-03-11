@@ -11,7 +11,7 @@ const CERTIFY_WEBHOOK = 'https://spikeislandstudios.app.n8n.cloud/webhook/certif
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
-        const { contractId, contractTypeKey, initiatorPartyRole } = body
+        const { contractId, contractTypeKey, initiatorPartyRole, roleContext } = body
 
         if (!contractId) {
             return NextResponse.json(
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
                 contract_id: contractId,
                 contract_type_key: contractTypeKey || null,
                 initiator_party_role: initiatorPartyRole || null,
+                roleContext: roleContext || null,
             })
         })
 

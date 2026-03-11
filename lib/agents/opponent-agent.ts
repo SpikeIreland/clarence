@@ -63,6 +63,11 @@ export interface ChatResponse {
     sentiment: 'positive' | 'neutral' | 'firm' | 'frustrated'
 }
 
+export interface RoleLabels {
+    protectedPartyLabel: string           // e.g. "Customer", "Tenant", "Buyer"
+    providingPartyLabel: string           // e.g. "Provider", "Landlord", "Seller"
+}
+
 
 // ============================================================================
 // SECTION 2: CLAUDE CLIENT
@@ -88,46 +93,50 @@ export async function generateCounterMove(
     agent: OpponentAgentInput,
     clause: ClauseContext,
     moveHistory: MoveHistoryEntry[],
-    negotiationState: NegotiationState
+    negotiationState: NegotiationState,
+    roleLabels?: RoleLabels
 ): Promise<CounterMoveResult> {
     const client = getClient()
     if (!client) {
         return buildFallbackCounterMove(clause)
     }
 
+    const protLabel = roleLabels?.protectedPartyLabel || 'Customer'
+    const provLabel = roleLabels?.providingPartyLabel || 'Provider'
+
     // Build context about recent moves on this clause
     const clauseMoves = moveHistory
         .filter(m => m.clauseId === clause.clauseId)
         .slice(-5)
 
-    const userPrompt = `The customer has proposed a position on this clause. Decide your response.
+    const userPrompt = `The ${protLabel} has proposed a position on this clause. Decide your response.
 
 ## Clause
 Name: ${clause.clauseName}
 Category: ${clause.clauseCategory}
 
 ## Current Positions
-Customer's position: ${clause.proposedPosition} (just moved${clause.customerPosition ? ` from ${clause.customerPosition}` : ''})
+${protLabel}'s position: ${clause.proposedPosition} (just moved${clause.customerPosition ? ` from ${clause.customerPosition}` : ''})
 Your current position: ${clause.providerPosition ?? 'not yet set'}
 Clarence's recommendation: ${clause.clarencePosition ?? 'not available'}
 
 ## Position Scale Reminder
-1 = Best for you (provider). 10 = Best for customer.
-Customer proposing ${clause.proposedPosition} means they want ${clause.proposedPosition >= 7 ? 'strong customer protection' : clause.proposedPosition <= 3 ? 'surprisingly favourable terms for you' : 'a balanced position'}.
+1 = Best for you (${provLabel}). 10 = Best for ${protLabel}.
+${protLabel} proposing ${clause.proposedPosition} means they want ${clause.proposedPosition >= 7 ? `strong ${protLabel} protection` : clause.proposedPosition <= 3 ? 'surprisingly favourable terms for you' : 'a balanced position'}.
 
 ## Move History on This Clause
-${clauseMoves.length > 0 ? clauseMoves.map(m => `${m.party} moved from ${m.fromPosition ?? 'initial'} to ${m.toPosition}`).join('\n') : 'No previous moves'}
+${clauseMoves.length > 0 ? clauseMoves.map(m => `${m.party === 'customer' ? protLabel : provLabel} moved from ${m.fromPosition ?? 'initial'} to ${m.toPosition}`).join('\n') : 'No previous moves'}
 
 ## Overall Negotiation Status
 Progress: ${negotiationState.sessionProgress}% (${negotiationState.agreedClauses}/${negotiationState.totalClauses} clauses aligned)
-Leverage: You ${negotiationState.providerLeverage}% vs Customer ${negotiationState.customerLeverage}%
+Leverage: You ${negotiationState.providerLeverage}% vs ${protLabel} ${negotiationState.customerLeverage}%
 
 Decide: Accept their position, counter-propose, hold your current position, or reject outright.
 
 Return ONLY valid JSON (no markdown, no backticks):
 {
     "counterPosition": number (1-10),
-    "reasoning": "What you SAY to the customer (in character, 1-2 sentences)",
+    "reasoning": "What you SAY to the ${protLabel} (in character, 1-2 sentences)",
     "internalReasoning": "Your strategic thinking (not shared, for analysis only)",
     "action": "accept" | "counter" | "hold" | "reject",
     "willingness": number (1-10, how willing to move further on this clause)
@@ -163,29 +172,33 @@ export async function generateChatResponse(
     agent: OpponentAgentInput,
     userMessage: string,
     chatHistory: ChatMessage[],
-    negotiationState: NegotiationState
+    negotiationState: NegotiationState,
+    roleLabels?: RoleLabels
 ): Promise<ChatResponse> {
     const client = getClient()
     if (!client) {
         return buildFallbackChatResponse()
     }
 
+    const protLabel = roleLabels?.protectedPartyLabel || 'Customer'
+    const provLabel = roleLabels?.providingPartyLabel || 'Provider'
+
     // Build chat context from recent history
     const recentHistory = chatHistory.slice(-10).map(msg =>
-        `${msg.sender === 'user' ? 'Customer' : 'You'}: ${msg.message}`
+        `${msg.sender === 'user' ? protLabel : 'You'}: ${msg.message}`
     ).join('\n')
 
-    const userPrompt = `The customer has sent you a message in the negotiation chat. Respond in character.
+    const userPrompt = `The ${protLabel} has sent you a message in the negotiation chat. Respond in character.
 
 ## Conversation History
 ${recentHistory || 'No previous messages'}
 
-## Customer's Latest Message
+## ${protLabel}'s Latest Message
 "${userMessage}"
 
 ## Negotiation Status
 Progress: ${negotiationState.sessionProgress}% (${negotiationState.agreedClauses}/${negotiationState.totalClauses} clauses aligned)
-Leverage: You ${negotiationState.providerLeverage}% vs Customer ${negotiationState.customerLeverage}%
+Leverage: You ${negotiationState.providerLeverage}% vs ${protLabel} ${negotiationState.customerLeverage}%
 
 Respond naturally, in character. Keep it concise (2-4 sentences). Reference the negotiation context where relevant.
 

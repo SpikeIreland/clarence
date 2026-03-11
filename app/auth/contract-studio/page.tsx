@@ -6213,10 +6213,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="flex justify-between text-xs text-slate-500">
                                         <span className="flex items-center gap-1">
                                             <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                                            Provider-Friendly
+                                            {roleContext ? `${roleContext.providingPartyLabel}-Friendly` : 'Provider-Friendly'}
                                         </span>
                                         <span className="flex items-center gap-1">
-                                            Customer-Friendly
+                                            {roleContext ? `${roleContext.protectedPartyLabel}-Friendly` : 'Customer-Friendly'}
                                             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                                         </span>
                                     </div>
@@ -6488,10 +6488,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="flex justify-between text-xs text-slate-500">
                                         <span className="flex items-center gap-1">
                                             <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                                            Provider-Friendly
+                                            {roleContext ? `${roleContext.providingPartyLabel}-Friendly` : 'Provider-Friendly'}
                                         </span>
                                         <span className="flex items-center gap-1">
-                                            Customer-Friendly
+                                            {roleContext ? `${roleContext.protectedPartyLabel}-Friendly` : 'Customer-Friendly'}
                                             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                                         </span>
                                     </div>
@@ -6795,7 +6795,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <div className="text-xs text-slate-400 mt-1">
                             {selectedClause.gapSize < 0.5
                                 ? `Both parties at: ${getPositionLabel(myDbPosition)}`
-                                : `You: ${getPositionLabel(myDbPosition)} → ${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}`
+                                : `You: ${getPositionLabel(myDbPosition)} → ${roleContext?.counterpartyRoleLabel || (isCustomer ? 'Provider' : 'Customer')}: ${getPositionLabel(otherDbPosition)}`
                             }
                         </div>
                     )}

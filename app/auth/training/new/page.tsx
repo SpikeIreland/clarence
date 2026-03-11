@@ -667,6 +667,9 @@ function TrainingStudioPage() {
                         dealCurrency: scenario.dealCurrency || 'GBP',
                         dealDuration: scenario.dealDurationMonths,
                         isTraining: true,
+                        // Role Matrix fields — ensures training sessions get proper party labels
+                        contract_type_key: scenario.contractType,
+                        initiator_party_role: 'protected',
                         // Template — this tells session-create to load clauses from the template
                         template_source: 'existing_template',
                         source_template_id: selectedTemplateId,

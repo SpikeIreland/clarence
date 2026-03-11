@@ -444,3 +444,39 @@ export function getPositionDescription(
     }
     return descriptions[Math.round(position)] || 'Unknown position'
 }
+
+
+// ============================================================================
+// SECTION 6: FAIRNESS DISPLAY TRANSLATION
+// ============================================================================
+
+/**
+ * Translate fairness enum values (stored in DB) to display labels
+ * using the correct party labels from roleContext.
+ *
+ * DB enum values use "customer"/"provider" as structural identifiers.
+ * Display labels should match the contract type's actual party labels.
+ *
+ * @example
+ * getFairnessDisplayLabel('customer_favoring', leaseRoleContext)
+ * // Returns "Tenant-Favoring" (not "Customer-Favoring")
+ */
+export function getFairnessDisplayLabel(
+    fairnessEnum: string,
+    roleContext: RoleContext | null
+): string {
+    const protectedLabel = roleContext?.protectedPartyLabel || 'Customer'
+    const providingLabel = roleContext?.providingPartyLabel || 'Provider'
+
+    const map: Record<string, string> = {
+        'balanced': 'Balanced',
+        'slightly_customer_favoring': `Slightly ${protectedLabel}-Favoring`,
+        'customer_favoring': `${protectedLabel}-Favoring`,
+        'heavily_customer_favoring': `Heavily ${protectedLabel}-Favoring`,
+        'slightly_provider_favoring': `Slightly ${providingLabel}-Favoring`,
+        'provider_favoring': `${providingLabel}-Favoring`,
+        'heavily_provider_favoring': `Heavily ${providingLabel}-Favoring`,
+        'review_recommended': 'Review Recommended',
+    }
+    return map[fairnessEnum] || fairnessEnum
+}

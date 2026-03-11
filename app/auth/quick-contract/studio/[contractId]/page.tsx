@@ -1002,6 +1002,7 @@ function QuickContractStudioContent() {
                 contract_id: resolvedContractId || contractId,
                 contract_type_key: contract?.contractTypeKey || null,
                 initiator_party_role: contract?.initiatorPartyRole || null,
+                roleContext: roleContext || null,
             })
         }).catch(err => console.error('Failed to trigger certification:', err))
 
@@ -2881,6 +2882,7 @@ INSTRUCTIONS:
                     contract_id: effectiveId,
                     contract_type_key: contract?.contractTypeKey || null,
                     initiator_party_role: contract?.initiatorPartyRole || null,
+                    roleContext: roleContext || null,
                 })
             })
         } catch (err) {
