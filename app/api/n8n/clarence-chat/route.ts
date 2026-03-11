@@ -147,12 +147,28 @@ export async function POST(request: NextRequest) {
             }
 
             // STEP 2: Build prompts
-            const { systemPrompt, userPrompt } = buildSessionPrompts(
-                contextResult.context,
-                sessionRoleContext
-            )
-
-            console.log('Session prompt built, system:', systemPrompt.length, 'chars, user:', userPrompt.length, 'chars')
+            let systemPrompt: string
+            let userPrompt: string
+            try {
+                const prompts = buildSessionPrompts(
+                    contextResult.context,
+                    sessionRoleContext
+                )
+                systemPrompt = prompts.systemPrompt
+                userPrompt = prompts.userPrompt
+                console.log('Session prompt built, system:', systemPrompt.length, 'chars, user:', userPrompt.length, 'chars')
+            } catch (promptError) {
+                console.error('Session prompt build failed:', promptError)
+                return NextResponse.json(
+                    {
+                        error: 'Failed to build prompt',
+                        success: false,
+                        response: 'I apologize, but I could not prepare the AI request. Please try again.',
+                        debug: String(promptError)
+                    },
+                    { status: 500 }
+                )
+            }
 
             // STEP 3: Call Claude API directly
             const apiKey = process.env.ANTHROPIC_API_KEY
@@ -168,27 +184,41 @@ export async function POST(request: NextRequest) {
                 )
             }
 
-            const anthropic = new Anthropic({ apiKey })
-            const claudeResponse = await anthropic.messages.create({
-                model: SESSION_MODEL,
-                max_tokens: SESSION_MAX_TOKENS,
-                temperature: 0,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userPrompt }],
-            })
+            try {
+                const anthropic = new Anthropic({ apiKey })
+                const claudeResponse = await anthropic.messages.create({
+                    model: SESSION_MODEL,
+                    max_tokens: SESSION_MAX_TOKENS,
+                    temperature: 0,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: userPrompt }],
+                })
 
-            const responseText = claudeResponse.content
-                .filter(block => block.type === 'text')
-                .map(block => block.type === 'text' ? block.text : '')
-                .join('')
+                const responseText = claudeResponse.content
+                    .filter(block => block.type === 'text')
+                    .map(block => block.type === 'text' ? block.text : '')
+                    .join('')
 
-            console.log('Session Claude response received, length:', responseText.length, 'tokens:', claudeResponse.usage?.output_tokens)
+                console.log('Session Claude response received, length:', responseText.length, 'tokens:', claudeResponse.usage?.output_tokens)
 
-            return NextResponse.json({
-                response: responseText,
-                message: responseText,
-                success: true,
-            })
+                return NextResponse.json({
+                    response: responseText,
+                    message: responseText,
+                    success: true,
+                })
+            } catch (claudeError) {
+                console.error('Claude API call failed:', claudeError)
+                const errMsg = claudeError instanceof Error ? claudeError.message : String(claudeError)
+                return NextResponse.json(
+                    {
+                        error: 'Claude API call failed',
+                        success: false,
+                        response: 'I apologize, but I could not connect to the AI service. Please try again.',
+                        debug: errMsg
+                    },
+                    { status: 502 }
+                )
+            }
         }
 
         // ================================================================
