@@ -2250,6 +2250,7 @@ function ContractStudioContent() {
     // SECTION 6X: SUB-CLAUSE MODAL STATE
     // ============================================================================
 
+    const [showClauseText, setShowClauseText] = useState(false)
     const [showAddSubClauseModal, setShowAddSubClauseModal] = useState(false)
     const [subClauseParent, setSubClauseParent] = useState<ContractClause | null>(null)
     const [newSubClauseName, setNewSubClauseName] = useState('')
@@ -8844,13 +8845,27 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     </div>
                                 )}
 
-                                {/* Clause Content */}
+                                {/* Clause Text — collapsible toggle (matches QC Studio pattern) */}
                                 {selectedClause.clauseContent && (
-                                    <div className="mb-4">
-                                        <h3 className="text-sm font-semibold text-slate-700 mb-2">Clause Text</h3>
-                                        <div className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
-                                            {selectedClause.clauseContent}
-                                        </div>
+                                    <div className="bg-white rounded-xl border border-slate-200 mb-4">
+                                        <button
+                                            onClick={() => setShowClauseText(!showClauseText)}
+                                            className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-xl"
+                                        >
+                                            <span className="text-sm font-medium text-slate-700">View Full Clause Text</span>
+                                            <svg className={`w-4 h-4 text-slate-400 transition-transform ${showClauseText ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        {showClauseText && (
+                                            <div className="px-5 pb-5 border-t border-slate-100">
+                                                <div className="mt-4 p-4 bg-slate-50 rounded-lg">
+                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                        {selectedClause.clauseContent}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
