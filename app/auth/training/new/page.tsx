@@ -104,6 +104,11 @@ const DIFFICULTY_OPTIONS: OptionButton[] = [
     { label: 'Assertive', value: 'advanced', icon: '🔥', description: 'Experienced negotiator who drives a hard bargain' },
 ]
 
+const ROLE_OPTIONS: OptionButton[] = [
+    { label: 'Customer', value: 'protected', icon: '🛡️', description: 'You are buying — negotiate protections and value' },
+    { label: 'Provider', value: 'providing', icon: '🏗️', description: 'You are selling — negotiate terms and flexibility' },
+]
+
 // ============================================================================
 // SECTION 3: MAIN COMPONENT
 // ============================================================================
@@ -127,11 +132,19 @@ function TrainingStudioPage() {
     const [templates, setTemplates] = useState<ContractTemplate[]>([])
 
     // Collected preferences
-    const [selectedPath, setSelectedPath] = useState<'dynamic' | 'playbook' | 'quick' | null>(null)
+    const [selectedPath, setSelectedPath] = useState<'dynamic' | 'playbook' | 'quick' | 'colleague' | null>(null)
+    const [selectedRole, setSelectedRole] = useState<'protected' | 'providing' | null>(null)
     const [selectedPlaybookId, setSelectedPlaybookId] = useState<string | null>(preselectedPlaybookId)
     const [selectedContractType, setSelectedContractType] = useState<string | null>(null)
     const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null)
     const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+
+    // Colleague mode
+    const [colleagueEmail, setColleagueEmail] = useState('')
+    const [colleagueName, setColleagueName] = useState('')
+    const [colleagueCompany, setColleagueCompany] = useState('')
+    const [showColleagueInput, setShowColleagueInput] = useState(false)
+    const [inviteLink, setInviteLink] = useState<string | null>(null)
 
     // Generated data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -318,6 +331,13 @@ function TrainingStudioPage() {
         })
 
         options.push({
+            label: 'Play Against a Colleague',
+            value: 'colleague',
+            icon: '👥',
+            description: 'Negotiate live with someone you know',
+        })
+
+        options.push({
             label: 'Quick Practice',
             value: 'quick',
             icon: '⚡',
@@ -343,15 +363,14 @@ function TrainingStudioPage() {
                 loadTemplates(user.companyId, user.userId),
             ])
 
-            // If playbook pre-selected via URL, skip to playbook path
+            // If playbook pre-selected via URL, skip to playbook path but ask role first
             if (preselectedPlaybookId && playbooks.find(p => p.playbookId === preselectedPlaybookId)) {
                 setSelectedPath('playbook')
                 setSelectedPlaybookId(preselectedPlaybookId)
-                // Skip greeting, go straight to preferences
                 addMessage({
                     type: 'clarence',
-                    content: `Let's train on your company playbook. Choose your preferred difficulty level:`,
-                    options: DIFFICULTY_OPTIONS,
+                    content: `Training on your company playbook. Which role do you want to take?`,
+                    options: ROLE_OPTIONS,
                 })
                 setPhase('preferences')
                 return
@@ -375,58 +394,17 @@ function TrainingStudioPage() {
         // Add user selection as a message
         addMessage({ type: 'user', content: label })
 
-        // Phase: Path Selection
+        // Phase: Path Selection → always ask role next
         if (phase === 'greeting') {
-            setSelectedPath(value as 'dynamic' | 'playbook' | 'quick')
+            setSelectedPath(value as 'dynamic' | 'playbook' | 'quick' | 'colleague')
 
-            if (value === 'quick') {
-                // Quick practice — generate immediately with defaults
-                setPhase('generating')
-                addMessage({
-                    type: 'clarence',
-                    content: 'Great choice! I\'m setting up a training session for you now...',
-                })
-                await generateSession({})
-                return
-            }
-
-            if (value === 'playbook') {
-                if (companyPlaybooks.length === 1) {
-                    // Only one playbook — skip selection, ask difficulty
-                    setSelectedPlaybookId(companyPlaybooks[0].playbookId)
-                    addMessage({
-                        type: 'clarence',
-                        content: `I'll use your **${companyPlaybooks[0].playbookName}** playbook (${companyPlaybooks[0].rulesCount} rules). How tough do you want the counterpart to be?`,
-                        options: DIFFICULTY_OPTIONS,
-                    })
-                    setPhase('preferences')
-                } else {
-                    // Multiple playbooks — ask which one
-                    addMessage({
-                        type: 'clarence',
-                        content: 'Which playbook would you like to train on?',
-                        options: companyPlaybooks.map(pb => ({
-                            label: pb.playbookName,
-                            value: pb.playbookId,
-                            icon: '📋',
-                            description: `${pb.rulesCount} rules${pb.contractType ? ` | ${pb.contractType}` : ''}`,
-                        })),
-                    })
-                    setPhase('preferences')
-                }
-                return
-            }
-
-            if (value === 'dynamic') {
-                // Dynamic scenario — ask contract type
-                addMessage({
-                    type: 'clarence',
-                    content: 'What type of contract would you like to negotiate?',
-                    options: CONTRACT_TYPE_OPTIONS,
-                })
-                setPhase('preferences')
-                return
-            }
+            addMessage({
+                type: 'clarence',
+                content: 'Which side of the negotiation do you want to train on?',
+                options: ROLE_OPTIONS,
+            })
+            setPhase('preferences')
+            return
         }
 
         // Phase: Template selection (after scenario generated)
@@ -434,6 +412,17 @@ function TrainingStudioPage() {
             const templateId = value.replace('template:', '')
             const template = templates.find(t => t.templateId === templateId)
             setSelectedTemplateId(templateId)
+
+            if (selectedPath === 'colleague') {
+                // Colleague path: after template, ask for colleague details
+                addMessage({
+                    type: 'clarence',
+                    content: `**${template?.templateName}** selected. Now, who will you be negotiating with?\n\nEnter their details below.`,
+                })
+                setShowColleagueInput(true)
+                return
+            }
+
             if (template) {
                 addMessage({
                     type: 'clarence',
@@ -446,6 +435,65 @@ function TrainingStudioPage() {
 
         // Phase: Preferences gathering
         if (phase === 'preferences') {
+            // Role selection (all paths) — fires first before other preferences
+            if (!selectedRole) {
+                setSelectedRole(value as 'protected' | 'providing')
+                const roleLabel = value === 'protected' ? 'Customer' : 'Provider'
+
+                if (selectedPath === 'quick') {
+                    setPhase('generating')
+                    addMessage({
+                        type: 'clarence',
+                        content: `Training as **${roleLabel}**. Setting up a quick session now...`,
+                    })
+                    await generateSession({})
+                    return
+                }
+
+                if (selectedPath === 'playbook') {
+                    if (companyPlaybooks.length === 1) {
+                        setSelectedPlaybookId(companyPlaybooks[0].playbookId)
+                        addMessage({
+                            type: 'clarence',
+                            content: `Training as **${roleLabel}** with your **${companyPlaybooks[0].playbookName}** playbook. How tough do you want the counterpart to be?`,
+                            options: DIFFICULTY_OPTIONS,
+                        })
+                    } else {
+                        addMessage({
+                            type: 'clarence',
+                            content: `Training as **${roleLabel}**. Which playbook would you like to use?`,
+                            options: companyPlaybooks.map(pb => ({
+                                label: pb.playbookName,
+                                value: pb.playbookId,
+                                icon: '📋',
+                                description: `${pb.rulesCount} rules${pb.contractType ? ` | ${pb.contractType}` : ''}`,
+                            })),
+                        })
+                    }
+                    return
+                }
+
+                if (selectedPath === 'dynamic') {
+                    addMessage({
+                        type: 'clarence',
+                        content: `Training as **${roleLabel}**. What type of contract would you like to negotiate?`,
+                        options: CONTRACT_TYPE_OPTIONS,
+                    })
+                    return
+                }
+
+                if (selectedPath === 'colleague') {
+                    addMessage({
+                        type: 'clarence',
+                        content: `Training as **${roleLabel}** against a colleague. What type of contract?`,
+                        options: CONTRACT_TYPE_OPTIONS,
+                    })
+                    return
+                }
+
+                return
+            }
+
             // Playbook selection (from multi-playbook list)
             if (selectedPath === 'playbook' && !selectedPlaybookId) {
                 const pb = companyPlaybooks.find(p => p.playbookId === value)
@@ -468,6 +516,53 @@ function TrainingStudioPage() {
                     content: 'And how challenging would you like this to be?',
                     options: DIFFICULTY_OPTIONS,
                 })
+                return
+            }
+
+            // Contract type selection (colleague path) — skip difficulty, go to template
+            if (selectedPath === 'colleague' && !selectedContractType) {
+                setSelectedContractType(value)
+                const matchingTemplates = templates.filter(t => {
+                    if (value === 'any') return true
+                    const typeMatch = t.contractType?.toLowerCase() === value.toLowerCase()
+                    const nameMatch = t.templateName?.toLowerCase().includes(value.toLowerCase().replace(/_/g, ' '))
+                    return typeMatch || nameMatch
+                })
+                const templatesToShow = matchingTemplates.length > 0 ? matchingTemplates : templates
+
+                if (templatesToShow.length === 0) {
+                    addMessage({
+                        type: 'clarence',
+                        content: 'You need a contract template first. Create one in Templates, then come back.',
+                        options: [
+                            { label: 'Go to Templates', value: 'goto-templates', icon: '📄', description: 'Create a template' },
+                            { label: 'Back', value: 'back', icon: '←', description: 'Return to dashboard' },
+                        ],
+                    })
+                    setPhase('error')
+                    return
+                }
+
+                if (templatesToShow.length === 1) {
+                    setSelectedTemplateId(templatesToShow[0].templateId)
+                    addMessage({
+                        type: 'clarence',
+                        content: `Using **${templatesToShow[0].templateName}** (${templatesToShow[0].clauseCount} clauses). Now, who will you be negotiating with?\n\nEnter their details below.`,
+                    })
+                    setShowColleagueInput(true)
+                } else {
+                    addMessage({
+                        type: 'clarence',
+                        content: 'Which template should we use for this negotiation?',
+                        options: templatesToShow.map(t => ({
+                            label: t.templateName,
+                            value: `template:${t.templateId}`,
+                            icon: '📄',
+                            description: `${t.clauseCount} clauses`,
+                        })),
+                    })
+                    setPhase('ready')
+                }
                 return
             }
 
@@ -499,7 +594,7 @@ function TrainingStudioPage() {
             router.push('/auth/training')
             return
         }
-    }, [phase, selectedPath, selectedPlaybookId, selectedContractType, selectedDifficulty, companyPlaybooks, templates, addMessage, router])
+    }, [phase, selectedPath, selectedRole, selectedPlaybookId, selectedContractType, selectedDifficulty, companyPlaybooks, templates, addMessage, router])
 
     // ========================================================================
     // SECTION 9: GENERATE SESSION
@@ -669,14 +764,15 @@ function TrainingStudioPage() {
                         isTraining: true,
                         // Role Matrix fields — ensures training sessions get proper party labels
                         contract_type_key: scenario.contractType,
-                        initiator_party_role: 'protected',
+                        initiator_party_role: selectedRole || 'protected',
                         // Template — this tells session-create to load clauses from the template
                         template_source: 'existing_template',
                         source_template_id: selectedTemplateId,
                         assessment_completed: true,
                         // AI counterpart info
                         deal_context: {
-                            training_mode: 'dynamic',
+                            training_mode: selectedPath === 'colleague' ? 'colleague' : 'dynamic',
+                            training_role: selectedRole || 'protected',
                             ai_character_name: agentConfig.persona.name,
                             ai_company_name: agentConfig.persona.company,
                             ai_personality: agentConfig.personalityTraits.style,
@@ -725,14 +821,26 @@ function TrainingStudioPage() {
             }
         }
 
+        // Colleague session — navigate to studio
+        if (actionId === 'start-colleague-session' && scenario?.sessionId) {
+            router.push(`/auth/contract-studio?session_id=${scenario.sessionId}`)
+            return
+        }
+
         // Error recovery
         if (actionId === 'retry') {
             setPhase('generating')
             setMessages([])
             setSelectedPath(null)
+            setSelectedRole(null)
             setSelectedPlaybookId(null)
             setSelectedContractType(null)
             setSelectedDifficulty(null)
+            setColleagueEmail('')
+            setColleagueName('')
+            setColleagueCompany('')
+            setShowColleagueInput(false)
+            setInviteLink(null)
 
             if (userInfo) {
                 await startConversation(userInfo, companyPlaybooks)
@@ -742,7 +850,122 @@ function TrainingStudioPage() {
         if (actionId === 'back') {
             router.push('/auth/training')
         }
-    }, [scenario, agentConfig, userInfo, selectedTemplateId, supabase, router, startConversation, companyPlaybooks, addMessage])
+    }, [scenario, agentConfig, userInfo, selectedTemplateId, selectedRole, selectedPath, supabase, router, startConversation, companyPlaybooks, addMessage])
+
+    // ========================================================================
+    // SECTION 10B: COLLEAGUE SESSION CREATION
+    // ========================================================================
+
+    const handleColleagueSubmit = useCallback(async () => {
+        if (!colleagueEmail.trim() || !userInfo || !selectedTemplateId) return
+        setIsLoading(true)
+        setShowColleagueInput(false)
+        setPhase('launching')
+
+        addMessage({ type: 'user', content: `Invite ${colleagueName || colleagueEmail} (${colleagueEmail})` })
+        addMessage({ type: 'system', content: 'Creating session and sending invitation...' })
+
+        try {
+            const userIsProvider = selectedRole === 'providing'
+            const contractType = selectedContractType || 'service_agreement'
+
+            // Create session via n8n webhook
+            const sessionResponse = await fetch(`${API_BASE}/session-create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: userInfo.userId,
+                    userEmail: userInfo.email,
+                    userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim(),
+                    companyName: userInfo.company,
+                    companyId: userInfo.companyId,
+                    contractType,
+                    contract_type: contractType,
+                    contractName: `Training: ${userInfo.company} vs ${colleagueCompany || 'Colleague'}`,
+                    contract_name: `Training: ${userInfo.company} vs ${colleagueCompany || 'Colleague'}`,
+                    dealValue: 100000,
+                    dealCurrency: 'GBP',
+                    isTraining: true,
+                    contract_type_key: contractType,
+                    initiator_party_role: selectedRole || 'protected',
+                    template_source: 'existing_template',
+                    source_template_id: selectedTemplateId,
+                    assessment_completed: true,
+                    deal_context: {
+                        training_mode: 'colleague',
+                        training_role: selectedRole || 'protected',
+                        colleague_email: colleagueEmail,
+                        colleague_name: colleagueName || null,
+                        colleague_company: colleagueCompany || null,
+                    },
+                    notes: `Colleague Training | ${userIsProvider ? 'Provider' : 'Customer'} vs ${colleagueName || colleagueEmail}`,
+                }),
+            })
+
+            const sessionResult = await sessionResponse.json()
+            if (!sessionResult.sessionId) throw new Error('No session ID returned')
+
+            // Run position divergence (no AI agent)
+            await fetch('/api/agents/training-orchestrator', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'link',
+                    userId: userInfo.userId,
+                    agentId: null,
+                    sessionId: sessionResult.sessionId,
+                    leverageResult: null,
+                    difficulty: 'balanced',
+                }),
+            })
+
+            // Send invitation via n8n invite-provider webhook
+            await fetch(`${API_BASE}/invite-provider`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionResult.sessionId,
+                    session_number: sessionResult.sessionNumber || sessionResult.sessionId.substring(0, 8),
+                    customer_company: userIsProvider ? (colleagueCompany || 'Colleague') : userInfo.company,
+                    contract_type: contractType,
+                    deal_value: 100000,
+                    invited_by_user_id: userInfo.userId,
+                    provider: {
+                        company_name: userIsProvider ? userInfo.company : (colleagueCompany || 'Colleague'),
+                        contact_name: colleagueName || colleagueEmail,
+                        contact_email: colleagueEmail,
+                    },
+                }),
+            })
+
+            // Generate shareable link
+            const baseUrl = window.location.origin
+            const shareLink = `${baseUrl}/provider?session_id=${sessionResult.sessionId}`
+            setInviteLink(shareLink)
+
+            setScenario({ sessionId: sessionResult.sessionId, contractType })
+
+            addMessage({
+                type: 'clarence',
+                content: `Invitation sent to **${colleagueName || colleagueEmail}**! They'll receive an email with a link to join.\n\nYou can also share the link below directly.`,
+            })
+            addMessage({
+                type: 'clarence',
+                content: 'Ready to enter the contract studio? Your colleague can join at any time.',
+                actionButton: { label: 'Enter Contract Studio', actionId: 'start-colleague-session' },
+            })
+        } catch (err) {
+            console.error('Error creating colleague session:', err)
+            setPhase('ready')
+            setShowColleagueInput(true)
+            addMessage({
+                type: 'clarence',
+                content: `Something went wrong: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
+            })
+        } finally {
+            setIsLoading(false)
+        }
+    }, [colleagueEmail, colleagueName, colleagueCompany, userInfo, selectedTemplateId, selectedRole, selectedContractType, addMessage])
 
     // ========================================================================
     // SECTION 11: CHAT INPUT (free-form messages to Clarence)
@@ -924,6 +1147,94 @@ function TrainingStudioPage() {
     }
 
     // ========================================================================
+    // SECTION 15B: RENDER - COLLEAGUE INPUT FORM
+    // ========================================================================
+
+    function ColleagueInputForm() {
+        return (
+            <div className="flex gap-3 mb-4">
+                <ClarenceAvatar />
+                <div className="max-w-[85%] w-full">
+                    <div className="bg-white border-2 border-amber-200 rounded-xl p-5 space-y-4">
+                        <h4 className="font-semibold text-slate-800 text-sm">Colleague Details</h4>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs text-slate-500 mb-1 block">Email Address *</label>
+                                <input
+                                    type="email"
+                                    value={colleagueEmail}
+                                    onChange={e => setColleagueEmail(e.target.value)}
+                                    placeholder="colleague@company.com"
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-amber-400"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-500 mb-1 block">Contact Name</label>
+                                <input
+                                    type="text"
+                                    value={colleagueName}
+                                    onChange={e => setColleagueName(e.target.value)}
+                                    placeholder="Jane Smith"
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-amber-400"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-500 mb-1 block">Company Name</label>
+                                <input
+                                    type="text"
+                                    value={colleagueCompany}
+                                    onChange={e => setColleagueCompany(e.target.value)}
+                                    placeholder="Acme Corp"
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-amber-400"
+                                />
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleColleagueSubmit}
+                            disabled={!colleagueEmail.trim() || isLoading}
+                            className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50"
+                        >
+                            Send Invitation & Start Session
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 15C: RENDER - COPY LINK CARD
+    // ========================================================================
+
+    function CopyLinkCard({ link }: { link: string }) {
+        const [copied, setCopied] = useState(false)
+        const handleCopy = () => {
+            navigator.clipboard.writeText(link)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+        }
+        return (
+            <div className="flex gap-3 mb-4">
+                <ClarenceAvatar />
+                <div className="max-w-[85%]">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4">
+                        <p className="text-xs text-slate-500 mb-2">Share this link with your colleague:</p>
+                        <div className="flex items-center gap-2">
+                            <code className="flex-1 text-xs bg-slate-50 px-3 py-2 rounded-lg text-slate-600 truncate">{link}</code>
+                            <button
+                                onClick={handleCopy}
+                                className="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 text-xs font-medium rounded-lg transition flex-shrink-0"
+                            >
+                                {copied ? 'Copied!' : 'Copy'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
     // SECTION 16: RENDER - ACTION BUTTON
     // ========================================================================
 
@@ -1070,6 +1381,9 @@ function TrainingStudioPage() {
                         {messages.map(msg => (
                             <MessageBubble key={msg.id} msg={msg} />
                         ))}
+
+                        {showColleagueInput && !isLoading && <ColleagueInputForm />}
+                        {inviteLink && <CopyLinkCard link={inviteLink} />}
 
                         {isLoading && phase === 'generating' && messages.length > 0 && (
                             <div className="flex gap-3 mb-4">
