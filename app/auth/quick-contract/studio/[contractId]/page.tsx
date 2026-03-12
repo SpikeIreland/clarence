@@ -4010,6 +4010,19 @@ INSTRUCTIONS:
     // SECTION 7: MAIN LAYOUT RENDER
     // ========================================================================
 
+    // Position parties by ROLE, not by initiator/respondent.
+    // Provider (blue) always LEFT — matches position 1 on the bar.
+    // Customer (emerald) always RIGHT — matches position 10 on the bar.
+    const userIsProvider = roleContext?.userPartyRole === 'providing'
+    const isUserInitiator = getPartyRole() === 'initiator'
+
+    // When the user's role matches their initiator status, initiatorInfo = provider side
+    const initiatorIsProvider = userIsProvider === isUserInitiator
+    const providerPartyInfo = initiatorIsProvider ? initiatorInfo : respondentInfo
+    const customerPartyInfo = initiatorIsProvider ? respondentInfo : initiatorInfo
+    const providerLabel = roleContext?.providingPartyLabel || 'Provider'
+    const customerLabel = roleContext?.protectedPartyLabel || 'Customer'
+
     return (
         <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
 
@@ -4262,23 +4275,15 @@ INSTRUCTIONS:
                 {!isTemplateMode && (
                     <div className="relative flex items-center px-4 py-2 border-t border-slate-100 bg-slate-50/50">
 
-                        {/* LEFT half: Respondent (Provider) — right-aligned to meet the centre */}
+                        {/* LEFT half: Provider (blue) — always matches position 1 on the bar */}
                         <div className="flex-1 flex justify-end pr-3">
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${providerPartyInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
                                 <span className="text-xs font-medium text-blue-800">
-                                    {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
+                                    {providerPartyInfo?.company || providerPartyInfo?.name || (userIsProvider ? userInfo?.companyName : null) || 'Awaiting Respondent'}
                                 </span>
-                                {respondentInfo && (
-                                    <span className="text-xs text-blue-600">
-                                        · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
-                                            ? roleContext.counterpartyRoleLabel
-                                            : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
-                                                ? roleContext.userRoleLabel
-                                                : 'Provider'}
-                                    </span>
-                                )}
-                                {getPartyRole() === 'respondent' && (
+                                <span className="text-xs text-blue-600">· {providerLabel}</span>
+                                {userIsProvider && (
                                     <span className="text-[10px] text-blue-400 font-medium">(You)</span>
                                 )}
                             </div>
@@ -4312,21 +4317,15 @@ INSTRUCTIONS:
                             </button>
                         </div>
 
-                        {/* RIGHT half: Initiator (Customer) — left-aligned from the centre */}
+                        {/* RIGHT half: Customer (emerald) — always matches position 10 on the bar */}
                         <div className="flex-1 flex justify-start pl-3">
                             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                                <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${customerPartyInfo ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
                                 <span className="text-xs font-medium text-emerald-800">
-                                    {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
+                                    {customerPartyInfo?.company || customerPartyInfo?.name || (!userIsProvider ? userInfo?.companyName : null) || 'Awaiting Respondent'}
                                 </span>
-                                <span className="text-xs text-emerald-600">
-                                    · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
-                                        ? roleContext.userRoleLabel
-                                        : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
-                                            ? roleContext.counterpartyRoleLabel
-                                            : 'Customer'}
-                                </span>
-                                {getPartyRole() === 'initiator' && (
+                                <span className="text-xs text-emerald-600">· {customerLabel}</span>
+                                {!userIsProvider && (
                                     <span className="text-[10px] text-emerald-400 font-medium">(You)</span>
                                 )}
                             </div>
