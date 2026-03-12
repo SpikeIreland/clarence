@@ -5,6 +5,7 @@ import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
 import { PartyChatPanel } from './components/party-chat-component'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import ClauseFeedbackButton from '@/app/components/ClauseFeedbackButton'
 import TrainingScorecard from './components/TrainingScorecard'
 import TrainingPlaybookCompliance from './components/TrainingPlaybookCompliance'
 import ComplianceWarningModal from '@/app/components/ComplianceWarningModal'
@@ -2420,6 +2421,7 @@ function ContractStudioContent() {
 
     const latestMessageRef = useRef<HTMLDivElement>(null)
     const positionPanelRef = useRef<HTMLDivElement>(null)
+    const prevChatClauseRef = useRef<string | null>(null)
 
     // ============================================================================
     // SECTION 6H: GLOBAL WORKING STATE MANAGEMENT
@@ -3962,10 +3964,24 @@ function ContractStudioContent() {
     }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
 
     useEffect(() => {
-        if (latestMessageRef.current) {
-            latestMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        if (!chatMessages.length) return
+
+        const currentClauseId = selectedClause?.positionId || null
+
+        if (currentClauseId !== prevChatClauseRef.current) {
+            // Clause changed — scroll to TOP so user reads explanation from start
+            const chatContainer = document.querySelector('.clarence-chat-messages')
+            if (chatContainer) {
+                chatContainer.scrollTo({ top: 0, behavior: 'smooth' })
+            }
+            prevChatClauseRef.current = currentClauseId
+        } else {
+            // Same clause, new message — scroll to latest (follow conversation)
+            if (latestMessageRef.current) {
+                latestMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
         }
-    }, [chatMessages])
+    }, [chatMessages, selectedClause?.positionId])
 
     useEffect(() => {
         if (clauses.length > 0) {
@@ -8711,6 +8727,17 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     selectedClause.status === 'provider_confirmed' ? '⏳ Awaiting Customer' :
                                                         selectedClause.status}
                                         </span>
+                                        {session && (
+                                            <ClauseFeedbackButton
+                                                clause={selectedClause}
+                                                sessionId={session.sessionId}
+                                                templateName={session.templateName}
+                                                contractTypeKey={session.contractTypeKey}
+                                                chatMessages={chatMessages}
+                                                userId={userInfo?.userId}
+                                                companyId={userInfo?.companyId}
+                                            />
+                                        )}
                                     </div>
                                     {selectedClause.description && (
                                         <p className="text-sm text-slate-500 mt-1 line-clamp-2">
@@ -9430,7 +9457,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+                    <div className="clarence-chat-messages flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
                         {chatMessages.map((msg, index) => {
                             const isLatestMessage = index === chatMessages.length - 1
 

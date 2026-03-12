@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
                 page_name: body.page_name || null,
                 user_agent: body.user_agent || null,
                 screen_resolution: body.screen_resolution || null,
+                clause_context: body.clause_context || null,
                 status: 'new'
             })
             .select()
