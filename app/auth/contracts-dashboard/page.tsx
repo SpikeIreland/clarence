@@ -329,49 +329,88 @@ export default function ContractsDashboard() {
   const handleDeleteSession = async (sessionId: string) => {
     setDeletingSessionId(sessionId)
     try {
-      // Delete related data first (in order of dependencies)
+      // Delete related data first (child tables before parent)
 
-      // 1. Delete clause positions for this session
-      const { error: positionsError } = await supabase
-        .from('clause_positions')
+      // 1. Delete generated documents
+      await supabase
+        .from('generated_documents')
         .delete()
         .eq('session_id', sessionId)
 
-      if (positionsError) {
-        console.error('Error deleting clause positions:', positionsError)
-      }
-
-      // 2. Delete provider bids for this session
-      const { error: bidsError } = await supabase
-        .from('provider_bids')
+      // 2. Delete party messages
+      await supabase
+        .from('party_messages')
         .delete()
         .eq('session_id', sessionId)
 
-      if (bidsError) {
-        console.error('Error deleting provider bids:', bidsError)
-      }
+      // 3. Delete party chat messages
+      await supabase
+        .from('party_chat_messages')
+        .delete()
+        .eq('session_id', sessionId)
 
-      // 3. Delete leverage calculations for this session
-      const { error: leverageError } = await supabase
+      // 4. Delete clause chat messages
+      await supabase
+        .from('clause_chat_messages')
+        .delete()
+        .eq('session_id', sessionId)
+
+      // 5. Delete session clause positions
+      await supabase
+        .from('session_clause_positions')
+        .delete()
+        .eq('session_id', sessionId)
+
+      // 6. Delete leverage calculations
+      await supabase
         .from('leverage_calculations')
         .delete()
         .eq('session_id', sessionId)
 
-      if (leverageError) {
-        console.error('Error deleting leverage calculations:', leverageError)
-      }
-
-      // 4. Delete chat messages for this session
-      const { error: chatError } = await supabase
-        .from('chat_messages')
+      // 7. Delete provider bids
+      await supabase
+        .from('provider_bids')
         .delete()
         .eq('session_id', sessionId)
 
-      if (chatError) {
-        console.error('Error deleting chat messages:', chatError)
+      // 8. Delete negotiation actions
+      await supabase
+        .from('negotiation_actions')
+        .delete()
+        .eq('session_id', sessionId)
+
+      // 9. Delete phase inputs
+      await supabase
+        .from('phase_inputs')
+        .delete()
+        .eq('session_id', sessionId)
+
+      // 10. Delete audit log entries
+      await supabase
+        .from('audit_log')
+        .delete()
+        .eq('session_id', sessionId)
+
+      // 11. Delete uploaded contract clauses (linked via uploaded_contracts)
+      const { data: linkedContracts } = await supabase
+        .from('uploaded_contracts')
+        .select('contract_id')
+        .eq('session_id', sessionId)
+
+      if (linkedContracts) {
+        for (const lc of linkedContracts) {
+          await supabase
+            .from('uploaded_contract_clauses')
+            .delete()
+            .eq('contract_id', lc.contract_id)
+        }
+        await supabase
+          .from('uploaded_contracts')
+          .delete()
+          .eq('session_id', sessionId)
       }
 
-      // 5. Finally delete the session itself
+      // 12. Finally delete the session itself
       const { error: sessionError } = await supabase
         .from('sessions')
         .delete()

@@ -211,13 +211,14 @@ const getBiddersDisplay = (bidders: string): string => {
 // SECTION 3: STRATEGIC QUESTIONS (WP2 ENHANCED)
 // ============================================================================
 
-const ALL_STRATEGIC_QUESTIONS: StrategicQuestion[] = [
+// Base questions — role-specific text is applied at runtime via getRoleAwareQuestions()
+const ALL_STRATEGIC_QUESTIONS_BASE: StrategicQuestion[] = [
   // BATNA Questions (Category: batna)
   {
     key: 'batnaSpecifics',
-    question: "You mentioned having alternative options. Walk me through your Plan B specifically - if negotiations with your preferred provider(s) fell through tomorrow, what would you actually do?",
+    question: "You mentioned having alternative options. Walk me through your Plan B specifically - if negotiations with your preferred counterparty fell through tomorrow, what would you actually do?",
     shortQuestion: "Briefly describe your backup plan if this negotiation fails.",
-    context: (data) => data.numberOfBidders ? `I see you've identified ${data.numberOfBidders} competing providers.` : undefined,
+    context: (data) => data.numberOfBidders ? `I see you've identified ${data.numberOfBidders} competing options.` : undefined,
     category: 'batna',
     priority: 'core'
   },
@@ -255,7 +256,7 @@ const ALL_STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   // Risk Questions (Category: risk)
   {
     key: 'riskAppetite',
-    question: "How would your board react if this provider relationship failed in 12 months? Is this a career-defining decision for anyone?",
+    question: "How would your board react if this engagement failed in 12 months? Is this a career-defining decision for anyone?",
     shortQuestion: "What's the internal consequence if this fails?",
     category: 'risk',
     priority: 'extended'
@@ -278,7 +279,7 @@ const ALL_STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   },
   {
     key: 'internalPolitics',
-    question: "Is there anything politically sensitive I should know? Previous failed relationships, internal champions for this provider, or competing priorities?",
+    question: "Is there anything politically sensitive I should know? Previous failed relationships, internal champions for the other party, or competing priorities?",
     shortQuestion: "Any internal politics I should know about?",
     category: 'internal',
     priority: 'extended'
@@ -294,7 +295,7 @@ const ALL_STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   },
   {
     key: 'longTermVision',
-    question: "Where do you see this provider relationship in 3-5 years? Is this a tactical fix or strategic partnership?",
+    question: "Where do you see this business relationship in 3-5 years? Is this a tactical fix or strategic partnership?",
     shortQuestion: "Is this tactical or strategic long-term?",
     category: 'relationship',
     priority: 'extended'
@@ -303,12 +304,15 @@ const ALL_STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   // WP2: Tendering Question (Category: tendering) - Only shown for multi-provider scenarios
   {
     key: 'qualificationThreshold',
-    question: "You're evaluating multiple providers. What minimum alignment percentage would a provider need to meet to stay in consideration? (e.g., 60%, 70%, 80%)",
-    shortQuestion: "Minimum provider alignment % to qualify?",
+    question: "You're evaluating multiple counterparties. What minimum alignment percentage would they need to meet to stay in consideration? (e.g., 60%, 70%, 80%)",
+    shortQuestion: "Minimum counterparty alignment % to qualify?",
     category: 'tendering',
     priority: 'core'
   }
 ]
+
+// Keep backward-compatible reference (used by getQuestionsForMode which is defined before the component)
+const ALL_STRATEGIC_QUESTIONS = ALL_STRATEGIC_QUESTIONS_BASE
 
 // ============================================================================
 // SECTION 4: DEFAULT VALUES FOR FAST-TRACK (STC)
@@ -450,6 +454,12 @@ function IntelligentQuestionnaireContent() {
   const [showFastTrackReview, setShowFastTrackReview] = useState(false)
   const [editingField, setEditingField] = useState<QuestionKey | null>(null)
 
+  // Role context — determines if questions are from customer or provider perspective
+  const [initiatorPartyRole, setInitiatorPartyRole] = useState<'protected' | 'providing'>('protected')
+  const isProvider = initiatorPartyRole === 'providing'
+  const counterpartyLabel = isProvider ? 'customer' : 'provider'
+  const counterpartyLabelCap = isProvider ? 'Customer' : 'Provider'
+
   // Transition Modal State
   const [transitionState, setTransitionState] = useState<TransitionState>({
     isOpen: false,
@@ -475,7 +485,7 @@ function IntelligentQuestionnaireContent() {
       'risk': { name: 'Risk Tolerance', icon: '⚠️' },
       'internal': { name: 'Internal Dynamics', icon: '🏢' },
       'relationship': { name: 'Relationship Priorities', icon: '🤝' },
-      'tendering': { name: 'Provider Qualification', icon: '📊' }
+      'tendering': { name: isProvider ? 'Customer Qualification' : 'Provider Qualification', icon: '📊' }
     }
 
     const categoryIndices: Record<string, number[]> = {}
@@ -497,10 +507,10 @@ function IntelligentQuestionnaireContent() {
       }
     })
 
-    sections.push({ id: 'complete', name: 'Invite Provider', icon: '📩', questionIndices: [] as number[] })
+    sections.push({ id: 'complete', name: `Invite ${counterpartyLabelCap}`, icon: '📩', questionIndices: [] as number[] })
 
     return sections
-  }, [activeQuestions])
+  }, [activeQuestions, isProvider, counterpartyLabelCap])
 
   // ========================================================================
   // SECTION 6B: PROGRESS HELPERS
@@ -568,6 +578,9 @@ function IntelligentQuestionnaireContent() {
 
           if (data && (data.company_name || data.companyName || data.session_id || data.sessionId)) {
             setSessionNumber(data.sessionNumber || data.session_number || null)
+            if (data.initiator_party_role === 'providing' || data.initiatorPartyRole === 'providing') {
+              setInitiatorPartyRole('providing')
+            }
             const requirements: ExistingRequirements = mapApiResponseToRequirements(data)
             setExistingData(requirements)
 
@@ -597,6 +610,9 @@ function IntelligentQuestionnaireContent() {
 
           if (session) {
             setSessionNumber(session.session_number || session.sessionNumber || null)
+            if (session.initiator_party_role === 'providing' || session.initiatorPartyRole === 'providing') {
+              setInitiatorPartyRole('providing')
+            }
 
             const minimalRequirements: ExistingRequirements = {
               companyName: session.customer_company || session.customerCompany || '',
@@ -819,7 +835,7 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
     let questionText = assessmentMode === 'abbreviated' && question.shortQuestion
       ? question.shortQuestion
       : question.question
-    questionText = questionText.replace('{providerName}', 'this provider').replace('{companyName}', data.companyName || 'your company')
+    questionText = questionText.replace('{providerName}', `this ${counterpartyLabel}`).replace('{companyName}', data.companyName || 'your company')
     if (question.context) {
       const context = question.context(data)
       if (context) questionText = `${context}\n\n${questionText}`
@@ -828,6 +844,47 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
     await new Promise(resolve => setTimeout(resolve, 600))
     addClarenceMessage(questionText, question.key)
     setIsTyping(false)
+  }
+
+  const handleGoBack = () => {
+    if (currentQuestionIndex <= 0 || isTyping) return
+    const prevIndex = currentQuestionIndex - 1
+    const prevQuestion = activeQuestions[prevIndex]
+
+    // Remove the last user message and the Clarence question that followed it
+    // Also remove any acknowledgment messages between them
+    setMessages(prev => {
+      // Find the last user message
+      const lastUserIdx = [...prev].reverse().findIndex(m => m.type === 'user')
+      if (lastUserIdx === -1) return prev
+      const cutIdx = prev.length - 1 - lastUserIdx
+      // Remove from that user message onward, plus the Clarence question before it
+      // Find the Clarence message just before the user's answer
+      let startCut = cutIdx
+      for (let i = cutIdx - 1; i >= 0; i--) {
+        if (prev[i].type === 'clarence') {
+          startCut = i
+          break
+        }
+      }
+      return prev.slice(0, startCut)
+    })
+
+    // Clear the answer for the previous question
+    if (prevQuestion) {
+      setStrategicAnswers(prev => {
+        const next = { ...prev }
+        delete next[prevQuestion.key]
+        return next
+      })
+    }
+
+    setCurrentQuestionIndex(prevIndex)
+
+    // Re-ask the previous question
+    setTimeout(() => {
+      if (existingData) askStrategicQuestion(prevIndex, existingData)
+    }, 300)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -899,8 +956,8 @@ ${completionItems}
 
 **What happens next:**
 
-1. **Invite your provider(s)** - Send invitations to start the negotiation
-2. **Provider intake** - They'll complete their own assessment
+1. **Invite your ${counterpartyLabel}** - Send invitations to start the negotiation
+2. **${counterpartyLabelCap} intake** - They'll complete their own assessment
 3. **Leverage calculation** - I'll calculate leverage once both sides are ready
 4. **Negotiate** - I'll generate draft positions and guide the mediation
 
@@ -1035,7 +1092,7 @@ Your data is saved and ready. Click below to continue.`)
             'They will complete their own strategic assessment',
             'Once both sides are ready, the Contract Studio activates'
           ],
-          buttonText: 'Continue to Invite Provider'
+          buttonText: 'Continue to Invite Counterparty'
         }
 
     setTransitionState({
@@ -1258,7 +1315,19 @@ Your data is saved and ready. Click below to continue.`)
             const progress = getSectionProgress(section.id)
             const isActive = currentSectionId === section.id
             return (
-              <div key={section.id} className={`p-3 rounded-lg mb-2 transition-all ${isActive ? 'bg-blue-50 border border-blue-200' : status === 'complete' ? 'bg-green-50 border border-green-100' : 'bg-slate-50 border border-transparent'}`}>
+              <div
+                key={section.id}
+                className={`p-3 rounded-lg mb-2 transition-all ${section.questionIndices.length > 0 && (status === 'complete' || status === 'current') ? 'cursor-pointer hover:ring-1 hover:ring-blue-300' : ''} ${isActive ? 'bg-blue-50 border border-blue-200' : status === 'complete' ? 'bg-green-50 border border-green-100' : 'bg-slate-50 border border-transparent'}`}
+                onClick={() => {
+                  if (section.questionIndices.length > 0 && (status === 'complete' || status === 'current')) {
+                    const targetIndex = Math.min(...section.questionIndices)
+                    setCurrentQuestionIndex(targetIndex)
+                    if (existingData) {
+                      setTimeout(() => askStrategicQuestion(targetIndex, existingData), 300)
+                    }
+                  }
+                }}
+              >
                 <div className="flex items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-3 ${status === 'complete' ? 'bg-green-100 text-green-600' : isActive ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
                     {status === 'complete' ? '✓' : section.icon}
@@ -1417,6 +1486,17 @@ Your data is saved and ready. Click below to continue.`)
                     {!conversationComplete ? (
                       <div className="border-t border-slate-200 p-4">
                         <form onSubmit={handleSubmit} className="flex gap-3">
+                          {currentQuestionIndex > 0 && (
+                            <button
+                              type="button"
+                              onClick={handleGoBack}
+                              disabled={isTyping}
+                              className="px-4 py-3 border border-slate-300 text-slate-600 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="Go back to previous question"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                            </button>
+                          )}
                           <input
                             ref={inputRef}
                             type="text"
@@ -1455,7 +1535,7 @@ Your data is saved and ready. Click below to continue.`)
                             </>
                           ) : (
                             <>
-                              {saveError ? 'Retry' : 'Continue to Invite Provider'}
+                              {saveError ? 'Retry' : 'Continue to Invite Counterparty'}
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
