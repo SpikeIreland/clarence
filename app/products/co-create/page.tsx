@@ -134,7 +134,9 @@ export default function CoCreatePage() {
               </h3>
               <p className="text-sm text-slate-600">
                 Both parties collaboratively refine each clause with AI
-                mediation guiding the process.
+                mediation guiding the process. Your playbook standards inform
+                Clarence&apos;s suggestions — protecting your positions without
+                disrupting collaboration.
               </p>
             </div>
             <div className="text-center">

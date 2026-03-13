@@ -86,6 +86,9 @@ export default function ContractCreatePage() {
                     Clause-by-clause AI mediation
                   </FeatureListItem>
                   <FeatureListItem color="emerald">
+                    Playbook compliance monitoring throughout negotiation
+                  </FeatureListItem>
+                  <FeatureListItem color="emerald">
                     Full evidence package on completion
                   </FeatureListItem>
                 </ul>
@@ -125,7 +128,8 @@ export default function ContractCreatePage() {
               </h3>
               <p className="text-sm text-slate-600">
                 Upload your template, configure clause positions, and complete
-                the strategic assessment.
+                the strategic assessment. With an active playbook, Clarence
+                flags exposure before negotiation begins.
               </p>
             </div>
             <div className="text-center">

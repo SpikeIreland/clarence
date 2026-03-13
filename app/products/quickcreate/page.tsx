@@ -132,11 +132,12 @@ export default function QuickCreatePage() {
                 <CheckCircle className="w-6 h-6 text-emerald-600" />
               </div>
               <h3 className="font-semibold text-slate-800 mb-2">
-                2. Review & Adjust
+                2. Review & Cross-Check
               </h3>
               <p className="text-sm text-slate-600">
-                Clarence configures fair clause positions automatically. Review
-                and make any adjustments.
+                Clarence configures fair clause positions automatically. With an
+                active playbook, your template is cross-checked against your
+                standards before it leaves your desk.
               </p>
             </div>
             <div className="text-center">

@@ -33,7 +33,7 @@ export const products: Product[] = [
     fullName: 'Clarence QuickCreate',
     tagline: 'Agreements at the speed of trust',
     description:
-      'Upload any contract — simple or complex — set your terms, and send. Clarence configures fair starting positions so you can review, adjust, and move — without the back-and-forth.',
+      'Upload any contract — simple or complex — set your terms, and send. Clarence configures fair starting positions so you can review, adjust, and move. Cross-check against your playbook before sending — so nothing leaves your desk unchecked.',
     category: 'creation',
     icon: 'Zap',
     color: 'emerald',
@@ -45,6 +45,7 @@ export const products: Product[] = [
       'Status tracking from draft to signature',
       'Works with any contract — from NDAs to enterprise agreements',
       'Quick review and send workflow',
+      'Pre-send playbook cross-check (Enterprise)',
     ],
     useCases: [
       'High-volume contract programmes',
@@ -60,7 +61,7 @@ export const products: Product[] = [
     fullName: 'Clarence ContractCreate',
     tagline: 'Your terms, honestly mediated',
     description:
-      'Bring your own contract template, complete the strategic assessment, and invite the other party. Full leverage visibility, three-position negotiation, and clause-by-clause principled mediation — because both sides deserve to see the same picture.',
+      'Bring your own contract template, complete the strategic assessment, and invite the other party. Full leverage visibility, three-position negotiation, and clause-by-clause principled mediation — with real-time playbook compliance tracking throughout.',
     category: 'creation',
     icon: 'Scale',
     color: 'emerald',
@@ -71,6 +72,7 @@ export const products: Product[] = [
       'Party-fit and leverage scoring',
       'Three-position negotiation framework',
       'Clause-by-clause principled mediation',
+      'Real-time playbook compliance monitoring',
       'Full evidence package on completion',
     ],
     useCases: [
@@ -154,6 +156,7 @@ export const products: Product[] = [
       'Industry-standard term references',
       'Best practice recommendations',
       'Risk assessment for contract terms',
+      'Playbook gap analysis and coverage reporting',
       'Contextual legal knowledge on demand',
     ],
     useCases: [
@@ -172,7 +175,7 @@ export const products: Product[] = [
     fullName: 'Clarence Negotiate',
     tagline: 'Where both sides come to terms',
     description:
-      'The heart of Clarence. Work through every clause with principled mediation, real-time leverage visibility, and intelligent trade-off suggestions that guide both parties toward agreement — not advantage.',
+      'The heart of Clarence. Work through every clause with principled mediation, real-time leverage visibility, and intelligent trade-off suggestions that guide both parties toward agreement — not advantage. Your playbook compliance score updates live, so you never drift beyond your red lines.',
     category: 'negotiation',
     icon: 'MessageSquare',
     color: 'slate',
@@ -183,6 +186,7 @@ export const products: Product[] = [
       'Intelligent trade-off suggestions and compromises',
       'Industry-standard position benchmarking',
       'Clause-by-clause mediation guidance',
+      'Live playbook compliance score and red line alerts',
       'Complete negotiation audit trail',
     ],
     useCases: [
@@ -207,7 +211,7 @@ export const products: Product[] = [
     features: [
       'Intelligent opponents with adjustable difficulty',
       'Pre-built mission scenarios for common contract types',
-      'Company playbook integration',
+      'Playbook verification — confirm how AI interprets your rules',
       'Team war games and multi-player sessions',
       'Performance scorecard and skill development',
       'Promote training contracts to live templates',

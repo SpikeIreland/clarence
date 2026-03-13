@@ -128,6 +128,7 @@ export default function PricingPage() {
                   <FeatureItem>5 team members</FeatureItem>
                   <FeatureItem>Unlimited AI interactions</FeatureItem>
                   <FeatureItem>Full document package</FeatureItem>
+                  <FeatureItem>Pre-negotiation playbook cross-check</FeatureItem>
                   <FeatureItem>Email support (48hr response)</FeatureItem>
                 </ul>
 
@@ -174,7 +175,8 @@ export default function PricingPage() {
                   <FeatureItem>SSO / SAML authentication</FeatureItem>
                   <FeatureItem>API access</FeatureItem>
                   <FeatureItem>Dedicated account manager</FeatureItem>
-                  <FeatureItem>Custom playbook integration</FeatureItem>
+                  <FeatureItem>Full playbook suite — build, verify, enforce</FeatureItem>
+                  <FeatureItem>AI playbook builder + managed service option</FeatureItem>
                 </ul>
 
                 <Link
@@ -267,7 +269,8 @@ export default function PricingPage() {
                   <ComparisonRow label="Support" starter="Community" pro="Email (48hr)" enterprise="Priority + AM" />
                   <TableRow label="SSO / SAML" starter={false} pro={false} enterprise={true} />
                   <TableRow label="API Access" starter={false} pro={false} enterprise={true} />
-                  <TableRow label="Custom playbook integration" starter={false} pro={false} enterprise={true} />
+                  <TableRow label="Playbook cross-check" starter={false} pro={true} enterprise={true} />
+                  <TableRow label="Full playbook suite (build, verify, enforce)" starter={false} pro={false} enterprise={true} />
                 </tbody>
               </table>
             </div>
@@ -299,6 +302,14 @@ export default function PricingPage() {
               <FAQItem
                 question="Can I upgrade or downgrade my plan?"
                 answer="Yes! Contact us at any time to adjust your plan. We'll pro-rate any changes and ensure a smooth transition for your active contracts."
+              />
+              <FAQItem
+                question="What is the playbook cross-check?"
+                answer="Before you send any contract into negotiation, Clarence can cross-check the template against your active playbook. It flags clauses that fall outside your acceptable ranges, identifies missing protections, and highlights potential red line breaches — so you can reduce exposure before the conversation starts. Available on Professional and Enterprise plans."
+              />
+              <FAQItem
+                question="Do I need a playbook to use Clarence?"
+                answer="No. Clarence works perfectly without a playbook — you get full access to mediation, leverage visibility, and all negotiation tools. But if you want compliance protection, Professional customers can upload an existing playbook for pre-negotiation cross-checks. Enterprise customers get the full playbook suite: AI-assisted builder, managed creation service, verification dashboard, and real-time enforcement."
               />
               <FAQItem
                 question="Is my data secure?"

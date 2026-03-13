@@ -3,7 +3,7 @@ import Link from 'next/link'
 import MainNavigation from '../components/MainNavigation'
 import FeatureListItem from '../components/FeatureListItem'
 import Footer from '../components/Footer'
-import { Shield, Lock, Server, Users, HeadphonesIcon, BookOpen } from 'lucide-react'
+import { Shield, Lock, Server, Users, HeadphonesIcon, BookOpen, Bot } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Enterprise | CLARENCE - Principled Negotiation at Scale',
@@ -134,21 +134,21 @@ export default function EnterprisePage() {
             <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
               <BookOpen className="w-8 h-8 text-purple-600 mb-4" />
               <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                Custom Playbooks
+                Playbook Protection
               </h3>
               <p className="text-sm text-slate-600 mb-4">
-                Upload your organisation's negotiation playbooks and enforce
-                compliance in every contract.
+                Build, verify, and enforce your negotiation playbook. Never sign
+                blind — every contract checked against your standards automatically.
               </p>
               <ul className="space-y-2">
                 <FeatureListItem color="purple">
-                  Upload company playbooks and position guides
+                  AI-assisted playbook creation or managed service
                 </FeatureListItem>
                 <FeatureListItem color="purple">
-                  Automated playbook compliance checking
+                  Verification dashboard for every parsed rule
                 </FeatureListItem>
                 <FeatureListItem color="purple">
-                  Train teams on your actual standards
+                  Real-time compliance monitoring in negotiation
                 </FeatureListItem>
               </ul>
             </div>
@@ -195,6 +195,98 @@ export default function EnterprisePage() {
                   Unlimited AI interactions
                 </FeatureListItem>
               </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Playbook Services ────────────────────────────────────────── */}
+      <section className="py-20 bg-slate-50 border-t border-slate-200">
+        <div className="container mx-auto px-6">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 rounded-full text-sm font-medium text-purple-700 mb-4">
+                <Shield className="w-4 h-4" />
+                <span>Risk Protection</span>
+              </div>
+              <h2 className="text-3xl font-bold text-slate-800 mb-4">
+                Build, Verify, and Enforce Your Playbook
+              </h2>
+              <p className="text-slate-600 max-w-2xl mx-auto">
+                Most organisations know they need a negotiation playbook. Few have
+                one that actually works. Clarence gives you the tools to build it
+                properly and the platform to enforce it automatically.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="p-8 bg-white rounded-2xl border border-slate-200">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                  <Bot className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                  AI-Assisted Playbook Builder
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Answer guided questions about your negotiation standards and
+                  Clarence generates a structured playbook — complete with red
+                  lines, acceptable ranges, and escalation rules. No legal team
+                  required.
+                </p>
+                <ul className="space-y-2">
+                  <FeatureListItem color="purple">
+                    Guided self-service creation workflow
+                  </FeatureListItem>
+                  <FeatureListItem color="purple">
+                    AI extracts rules from your existing policy documents
+                  </FeatureListItem>
+                  <FeatureListItem color="purple">
+                    Verification dashboard to review every parsed rule
+                  </FeatureListItem>
+                  <FeatureListItem color="purple">
+                    Included with Enterprise plan
+                  </FeatureListItem>
+                </ul>
+              </div>
+
+              <div className="p-8 bg-gradient-to-br from-purple-50 to-violet-50 rounded-2xl border border-purple-200">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                  <HeadphonesIcon className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                  Managed Playbook Service
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Our team works with your legal and procurement leaders to codify
+                  your negotiation standards into a production-ready playbook. The
+                  expertise of a specialist law firm, at a fraction of the cost.
+                </p>
+                <ul className="space-y-2">
+                  <FeatureListItem color="purple">
+                    Dedicated playbook specialist assigned to your account
+                  </FeatureListItem>
+                  <FeatureListItem color="purple">
+                    Stakeholder interviews and policy document analysis
+                  </FeatureListItem>
+                  <FeatureListItem color="purple">
+                    Iterative review and verification with your team
+                  </FeatureListItem>
+                  <FeatureListItem color="purple">
+                    Fraction of the cost of traditional law firm engagement
+                  </FeatureListItem>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-8 p-6 bg-white rounded-xl border border-slate-200 text-center">
+              <p className="text-sm text-slate-600 mb-2">
+                Already have a playbook? Upload it and Clarence parses it
+                automatically. Then use the verification dashboard to confirm every
+                rule before it goes live.
+              </p>
+              <p className="text-xs text-slate-400">
+                Supported formats: PDF, Word, Excel, structured JSON
+              </p>
             </div>
           </div>
         </div>

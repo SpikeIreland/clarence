@@ -148,7 +148,8 @@ export default function NegotiatePage() {
               </h3>
               <p className="text-sm text-slate-600">
                 Intelligent guidance, trade-off suggestions, and industry
-                benchmarks to inform decisions.
+                benchmarks to inform decisions. With an active playbook, your
+                compliance score and red line proximity are tracked in real time.
               </p>
             </div>
           </div>

@@ -218,26 +218,43 @@ export default function TrainingPage() {
                 Train on Your Actual Playbook
               </h2>
               <p className="text-slate-600 max-w-2xl mx-auto">
-                Upload your negotiation standards. Clarence enforces compliance
-                and scores your team against your own rules.
+                Upload your negotiation standards. Verify how Clarence interprets
+                them. Then score your team against your own rules — before a live
+                deal is on the line.
               </p>
             </div>
 
             <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-8 border border-amber-200">
-              <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid md:grid-cols-3 gap-8">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-800 mb-4">
                     Load Your Rules of Engagement
                   </h3>
                   <ul className="space-y-3">
                     <FeatureListItem color="amber">
-                      Upload your company's clause playbooks and position guides
+                      Upload your company&apos;s clause playbooks and position guides
                     </FeatureListItem>
                     <FeatureListItem color="amber">
                       Define acceptable position ranges for each clause type
                     </FeatureListItem>
                     <FeatureListItem color="amber">
                       Create scenarios based on real upcoming negotiations
+                    </FeatureListItem>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                    Verify Before You Trust
+                  </h3>
+                  <ul className="space-y-3">
+                    <FeatureListItem color="amber">
+                      See exactly how Clarence parsed every rule in your playbook
+                    </FeatureListItem>
+                    <FeatureListItem color="amber">
+                      Check red line thresholds, escalation triggers, and flexibility ranges
+                    </FeatureListItem>
+                    <FeatureListItem color="amber">
+                      Run test negotiations to validate compliance scoring accuracy
                     </FeatureListItem>
                   </ul>
                 </div>

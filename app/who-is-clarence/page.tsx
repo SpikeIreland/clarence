@@ -213,6 +213,7 @@ export default function WhoIsClarencePage() {
                 'Professionalism does not require hostility',
                 'Fairness is not naivete',
                 'Transparency is not weakness',
+                'Risk reduction is a form of fairness',
                 'This agreement reflects reality — not theatre',
               ].map((assertion) => (
                 <div

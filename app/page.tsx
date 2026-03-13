@@ -6,7 +6,7 @@ import ProductCard from './components/ProductCard'
 import SectionCTA from './components/SectionCTA'
 import Footer from './components/Footer'
 import { getFeaturedProducts } from './lib/products'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Shield } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'CLARENCE | Agreements, Not Arguments',
@@ -195,6 +195,92 @@ export default function Home() {
               className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
             >
               See how the platform works
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* RISK PROTECTION — Playbook lifecycle                               */}
+      {/* ================================================================== */}
+      <section className="py-20 bg-white border-t border-slate-200">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-800 text-white rounded-full text-sm font-medium mb-4">
+              <Shield className="w-4 h-4" />
+              <span>Risk Protection</span>
+            </div>
+            <h2 className="text-3xl font-bold text-slate-800 mb-4">
+              Never Sign Blind
+            </h2>
+            <p className="text-slate-600 max-w-2xl mx-auto">
+              Your negotiation playbook is your organisation&apos;s line of defence.
+              Clarence helps you build it, verify it, and enforce it — so every
+              agreement reflects your standards, not just the other party&apos;s draft.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+            <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-emerald-600">1</span>
+              </div>
+              <h3 className="font-semibold text-slate-800 mb-2">
+                Build Your Playbook
+              </h3>
+              <p className="text-sm text-slate-600">
+                Define your red lines, acceptable ranges, and escalation rules.
+                Self-service AI tools or managed service — no law firm fees required.
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-emerald-600">2</span>
+              </div>
+              <h3 className="font-semibold text-slate-800 mb-2">
+                Verify the Parse
+              </h3>
+              <p className="text-sm text-slate-600">
+                See exactly how Clarence interprets your playbook. Check every
+                rule, every threshold, every escalation path before it goes live.
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-emerald-600">3</span>
+              </div>
+              <h3 className="font-semibold text-slate-800 mb-2">
+                Cross-Check Before You Start
+              </h3>
+              <p className="text-sm text-slate-600">
+                Run any contract template against your playbook before negotiation
+                begins. Identify exposure, flag gaps, reduce risk at the source.
+              </p>
+            </div>
+
+            <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <span className="text-lg font-bold text-emerald-600">4</span>
+              </div>
+              <h3 className="font-semibold text-slate-800 mb-2">
+                Enforce During Negotiation
+              </h3>
+              <p className="text-sm text-slate-600">
+                Real-time compliance checking throughout. Red line breach alerts,
+                flexibility tracking, and escalation triggers — automatically.
+              </p>
+            </div>
+          </div>
+
+          <div className="text-center mt-10">
+            <Link
+              href="/enterprise"
+              className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+            >
+              Learn about playbook services
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
