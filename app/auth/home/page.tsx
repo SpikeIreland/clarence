@@ -632,12 +632,9 @@ function HomePageInner() {
     // SECTION 5E: FETCH CONTRACT CREATE / CO-CREATE SESSIONS
     // ========================================================================
 
-    const fetchContractCreateSessions = useCallback(async (userId: string, companyId: string): Promise<UnifiedContract[]> => {
+    const fetchContractCreateSessions = useCallback(async (userId: string, companyId: string, email: string): Promise<UnifiedContract[]> => {
         try {
-            // Fetch sessions where user is customer (initiator) or provider (respondent)
-            const { data: sessions, error: sessionsError } = await supabase
-                .from('sessions')
-                .select(`
+            const sessionFields = `
                     session_id,
                     session_number,
                     customer_company,
@@ -655,16 +652,50 @@ function HomePageInner() {
                     updated_at,
                     customer_id,
                     provider_id
-                `)
+                `
+
+            // Query 1: Fetch sessions where user is customer or provider (by UUID)
+            const { data: sessionsByUuid, error: sessionsError } = await supabase
+                .from('sessions')
+                .select(sessionFields)
                 .or(`customer_id.eq.${userId},provider_id.eq.${userId}`)
                 .order('updated_at', { ascending: false })
 
             if (sessionsError) {
-                console.error('Error fetching sessions:', sessionsError)
-                return []
+                console.error('Error fetching sessions by UUID:', sessionsError)
             }
 
-            if (!sessions || sessions.length === 0) return []
+            // Query 2: Fetch session IDs linked to this email via customer_requirements
+            // This catches sessions created before customer_id was properly saved
+            let emailSessions: typeof sessionsByUuid = []
+            if (email) {
+                const { data: reqData } = await supabase
+                    .from('customer_requirements')
+                    .select('session_id')
+                    .eq('contact_email', email)
+
+                if (reqData && reqData.length > 0) {
+                    const knownIds = new Set((sessionsByUuid || []).map(s => s.session_id))
+                    const missingIds = reqData
+                        .map(r => r.session_id)
+                        .filter(id => !knownIds.has(id))
+
+                    if (missingIds.length > 0) {
+                        const { data: extraSessions } = await supabase
+                            .from('sessions')
+                            .select(sessionFields)
+                            .in('session_id', missingIds)
+                            .order('updated_at', { ascending: false })
+
+                        emailSessions = extraSessions || []
+                    }
+                }
+            }
+
+            // Merge results
+            const sessions = [...(sessionsByUuid || []), ...(emailSessions || [])]
+
+            if (sessions.length === 0) return []
 
             return sessions.map(session => {
                 const isTraining = session.is_training === true
@@ -756,7 +787,7 @@ function HomePageInner() {
             const [qcInitiated, qcInvited, ccSessions] = await Promise.all([
                 fetchQuickCreateInitiated(info.userId),
                 fetchQuickCreateInvited(info.userId, info.email),
-                fetchContractCreateSessions(info.userId, info.companyId),
+                fetchContractCreateSessions(info.userId, info.companyId, info.email),
             ])
 
             // Merge and sort by last activity (most recent first)
@@ -959,7 +990,7 @@ function HomePageInner() {
                     throw new Error(`Failed to delete contract: ${deleteError.message}`)
                 }
 
-            } else if (contract.pathway === 'contract_create' || contract.pathway === 'training') {
+            } else if (contract.pathway === 'contract_create' || contract.pathway === 'co_create' || contract.pathway === 'training') {
                 // ============================================================
                 // Contract Create / Training pathway: cascade delete session
                 // Order: child tables first, then parent
@@ -1221,47 +1252,15 @@ function HomePageInner() {
                 </div>
 
                 {/* ======================================================== */}
-                {/* SECTION 8E: QUICK ACTIONS BAR                             */}
-                {/* ======================================================== */}
-                <div className="flex flex-wrap items-center gap-3 mb-8">
-                    <Link
-                        href="/auth/quick-contract/create"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        New Quick Create
-                    </Link>
-                    <Link
-                        href="/auth/contracts-dashboard"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        New Contract Create
-                    </Link>
-                    <Link
-                        href="/auth/training"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        Practice (Training)
-                    </Link>
-                </div>
-
-                {/* ======================================================== */}
                 {/* SECTION 8F: PATHWAY FILTER TABS (with counts)             */}
                 {/* ======================================================== */}
                 <div className="flex items-center gap-2 mb-6 overflow-x-auto">
                     <span className="text-sm font-medium text-slate-500 mr-2 flex-shrink-0">Filter:</span>
                     {FILTER_TABS.map(filter => {
                         const count = pathwayCounts[filter.key] ?? 0
-                        // Hide tabs with zero contracts (except 'All')
-                        if (filter.key !== 'all' && count === 0) return null
+                        // Always show core pathway tabs; hide others only if empty
+                        const alwaysShow = ['all', 'quick_create', 'contract_create', 'co_create']
+                        if (!alwaysShow.includes(filter.key) && count === 0) return null
 
                         return (
                             <button
