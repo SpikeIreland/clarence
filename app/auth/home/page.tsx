@@ -692,8 +692,38 @@ function HomePageInner() {
                 }
             }
 
+            // Query 3: Fetch session IDs linked to this email via provider_bids
+            // This catches sessions where the user is an invited provider
+            let providerSessions: typeof sessionsByUuid = []
+            if (email) {
+                const knownIds = new Set([
+                    ...(sessionsByUuid || []).map(s => s.session_id),
+                    ...(emailSessions || []).map(s => s.session_id),
+                ])
+                const { data: bidData } = await supabase
+                    .from('provider_bids')
+                    .select('session_id')
+                    .ilike('provider_contact_email', email)
+
+                if (bidData && bidData.length > 0) {
+                    const missingIds = bidData
+                        .map(r => r.session_id)
+                        .filter(id => !knownIds.has(id))
+
+                    if (missingIds.length > 0) {
+                        const { data: extraSessions } = await supabase
+                            .from('sessions')
+                            .select(sessionFields)
+                            .in('session_id', missingIds)
+                            .order('updated_at', { ascending: false })
+
+                        providerSessions = extraSessions || []
+                    }
+                }
+            }
+
             // Merge results
-            const sessions = [...(sessionsByUuid || []), ...(emailSessions || [])]
+            const sessions = [...(sessionsByUuid || []), ...(emailSessions || []), ...(providerSessions || [])]
 
             if (sessions.length === 0) return []
 
