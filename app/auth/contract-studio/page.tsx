@@ -795,7 +795,7 @@ async function callClarenceAI(
                     message = `[SYSTEM:welcome] Generate a welcome message. Alignment: ${options.alignmentPercentage ?? 0}%.`
                     break
                 case 'clause_explain':
-                    message = `[SYSTEM:clause_explain] Explain the selected clause in the context of this negotiation.`
+                    message = `[SYSTEM:clause_explain] Explain the clause "${options.clauseName || 'selected clause'}"${options.clauseCategory ? ` (category: ${options.clauseCategory})` : ''} in the context of this negotiation. Cover what this clause governs, how the current positions affect each party, and strategic considerations.`
                     break
                 case 'position_change':
                 case 'alignment_reached':

@@ -358,15 +358,35 @@ export async function buildSessionContext(
         // ------------------------------------------------------------------
         let clauseContext: ClauseContext | null = null
 
-        if (passedContext?.clauseId) {
-            const matchingPosition = positions.find(
-                (p: Record<string, unknown>) => p.clause_id === passedContext.clauseId
-            )
+        if (passedContext?.clauseId || passedContext?.clauseName) {
+            // Try matching by clause_id first, then fall back to position_id, then clause_name
+            let matchingPosition = passedContext?.clauseId
+                ? positions.find((p: Record<string, unknown>) => p.clause_id === passedContext.clauseId)
+                : null
+
+            if (!matchingPosition && passedContext?.clauseId) {
+                // Fallback: clauseId might actually be a position_id
+                matchingPosition = positions.find((p: Record<string, unknown>) => p.position_id === passedContext.clauseId)
+                if (matchingPosition) {
+                    console.log('[ContextBuilder] Clause matched by position_id fallback:', passedContext.clauseId)
+                }
+            }
+
+            if (!matchingPosition && passedContext?.clauseName) {
+                // Fallback: match by clause name
+                matchingPosition = positions.find(
+                    (p: Record<string, unknown>) => (p.clause_name as string)?.toLowerCase() === passedContext.clauseName!.toLowerCase()
+                )
+                if (matchingPosition) {
+                    console.log('[ContextBuilder] Clause matched by name fallback:', passedContext.clauseName)
+                }
+            }
 
             if (matchingPosition) {
-                const labels = allPositionLabels[passedContext.clauseId] || null
+                const matchClauseId = (matchingPosition.clause_id as string) || passedContext.clauseId || ''
+                const labels = allPositionLabels[matchClauseId] || null
                 clauseContext = {
-                    clauseId: matchingPosition.clause_id as string,
+                    clauseId: matchClauseId,
                     clauseNumber: matchingPosition.clause_number as number,
                     clauseName: (matchingPosition.clause_name as string) || passedContext.clauseName || 'Unknown',
                     category: (matchingPosition.category as string) || 'General',
@@ -377,6 +397,8 @@ export async function buildSessionContext(
                     status: matchingPosition.status as string | null,
                     positionLabels: labels,
                 }
+            } else {
+                console.warn('[ContextBuilder] Clause not found in positions. clauseId:', passedContext?.clauseId, 'clauseName:', passedContext?.clauseName, 'Available clause_ids:', positions.slice(0, 5).map((p: Record<string, unknown>) => p.clause_id))
             }
         }
 
