@@ -8,7 +8,7 @@ import Footer from '../components/Footer'
 export const metadata: Metadata = {
   title: 'Pricing | CLARENCE - Simple, Transparent Pricing',
   description:
-    'Flexible pricing for teams of all sizes. Professional plan from £300/month. Start with a free trial or contact us for enterprise solutions.',
+    'Flexible pricing for teams of all sizes. Professional plan from £300/seat/month. Start with a free trial or contact us for enterprise solutions.',
 }
 
 // ============================================================================
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 // Location: app/pricing/page.tsx
 //
 // Key changes:
-// - Professional tier now shows £300/month explicitly
+// - Professional tier now shows £300/seat/month explicitly
 // - Product-tier mapping added
 // - Uses shared components (Footer, SectionCTA)
 // - Refreshed visual design to match new site style
@@ -116,7 +116,7 @@ export default function PricingPage() {
                   <span className="text-slate-500">/ month</span>
                 </div>
                 <p className="text-sm text-emerald-700 mt-2">
-                  Per organisation, billed monthly
+                  Per seat, billed monthly
                 </p>
               </div>
 
@@ -136,7 +136,7 @@ export default function PricingPage() {
                   href="/request-trial"
                   className="block w-full mt-6 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-center font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
                 >
-                  Get Started — £300/month
+                  Get Started — £300/seat/month
                 </Link>
               </div>
             </div>
@@ -292,8 +292,8 @@ export default function PricingPage() {
                 answer="Request a trial and we'll set you up with one complete contract session. You'll have access to the Training Studio to learn the platform, then run a real negotiation with up to 2 respondents. No credit card required."
               />
               <FAQItem
-                question="What does £300/month include?"
-                answer="The Professional plan gives your organisation access to the full Clarence product suite including ContractCreate, Co-Create, Negotiate, Training Studio, and QuickCreate. You can run up to 10 active contracts with 5 respondents each, and have 5 team members on the platform."
+                question="What does £300/seat/month include?"
+                answer="The Professional plan gives each seat access to the full Clarence product suite including ContractCreate, Co-Create, Negotiate, Training Studio, and QuickCreate. You can run up to 10 active contracts with 5 respondents each, and have 5 team members on the platform."
               />
               <FAQItem
                 question="What's included in the Evidence Package?"
