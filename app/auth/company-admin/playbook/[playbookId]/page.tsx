@@ -600,6 +600,10 @@ function PlaybookReviewContent() {
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
+                            <a href={`/auth/company-admin/playbook/${playbookId}/cross-check`}
+                                className="px-2.5 py-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-100 transition-colors">
+                                Cross-check Templates
+                            </a>
                             {playbook.contract_type_key && (
                                 <span className="px-2 py-1 text-[10px] font-medium bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
                                     {playbook.contract_type_key.toUpperCase()}
