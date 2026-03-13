@@ -842,6 +842,11 @@ async function callClarenceAI(
 
         const data = await response.json()
 
+        // Log clause context debug info if present
+        if (data._debug) {
+            console.log('[ClarenceAI] Debug:', data._debug)
+        }
+
         // Map unified API response to ClarenceAIResponse format
         return {
             success: data.success ?? true,

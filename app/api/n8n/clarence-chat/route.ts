@@ -206,6 +206,12 @@ export async function POST(request: NextRequest) {
                     response: responseText,
                     message: responseText,
                     success: true,
+                    _debug: {
+                        clauseContextFound: !!contextResult.context?.clauseContext,
+                        clauseIdSent: body.clauseId || null,
+                        clauseNameSent: body.clauseName || null,
+                        buildTime: contextResult.buildTime,
+                    }
                 })
             } catch (claudeError) {
                 console.error('Claude API call failed:', claudeError)

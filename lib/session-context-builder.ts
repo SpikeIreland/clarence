@@ -373,12 +373,22 @@ export async function buildSessionContext(
             }
 
             if (!matchingPosition && passedContext?.clauseName) {
-                // Fallback: match by clause name
+                // Fallback: match by clause name (exact)
+                const searchName = passedContext.clauseName.toLowerCase().trim()
                 matchingPosition = positions.find(
-                    (p: Record<string, unknown>) => (p.clause_name as string)?.toLowerCase() === passedContext.clauseName!.toLowerCase()
+                    (p: Record<string, unknown>) => (p.clause_name as string)?.toLowerCase().trim() === searchName
                 )
+                // Fallback: partial name match (clause name contains search or vice versa)
+                if (!matchingPosition) {
+                    matchingPosition = positions.find(
+                        (p: Record<string, unknown>) => {
+                            const dbName = (p.clause_name as string)?.toLowerCase().trim()
+                            return dbName && (dbName.includes(searchName) || searchName.includes(dbName))
+                        }
+                    )
+                }
                 if (matchingPosition) {
-                    console.log('[ContextBuilder] Clause matched by name fallback:', passedContext.clauseName)
+                    console.log('[ContextBuilder] Clause matched by name fallback:', passedContext.clauseName, '→', (matchingPosition as Record<string, unknown>).clause_name)
                 }
             }
 
