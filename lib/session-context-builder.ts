@@ -223,8 +223,7 @@ export async function buildSessionContext(
                 .limit(1)
                 .single(),
 
-            // Clause positions with clause details from contract_clauses JOIN
-            // NOTE: clause_name, category, description live on contract_clauses, not session_clause_positions
+            // Clause positions (clause_name/category live on contract_clauses, fetched separately below)
             supabase
                 .from('session_clause_positions')
                 .select(`
@@ -233,8 +232,7 @@ export async function buildSessionContext(
                     gap_size, gap_severity, status,
                     customer_weight, provider_weight,
                     is_deal_breaker_customer, is_deal_breaker_provider,
-                    clause_content,
-                    contract_clauses(clause_name, category, description)
+                    clause_content
                 `)
                 .eq('session_id', sessionId)
                 .order('clause_number', { ascending: true }),
@@ -284,10 +282,33 @@ export async function buildSessionContext(
         }
         console.log('[ContextBuilder] Positions loaded:', rawPositions.length)
 
-        // Flatten the joined contract_clauses data into each position row
-        // Supabase returns: { ..., contract_clauses: { clause_name, category, description } }
+        // Fetch clause names/categories from contract_clauses (separate query since no FK join)
+        const clauseIds = rawPositions
+            .map((p: Record<string, unknown>) => p.clause_id as string)
+            .filter(Boolean)
+
+        let clauseDetailsMap: Record<string, { clause_name: string; category: string; description: string }> = {}
+        if (clauseIds.length > 0) {
+            const { data: clauseDetails } = await supabase
+                .from('contract_clauses')
+                .select('clause_id, clause_name, category, description')
+                .in('clause_id', clauseIds)
+
+            if (clauseDetails) {
+                for (const cc of clauseDetails) {
+                    clauseDetailsMap[cc.clause_id as string] = {
+                        clause_name: cc.clause_name as string,
+                        category: cc.category as string,
+                        description: cc.description as string,
+                    }
+                }
+            }
+            console.log('[ContextBuilder] Clause details loaded:', Object.keys(clauseDetailsMap).length, 'of', clauseIds.length)
+        }
+
+        // Merge clause details into position rows
         const positions: Record<string, unknown>[] = rawPositions.map((p: Record<string, unknown>) => {
-            const cc = p.contract_clauses as Record<string, unknown> | null
+            const cc = clauseDetailsMap[p.clause_id as string]
             return {
                 ...p,
                 clause_name: cc?.clause_name || null,
@@ -295,6 +316,7 @@ export async function buildSessionContext(
                 description: cc?.description || null,
             } as Record<string, unknown>
         })
+
         const leverageCalc = leverageResult.data
         const partyMessages = partyMsgResult.data || []
         const positionHistory = posHistResult.data || []
