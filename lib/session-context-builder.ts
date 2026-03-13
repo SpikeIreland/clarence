@@ -223,16 +223,18 @@ export async function buildSessionContext(
                 .limit(1)
                 .single(),
 
-            // Clause positions with clause details + clause content
+            // Clause positions with clause details from contract_clauses JOIN
+            // NOTE: clause_name, category, description live on contract_clauses, not session_clause_positions
             supabase
                 .from('session_clause_positions')
                 .select(`
-                    position_id, clause_id, clause_number, clause_name,
+                    position_id, clause_id, clause_number,
                     customer_position, provider_position,
                     gap_size, gap_severity, status,
                     customer_weight, provider_weight,
                     is_deal_breaker_customer, is_deal_breaker_provider,
-                    category, clause_content
+                    clause_content,
+                    contract_clauses(clause_name, category, description)
                 `)
                 .eq('session_id', sessionId)
                 .order('clause_number', { ascending: true }),
@@ -273,8 +275,26 @@ export async function buildSessionContext(
 
         const cr = crResult.data
         const pb = pbResult.data
-        const positions = posResult.data || []
+        const rawPositions = posResult.data || []
         const chatMessages = chatResult.data || []
+
+        // Log position query result for debugging
+        if (posResult.error) {
+            console.error('[ContextBuilder] Positions query error:', posResult.error.message)
+        }
+        console.log('[ContextBuilder] Positions loaded:', rawPositions.length)
+
+        // Flatten the joined contract_clauses data into each position row
+        // Supabase returns: { ..., contract_clauses: { clause_name, category, description } }
+        const positions: Record<string, unknown>[] = rawPositions.map((p: Record<string, unknown>) => {
+            const cc = p.contract_clauses as Record<string, unknown> | null
+            return {
+                ...p,
+                clause_name: cc?.clause_name || null,
+                category: cc?.category || null,
+                description: cc?.description || null,
+            } as Record<string, unknown>
+        })
         const leverageCalc = leverageResult.data
         const partyMessages = partyMsgResult.data || []
         const positionHistory = posHistResult.data || []
