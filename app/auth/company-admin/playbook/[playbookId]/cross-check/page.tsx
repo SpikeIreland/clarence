@@ -509,6 +509,10 @@ function CrossCheckContent() {
                 const { data } = await supabase.from('company_users').select('company_id').eq('email', user.email).eq('status', 'active').single()
                 companyId = data?.company_id
             }
+            if (!companyId) {
+                const { data } = await supabase.from('companies').select('company_id').limit(1).single()
+                companyId = data?.company_id
+            }
             const isHardcoded = ['paul.lyons67@icloud.com'].includes((user.email || '').toLowerCase())
             if (!isHardcoded && companyId) {
                 const { data } = await supabase.from('company_users').select('role').eq('email', user.email).eq('company_id', companyId).eq('status', 'active').single()
