@@ -769,15 +769,26 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         {p.sourceFileName && <span>{p.sourceFileName}</span>}
                                         <span>{p.rulesExtracted} rules</span>
                                         {['parsed', 'active', 'inactive', 'review_required'].includes(p.status) && p.rulesExtracted > 0 && (
-                                            <button
-                                                onClick={() => handleToggleRules(p.playbookId)}
-                                                className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
-                                            >
-                                                {expandedPlaybookId === p.playbookId ? 'Hide Rules' : 'View Rules'}
-                                                <svg className={`w-3.5 h-3.5 transition-transform ${expandedPlaybookId === p.playbookId ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </button>
+                                            <>
+                                                <button
+                                                    onClick={() => handleToggleRules(p.playbookId)}
+                                                    className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                                                >
+                                                    {expandedPlaybookId === p.playbookId ? 'Hide Rules' : 'View Rules'}
+                                                    <svg className={`w-3.5 h-3.5 transition-transform ${expandedPlaybookId === p.playbookId ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </button>
+                                                <a
+                                                    href={`/auth/company-admin/playbook/${p.playbookId}`}
+                                                    className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                                                >
+                                                    PlaybookIQ Review
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                    </svg>
+                                                </a>
+                                            </>
                                         )}
                                         {p.aiConfidenceScore != null && <span>{Math.round(p.aiConfidenceScore * 100)}% confidence</span>}
                                         <span>{new Date(p.createdAt).toLocaleDateString()}</span>
