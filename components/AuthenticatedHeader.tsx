@@ -120,8 +120,8 @@ const CREATE_MENU_ITEMS = [
     },
     {
         label: 'Quick Create',
-        description: 'Upload and send any contract',
-        href: '/auth/quick-contract/create',
+        description: 'Manage quick contracts',
+        href: '/auth/quick-contract',
         icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -129,8 +129,8 @@ const CREATE_MENU_ITEMS = [
         ),
     },
     {
-        label: 'Contract Create',
-        description: 'Full mediation dashboard',
+        label: 'Contract Studio',
+        description: 'Contract Create & Co-Create',
         href: '/auth/contracts-dashboard',
         icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

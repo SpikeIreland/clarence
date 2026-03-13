@@ -185,6 +185,9 @@ export default function ContractsDashboard() {
   const [editingName, setEditingName] = useState<string>('')
   const [isSavingName, setIsSavingName] = useState(false)
 
+  // Pathway badge lookup (mediation_type per session)
+  const [sessionPathways, setSessionPathways] = useState<Record<string, string>>({})
+
   // Chat overlay state
   const [showChatOverlay, setShowChatOverlay] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -221,7 +224,24 @@ export default function ContractsDashboard() {
       if (response.ok) {
         const data = await response.json()
         console.log('Sessions data received:', data)
-        setSessions(Array.isArray(data) ? data : [])
+        const sessionList = Array.isArray(data) ? data : []
+        setSessions(sessionList)
+
+        // Fetch mediation_type for pathway badges
+        if (sessionList.length > 0) {
+          const ids = sessionList.map((s: Session) => s.sessionId)
+          const { data: pathwayData } = await supabase
+            .from('sessions')
+            .select('session_id, mediation_type')
+            .in('session_id', ids)
+          if (pathwayData) {
+            const map: Record<string, string> = {}
+            pathwayData.forEach((row: { session_id: string; mediation_type: string | null }) => {
+              if (row.mediation_type) map[row.session_id] = row.mediation_type
+            })
+            setSessionPathways(map)
+          }
+        }
       } else {
         console.error('Failed to load sessions:', response.status)
         setSessions([])
@@ -904,14 +924,19 @@ export default function ContractsDashboard() {
       {/* ================================================================== */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        {/* Welcome Banner */}
+        {/* Page Title */}
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 mb-1">
-              Welcome back, {userInfo?.firstName || 'User'}
-            </h1>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-2xl font-bold text-slate-800">
+                Contract Studio
+              </h1>
+              <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                Dashboard
+              </span>
+            </div>
             <p className="text-slate-500 text-sm">
-              {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              Contract Create and Co-Create sessions
             </p>
           </div>
         </div>
@@ -1219,6 +1244,8 @@ export default function ContractsDashboard() {
                   const hasProviders = providerBids.length > 0
                   const readyProviders = providerBids.filter(b => canNegotiateWithProvider(b))
                   const isTraining = session.isTraining || false
+                  const mediationType = sessionPathways[session.sessionId]
+                  const isCoCreate = mediationType === 'co_create'
 
                   return (
                     <div
@@ -1233,6 +1260,11 @@ export default function ContractsDashboard() {
                             <div>
                               <div className="flex items-center gap-2">
                                 {isTraining && <span>🎓</span>}
+                                {!isTraining && (
+                                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isCoCreate ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {isCoCreate ? 'Co-Create' : 'Contract Create'}
+                                  </span>
+                                )}
                                 {editingSessionId === session.sessionId ? (
                                   /* Editing Mode */
                                   <div className="flex items-center gap-2">
