@@ -534,12 +534,13 @@ function CrossCheckContent() {
                 .order('display_order', { ascending: true })
             setRules((rulesData || []) as PlaybookRule[])
 
-            // Load company templates
+            // Load company templates (match company-admin filters)
             const { data: tmplData } = await supabase
                 .from('contract_templates')
                 .select('template_id, template_name, contract_type, clause_count')
                 .eq('company_id', companyId)
-                .eq('is_active', true)
+                .eq('is_public', true)
+                .eq('is_system', false)
                 .order('template_name')
             setTemplates((tmplData || []).map((t: Record<string, unknown>) => ({
                 template_id: t.template_id as string,
