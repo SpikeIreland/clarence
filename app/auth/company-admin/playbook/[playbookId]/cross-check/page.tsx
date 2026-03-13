@@ -52,7 +52,6 @@ interface TemplateClauseRow {
     default_customer_position_override: number | null
     default_provider_position_override: number | null
     clarence_position: number | null
-    is_active: boolean
 }
 
 // ============================================================================
@@ -569,9 +568,8 @@ function CrossCheckContent() {
             const supabase = createClient()
             const { data } = await supabase
                 .from('template_clauses')
-                .select('template_clause_id, clause_name, category_name, default_customer_position_override, default_provider_position_override, clarence_position, is_active')
+                .select('template_clause_id, clause_name, category_name, default_customer_position_override, default_provider_position_override, clarence_position')
                 .eq('template_id', selectedTemplateId)
-                .eq('is_active', true)
                 .order('display_order', { ascending: true })
             setTemplateClauses((data || []) as TemplateClauseRow[])
             setLoadingClauses(false)
