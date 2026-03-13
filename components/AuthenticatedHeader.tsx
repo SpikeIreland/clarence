@@ -106,8 +106,43 @@ const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.Rea
 // SECTION 4: COMPONENT
 // ============================================================================
 
+/** Create dropdown items — pathway dashboards */
+const CREATE_MENU_ITEMS = [
+    {
+        label: 'Choose Pathway',
+        description: 'Guided pathway selection',
+        href: '/auth/create',
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+        ),
+    },
+    {
+        label: 'Quick Create',
+        description: 'Upload and send any contract',
+        href: '/auth/quick-contract/create',
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+        ),
+    },
+    {
+        label: 'Contract Create',
+        description: 'Full mediation dashboard',
+        href: '/auth/contracts-dashboard',
+        icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+        ),
+    },
+]
+
 export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }: AuthenticatedHeaderProps) {
     const [showUserMenu, setShowUserMenu] = useState(false)
+    const [showCreateMenu, setShowCreateMenu] = useState(false)
 
     // ========================================================================
     // SECTION 4A: STYLING HELPERS
@@ -152,18 +187,58 @@ export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }:
 
                         {/* ================================================ */}
                         {/* CENTRE: Navigation Links */}
-                        {/* FA-26: Three items — Create, Templates, Training */}
+                        {/* Create is a dropdown; others are plain links */}
                         {/* ================================================ */}
                         <div className="absolute left-1/2 transform -translate-x-1/2 hidden md:flex items-center gap-1">
-                            {NAV_ITEMS.map((item) => (
-                                <Link
-                                    key={item.key}
-                                    href={item.href}
-                                    className={getNavLinkClass(item.key)}
-                                >
-                                    {item.label}
-                                </Link>
-                            ))}
+                            {NAV_ITEMS.map((item) => {
+                                if (item.key === 'create') {
+                                    return (
+                                        <div key={item.key} className="relative">
+                                            <button
+                                                onClick={() => {
+                                                    setShowCreateMenu(!showCreateMenu)
+                                                    setShowUserMenu(false)
+                                                }}
+                                                className={`${getNavLinkClass(item.key)} flex items-center gap-1`}
+                                            >
+                                                {item.label}
+                                                <svg className={`w-3.5 h-3.5 transition-transform ${showCreateMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+
+                                            {showCreateMenu && (
+                                                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+                                                    {CREATE_MENU_ITEMS.map((menuItem) => (
+                                                        <Link
+                                                            key={menuItem.href}
+                                                            href={menuItem.href}
+                                                            className="flex items-start gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors"
+                                                            onClick={() => setShowCreateMenu(false)}
+                                                        >
+                                                            <span className="text-slate-500 mt-0.5">{menuItem.icon}</span>
+                                                            <div>
+                                                                <div className="text-sm font-medium text-slate-800">{menuItem.label}</div>
+                                                                <div className="text-xs text-slate-500">{menuItem.description}</div>
+                                                            </div>
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                }
+
+                                return (
+                                    <Link
+                                        key={item.key}
+                                        href={item.href}
+                                        className={getNavLinkClass(item.key)}
+                                    >
+                                        {item.label}
+                                    </Link>
+                                )
+                            })}
                         </div>
 
                         {/* ================================================ */}
@@ -176,7 +251,10 @@ export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }:
                             {/* User Dropdown */}
                             <div className="relative">
                                 <button
-                                    onClick={() => setShowUserMenu(!showUserMenu)}
+                                    onClick={() => {
+                                        setShowUserMenu(!showUserMenu)
+                                        setShowCreateMenu(false)
+                                    }}
                                     className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-700 transition-colors"
                                 >
                                     <div className={`w-8 h-8 ${avatarBg} rounded-full flex items-center justify-center`}>
@@ -240,11 +318,14 @@ export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }:
                 </div>
             </header>
 
-            {/* Click outside to close user menu */}
-            {showUserMenu && (
+            {/* Click outside to close menus */}
+            {(showUserMenu || showCreateMenu) && (
                 <div
                     className="fixed inset-0 z-30"
-                    onClick={() => setShowUserMenu(false)}
+                    onClick={() => {
+                        setShowUserMenu(false)
+                        setShowCreateMenu(false)
+                    }}
                 />
             )}
         </>
