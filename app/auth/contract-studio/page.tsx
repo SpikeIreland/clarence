@@ -3368,7 +3368,11 @@ function ContractStudioContent() {
     // ============================================================================
 
     const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause, viewerRole: 'customer' | 'provider') => {
-        if (lastExplainedClauseId === clause.clauseId) return
+        console.log('[ClauseExplain] Called for:', clause.clauseName, 'clauseId:', clause.clauseId, 'lastExplained:', lastExplainedClauseId)
+        if (lastExplainedClauseId === clause.clauseId) {
+            console.log('[ClauseExplain] Skipped — already explained this clause')
+            return
+        }
 
         // TEMPORARILY DISABLED FOR DEMOS - re-enable after demo period
         // startWorking('clause_loading')
@@ -3376,6 +3380,7 @@ function ContractStudioContent() {
         setLastExplainedClauseId(clause.clauseId)
 
         try {
+            console.log('[ClauseExplain] Calling CLARENCE AI for clause_explain...')
             const response = await callClarenceAI(sessionId, 'clause_explain', viewerRole, {
                 clauseId: clause.clauseId,
                 clauseName: clause.clauseName,
@@ -3384,6 +3389,8 @@ function ContractStudioContent() {
                 contractTypeKey: session?.contractTypeKey,
                 initiatorPartyRole: session?.initiatorPartyRole,
             })
+
+            console.log('[ClauseExplain] CLARENCE response:', response?.success, 'hasResponse:', !!response?.response)
 
             if (response?.success && response.response) {
                 const explainMessage: ClauseChatMessage = {
@@ -3403,15 +3410,16 @@ function ContractStudioContent() {
                 // TEMPORARILY DISABLED FOR DEMOS
                 // stopWorking()
             } else {
+                console.error('[ClauseExplain] CLARENCE returned unsuccessful:', response)
                 setWorkingError('CLARENCE could not analyse this clause. Please try selecting it again.')
             }
         } catch (error) {
-            console.error('Failed to explain clause:', error)
+            console.error('[ClauseExplain] Failed to explain clause:', error)
             setWorkingError('Failed to connect to CLARENCE. Please try again.')
         } finally {
             setIsChatLoading(false)
         }
-    }, [lastExplainedClauseId, startWorking, stopWorking, setWorkingError])
+    }, [lastExplainedClauseId, session, startWorking, stopWorking, setWorkingError])
 
     // ========================================================================
     // SECTION 7A: INITIAL LOAD - WITH API VIEWER ROLE DETECTION (V10)
@@ -3724,7 +3732,10 @@ function ContractStudioContent() {
                     isTraining: data.session.isTraining || false,
                     notes: data.session.notes,
                     mediationType: data.session.mediationType,
-                    templateSource: data.session.templateSource
+                    templateSource: data.session.templateSource,
+                    createdAt: data.session.createdAt || null,
+                    contractTypeKey: data.session.contractTypeKey || data.session.contract_type_key || null,
+                    initiatorPartyRole: data.session.initiatorPartyRole || data.session.initiator_party_role || null,
                 }
 
                 // Parse clauses
@@ -5391,14 +5402,28 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
     }
 
     const handleClauseSelect = (clause: ContractClause) => {
+        console.log('[ClauseSelect] Clicked:', clause.clauseName, 'level:', clause.clauseLevel)
+        console.log('[ClauseSelect] Conditions:', {
+            isWorking: workingState.isWorking,
+            hasSession: !!session?.sessionId,
+            sessionStatus,
+            userRole: userInfo?.role,
+        })
+
         // Don't allow clause selection while working
-        if (workingState.isWorking) return
+        if (workingState.isWorking) {
+            console.log('[ClauseSelect] Blocked — workingState.isWorking is true')
+            return
+        }
 
         setSelectedClause(clause)
         setActiveTab('positions')
 
         if (session?.sessionId && (sessionStatus === 'ready' || sessionStatus === 'solo_prep') && userInfo?.role) {
+            console.log('[ClauseSelect] Calling explainClauseWithClarence')
             explainClauseWithClarence(session.sessionId, clause, userInfo.role)
+        } else {
+            console.warn('[ClauseSelect] SKIPPED explainClauseWithClarence — condition failed')
         }
     }
 
