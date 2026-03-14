@@ -2256,6 +2256,9 @@ function ContractStudioContent() {
     // ============================================================================
 
     const [showClauseText, setShowClauseText] = useState(false)
+    const [isDraftEditing, setIsDraftEditing] = useState(false)
+    const [editingDraftText, setEditingDraftText] = useState('')
+    const [savingDraft, setSavingDraft] = useState(false)
     const [showAddSubClauseModal, setShowAddSubClauseModal] = useState(false)
     const [subClauseParent, setSubClauseParent] = useState<ContractClause | null>(null)
     const [newSubClauseName, setNewSubClauseName] = useState('')
@@ -2728,7 +2731,7 @@ function ContractStudioContent() {
                 clauseNumber: c.clause_number || '',
                 clauseName: c.clause_name || 'Unnamed Clause',
                 category: c.category || 'General',
-                description: c.clarence_summary || c.content || '',
+                description: c.clarence_summary || c.description || '',
 
                 // Nesting
                 parentPositionId: c.parent_clause_id || null,
@@ -5710,6 +5713,53 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         }
     }, [session?.sessionId, userInfo?.role, workingState.isWorking, startWorking, stopWorking])
 
+    // ============================================================================
+    // SECTION 8F-2: DRAFT EDITING HANDLERS
+    // ============================================================================
+
+    const handleStartDraftEditing = () => {
+        if (!selectedClause) return
+        setEditingDraftText(selectedClause.clauseContent || '')
+        setIsDraftEditing(true)
+    }
+
+    const handleCancelDraftEditing = () => {
+        setIsDraftEditing(false)
+        setEditingDraftText('')
+    }
+
+    const handleSaveDraft = async () => {
+        if (!selectedClause || !session?.sessionId) return
+
+        setSavingDraft(true)
+        try {
+            const supabase = createClient()
+            const { error: updateError } = await supabase
+                .from('session_clause_positions')
+                .update({ clause_content: editingDraftText })
+                .eq('position_id', selectedClause.positionId)
+
+            if (updateError) {
+                console.error('Draft save error:', updateError)
+                throw updateError
+            }
+
+            // Update local state
+            setClauses(prev => prev.map(c =>
+                c.positionId === selectedClause.positionId
+                    ? { ...c, clauseContent: editingDraftText }
+                    : c
+            ))
+
+            setIsDraftEditing(false)
+            setEditingDraftText('')
+            console.log('[Draft] Saved clause content for', selectedClause.clauseName)
+        } catch (err) {
+            console.error('Save draft error:', err)
+        } finally {
+            setSavingDraft(false)
+        }
+    }
 
     // ============================================================================
     // SECTION 8Y: CLAUSE CONFIRMATION HANDLERS
@@ -8875,29 +8925,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     </div>
                                 )}
 
-                                {/* Clause Text — collapsible toggle (matches QC Studio pattern) */}
-                                {selectedClause.clauseContent && (
-                                    <div className="bg-white rounded-xl border border-slate-200 mb-4">
-                                        <button
-                                            onClick={() => setShowClauseText(!showClauseText)}
-                                            className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-xl"
-                                        >
-                                            <span className="text-sm font-medium text-slate-700">View Full Clause Text</span>
-                                            <svg className={`w-4 h-4 text-slate-400 transition-transform ${showClauseText ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            </svg>
-                                        </button>
-                                        {showClauseText && (
-                                            <div className="px-5 pb-5 border-t border-slate-100">
-                                                <div className="mt-4 p-4 bg-slate-50 rounded-lg">
-                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                                        {selectedClause.clauseContent}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                {/* Clause content moved to Draft tab */}
 
                                 {/* Pre-negotiation info box */}
                                 <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -9335,42 +9363,140 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         {/* ==================== DRAFT TAB ==================== */}
                         {!isSoloPrep && activeTab === 'draft' && selectedClause && (
-                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                <div className="mb-6">
-                                    {/* Header */}
+                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-5 space-y-4">
+
+                                {/* Section 1: Clause Content (from document/template) */}
+                                {selectedClause.clauseContent ? (
+                                    <div className="bg-white rounded-xl border border-slate-200">
+                                        <div className="flex items-center justify-between px-5 py-4">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-slate-700">Draft Clause Language</h3>
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                    Current clause text from the source document
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {isDraftEditing ? (
+                                            /* Editing Mode */
+                                            <div className="px-5 pb-5 space-y-3">
+                                                <textarea
+                                                    value={editingDraftText}
+                                                    onChange={(e) => setEditingDraftText(e.target.value)}
+                                                    className="w-full h-64 p-4 bg-white rounded-lg border-2 border-purple-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 text-sm text-slate-700 font-mono leading-relaxed resize-none transition-colors"
+                                                    placeholder="Enter your modified clause text..."
+                                                />
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-xs text-slate-500">
+                                                        {editingDraftText.length} characters
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={handleCancelDraftEditing}
+                                                            disabled={savingDraft}
+                                                            className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            onClick={handleSaveDraft}
+                                                            disabled={savingDraft || !editingDraftText.trim()}
+                                                            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                                        >
+                                                            {savingDraft ? (
+                                                                <>
+                                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                                    Saving...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                    Save Draft
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            /* Read-Only Mode */
+                                            <div className="px-5 pb-5 space-y-3">
+                                                <div className="p-4 rounded-lg border bg-slate-50 border-slate-200">
+                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+                                                        {selectedClause.clauseContent}
+                                                    </p>
+                                                    <div className="mt-3 pt-3 border-t border-slate-200">
+                                                        <span className="text-xs text-slate-400">
+                                                            {selectedClause.clauseContent.length} characters
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Edit Button */}
+                                                <button
+                                                    onClick={handleStartDraftEditing}
+                                                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                    </svg>
+                                                    Unlock to Edit
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    /* No clause content (Co-Create pathway / no document uploaded) */
+                                    <div className="text-center py-8 text-slate-500">
+                                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <svg className="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-sm font-medium text-slate-600">No document text available</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            This clause was created without a source document. Use the AI draft generator below to create clause language.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Section 2: AI Draft Generator */}
+                                <div className="bg-white rounded-xl border border-slate-200 p-5">
                                     <div className="mb-4">
-                                        <h3 className="text-lg font-semibold text-slate-800">Draft Contract Language</h3>
-                                        <p className="text-sm text-slate-500">
-                                            Generate professional clause language based on agreed positions
+                                        <h3 className="text-sm font-semibold text-slate-700">AI Draft Generator</h3>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            Generate balanced clause language based on current positions
                                         </p>
                                     </div>
 
-                                    {/* Clause Context */}
-                                    <div className="bg-slate-50 rounded-lg p-4 mb-4">
-                                        <div className={`grid ${hasProviderInvited ? 'grid-cols-3' : 'grid-cols-2'} gap-4 text-center`}>
+                                    {/* Position Context */}
+                                    <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                                        <div className={`grid ${hasProviderInvited ? 'grid-cols-3' : 'grid-cols-2'} gap-3 text-center`}>
                                             <div>
-                                                <div className="text-xs text-slate-500 mb-1">Customer Position</div>
-                                                <div className="text-lg font-bold text-emerald-600">
+                                                <div className="text-xs text-slate-500 mb-1">Customer</div>
+                                                <div className="text-base font-bold text-emerald-600">
                                                     {selectedClause.customerPosition ?? '-'}
                                                 </div>
                                             </div>
                                             <div>
-                                                <div className="text-xs text-slate-500 mb-1">CLARENCE Suggests</div>
-                                                <div className="text-lg font-bold text-purple-600">
+                                                <div className="text-xs text-slate-500 mb-1">CLARENCE</div>
+                                                <div className="text-base font-bold text-purple-600">
                                                     {selectedClause.clarenceRecommendation ?? '-'}
                                                 </div>
                                             </div>
                                             {hasProviderInvited && (
                                                 <div>
-                                                    <div className="text-xs text-slate-500 mb-1">Provider Position</div>
-                                                    <div className="text-lg font-bold text-blue-600">
+                                                    <div className="text-xs text-slate-500 mb-1">Provider</div>
+                                                    <div className="text-base font-bold text-blue-600">
                                                         {selectedClause.providerPosition ?? '-'}
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="text-center mt-3 pt-3 border-t border-slate-200">
-                                            <span className={`text-sm font-medium ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
+                                        <div className="text-center mt-2 pt-2 border-t border-slate-200">
+                                            <span className={`text-xs font-medium ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
                                                 selectedClause.gapSize <= 3 ? 'text-amber-600' :
                                                     'text-red-600'
                                                 }`}>
@@ -9383,7 +9509,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <button
                                         onClick={() => generateDraftLanguage(selectedClause)}
                                         disabled={isLoadingDraft}
-                                        className={`w-full py-3 rounded-lg font-medium transition ${isLoadingDraft
+                                        className={`w-full py-2.5 rounded-lg text-sm font-medium transition ${isLoadingDraft
                                             ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                                             : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                             }`}
@@ -9396,69 +9522,50 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         ) : lastDraftedClauseId === selectedClause.clauseId && draftLanguage ? (
                                             'Regenerate Draft'
                                         ) : (
-                                            '⚠️ Generate Balanced Draft'
+                                            'Generate Balanced Draft'
                                         )}
                                     </button>
-                                </div>
 
-                                {/* Draft Output */}
-                                {draftLanguage && lastDraftedClauseId === selectedClause.clauseId && (
-                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
-                                            <span className="text-sm font-medium text-slate-700">
-                                                ⚠️ Balanced Draft Language
-                                            </span>
-                                            <div className="flex gap-2">
+                                    {/* Generated Draft Output */}
+                                    {draftLanguage && lastDraftedClauseId === selectedClause.clauseId && (
+                                        <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+                                            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                                                <span className="text-xs font-medium text-slate-600">
+                                                    AI-Generated Draft
+                                                </span>
                                                 <button
                                                     onClick={() => {
                                                         navigator.clipboard.writeText(draftLanguage)
-                                                        alert('Draft copied to clipboard')
                                                     }}
-                                                    className="px-3 py-1 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition"
+                                                    className="px-2 py-1 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition"
                                                 >
-                                                    📋 Copy
+                                                    Copy
                                                 </button>
                                             </div>
-                                        </div>
-                                        <div className="p-4 bg-white">
-                                            <div
-                                                className="prose prose-sm max-w-none text-slate-700"
-                                                style={{ fontFamily: 'Georgia, serif', lineHeight: '1.7' }}
-                                            >
-                                                <p className="whitespace-pre-wrap">{draftLanguage}</p>
+                                            <div className="p-4 bg-white">
+                                                <p
+                                                    className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed"
+                                                    style={{ fontFamily: 'Georgia, serif', lineHeight: '1.7' }}
+                                                >
+                                                    {draftLanguage}
+                                                </p>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* No draft yet */}
-                                {(!draftLanguage || lastDraftedClauseId !== selectedClause.clauseId) && !isLoadingDraft && (
-                                    <div className="text-center py-6 text-slate-500">
-                                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                            <span className="text-2xl">📄</span>
-                                        </div>
-                                        <p>Click &quot;Generate Balanced Draft&quot; to create contract text</p>
-                                        <p className="text-sm text-slate-400 mt-1">
-                                            CLARENCE will draft fair, balanced language reflecting a compromise position
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* Warning for high gap */}
-                                {selectedClause.gapSize > 3 && (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
-                                        <div className="flex items-start gap-2">
-                                            <span className="text-amber-500">⚠</span>
-                                            <div>
-                                                <p className="text-sm font-medium text-amber-800">Positions Not Yet Aligned</p>
-                                                <p className="text-xs text-amber-600 mt-1">
-                                                    There&apos;s a significant gap ({selectedClause.gapSize.toFixed(1)} points) between parties.
+                                    {/* Warning for high gap */}
+                                    {selectedClause.gapSize > 3 && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+                                            <div className="flex items-start gap-2">
+                                                <span className="text-amber-500 text-xs">!</span>
+                                                <p className="text-xs text-amber-700">
+                                                    Significant gap ({selectedClause.gapSize.toFixed(1)} points) between parties.
                                                     Consider negotiating positions closer before finalising draft language.
                                                 </p>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         )}
 
