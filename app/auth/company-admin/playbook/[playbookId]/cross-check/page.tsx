@@ -45,6 +45,9 @@ interface TemplateSummary {
     clause_count: number
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RawTemplateClause = Record<string, any>
+
 interface TemplateClauseRow {
     template_clause_id: string
     clause_name: string
@@ -52,6 +55,17 @@ interface TemplateClauseRow {
     default_customer_position_override: number | null
     default_provider_position_override: number | null
     clarence_position: number | null
+}
+
+function normaliseClauseRow(raw: RawTemplateClause): TemplateClauseRow {
+    return {
+        template_clause_id: raw.template_clause_id || raw.id || '',
+        clause_name: raw.clause_name || 'Untitled',
+        category_name: raw.category_name || raw.category || 'Other',
+        default_customer_position_override: raw.default_customer_position_override ?? null,
+        default_provider_position_override: raw.default_provider_position_override ?? null,
+        clarence_position: raw.clarence_position ?? null,
+    }
 }
 
 // ============================================================================
@@ -568,10 +582,10 @@ function CrossCheckContent() {
             const supabase = createClient()
             const { data } = await supabase
                 .from('template_clauses')
-                .select('template_clause_id, clause_name, category_name, default_customer_position_override, default_provider_position_override, clarence_position')
+                .select('*')
                 .eq('template_id', selectedTemplateId)
                 .order('display_order', { ascending: true })
-            setTemplateClauses((data || []) as TemplateClauseRow[])
+            setTemplateClauses((data || []).map(normaliseClauseRow))
             setLoadingClauses(false)
             // Expand all categories by default when template loads
             if (data && data.length > 0) {
