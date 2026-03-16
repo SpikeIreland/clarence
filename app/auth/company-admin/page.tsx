@@ -1280,21 +1280,21 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                 <div className="space-y-3">
                     {templates.map((template) => (
                         <div key={template.templateId} className={`p-4 rounded-xl border ${template.isActive ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-200'}`}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${template.isActive ? 'bg-indigo-100' : 'bg-slate-100'}`}>
+                            <div className="flex items-start justify-between gap-4 flex-wrap">
+                                <div className="flex items-center gap-4 min-w-0">
+                                    <div className={`w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-xl ${template.isActive ? 'bg-indigo-100' : 'bg-slate-100'}`}>
                                         {CONTRACT_TYPE_ICONS[template.contractType] || '📄'}
                                     </div>
-                                    <div>
-                                        <p className="font-medium text-slate-800">{template.templateName}</p>
-                                        <div className="flex items-center gap-2 mt-1">
+                                    <div className="min-w-0">
+                                        <p className="font-medium text-slate-800 truncate">{template.templateName}</p>
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                                             {getStatusBadge(template)}
                                             <span className="text-xs text-slate-500">{template.clauseCount} clauses</span>
                                             {template.timesUsed > 0 && <span className="text-xs text-slate-500">Used {template.timesUsed}x</span>}
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     {template.status === 'ready' && template.clauseCount > 0 && (
                                         <button
                                             onClick={() => handleEditTemplate(template)}
