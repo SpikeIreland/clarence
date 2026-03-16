@@ -76,6 +76,7 @@ export default function WhoIsClarencePage() {
                 powerful, but because it is fair. Not because it persuades, but
                 because it reveals.&rdquo;
               </p>
+              <p className="text-sm text-slate-400 mt-2">— The Clarence Charter</p>
             </div>
           </div>
         </div>
@@ -135,6 +136,7 @@ export default function WhoIsClarencePage() {
                 drawn-out red-lining — all of which erode trust before a
                 relationship has even begun.&rdquo;
               </p>
+              <p className="text-sm text-slate-400 mt-2">— The Clarence Charter</p>
             </div>
 
             <p className="text-2xl font-bold text-slate-800">

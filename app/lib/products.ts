@@ -16,7 +16,7 @@ export interface Product {
   fullName: string
   tagline: string
   description: string
-  category: 'creation' | 'document' | 'negotiation' | 'operations' | 'coming-soon'
+  category: 'creation' | 'document' | 'negotiation' | 'protect' | 'operations' | 'coming-soon'
   icon: string
   color: 'emerald' | 'slate' | 'violet' | 'amber' | 'blue' | 'teal' | 'purple'
   status: 'available' | 'coming-soon'
@@ -122,7 +122,7 @@ export const products: Product[] = [
     category: 'document',
     icon: 'FileCheck',
     color: 'blue',
-    status: 'coming-soon',
+    status: 'available',
     features: [
       'Automated document analysis',
       'Fairness score targeting',
@@ -149,7 +149,7 @@ export const products: Product[] = [
     category: 'document',
     icon: 'Brain',
     color: 'blue',
-    status: 'coming-soon',
+    status: 'available',
     features: [
       'Expert-level contract guidance',
       'Clause interpretation and explanation',
@@ -223,6 +223,36 @@ export const products: Product[] = [
       'Testing strategies before going live',
     ],
     journeyPhase: 'negotiate',
+  },
+
+  // ── PROTECT ───────────────────────────────────────────────────────────
+  {
+    slug: 'protect',
+    name: 'Protect',
+    fullName: 'Clarence Protect',
+    tagline: 'Never sign blind',
+    description:
+      'Playbooks and risk management for every contract pathway. Load an existing playbook or let Clarence generate one automatically — then edit, refine, and activate. Clarence weaves your playbook rules and approval workflows into Quick Create, Contract Create, and Co-Create so every negotiation stays within your boundaries.',
+    category: 'protect',
+    icon: 'Shield',
+    color: 'slate',
+    status: 'available',
+    features: [
+      'Upload or auto-generate playbooks from your documents',
+      'Fully editable rules with confidence scoring',
+      'Real-time compliance monitoring across all three pathways',
+      'Red line breach alerts and escalation triggers',
+      'Pre-negotiation template cross-check scoring',
+      'Approval workflows woven into negotiation flow',
+      'Category-by-category risk analysis',
+    ],
+    useCases: [
+      'Codifying negotiation boundaries for consistent governance',
+      'Pre-screening contracts before negotiation begins',
+      'Enforcing approval chains during live negotiations',
+      'Onboarding new negotiators to company standards',
+    ],
+    journeyPhase: 'support',
   },
 
   // ── OPERATIONS ─────────────────────────────────────────────────────────
@@ -344,6 +374,7 @@ export const productCategories = [
   { key: 'creation' as const, label: 'Contract Creation' },
   { key: 'document' as const, label: 'Document & Knowledge' },
   { key: 'negotiation' as const, label: 'Negotiation & Training' },
+  { key: 'protect' as const, label: 'Risk & Compliance' },
   { key: 'operations' as const, label: 'Operations' },
   { key: 'coming-soon' as const, label: 'Coming Soon' },
 ]

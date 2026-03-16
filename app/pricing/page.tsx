@@ -223,8 +223,9 @@ export default function PricingPage() {
                   <TableRow label="Co-Create" starter={false} pro={true} enterprise={true} />
                   <TableRow label="Negotiate" starter="Limited" pro={true} enterprise={true} />
                   <TableRow label="Training Studio" starter={true} pro={true} enterprise={true} />
-                  <TableRow label="Document Preparation" starter={false} pro={true} enterprise={true} note="Coming soon" />
-                  <TableRow label="ContractKnowledge" starter={false} pro={true} enterprise={true} note="Coming soon" />
+                  <TableRow label="Document Preparation" starter={false} pro={true} enterprise={true} />
+                  <TableRow label="ContractKnowledge" starter={false} pro={true} enterprise={true} />
+                  <TableRow label="Protect (Playbooks)" starter={false} pro={true} enterprise={true} />
                   <TableRow label="Tendering" starter={false} pro={false} enterprise={true} note="Coming soon" />
                   <TableRow label="Sign" starter={false} pro={true} enterprise={true} note="Coming soon" />
                 </tbody>
