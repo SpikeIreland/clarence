@@ -6,6 +6,7 @@ import { eventLogger } from '@/lib/eventLogger'
 import { normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compliance'
 import jsPDF from 'jspdf'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import InsightsTab from './components/InsightsTab'
 
 
 // ============================================================================
@@ -85,7 +86,7 @@ interface CompanyTemplate {
     sourceFileName?: string
 }
 
-type AdminTab = 'playbooks' | 'templates' | 'training' | 'users' | 'audit'
+type AdminTab = 'insights' | 'playbooks' | 'templates' | 'training' | 'users' | 'audit'
 
 // ============================================================================
 // SECTION 2: API CONFIGURATION
@@ -1569,7 +1570,7 @@ function CompanyAdminContent() {
     const [loading, setLoading] = useState(true)
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [companyName, setCompanyName] = useState('')
-    const initialTab = (searchParams.get('tab') as AdminTab) || 'templates'
+    const initialTab = (searchParams.get('tab') as AdminTab) || 'insights'
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab)
     const [isAdmin, setIsAdmin] = useState(false)
     const [playbooks, setPlaybooks] = useState<Playbook[]>([])
@@ -2190,6 +2191,7 @@ function CompanyAdminContent() {
     const pendingCount = { training: trainingUsers.filter(u => u.status === 'pending').length, users: companyUsers.filter(u => u.status === 'invited').length }
 
     const navTabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+        { id: 'insights', label: 'Insights', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
         { id: 'training', label: 'Training Access', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>, badge: pendingCount.training > 0 ? pendingCount.training : undefined },
         { id: 'users', label: 'Users', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>, badge: pendingCount.users > 0 ? pendingCount.users : undefined },
@@ -2256,13 +2258,17 @@ function CompanyAdminContent() {
                 {/* CENTER PANEL: Tab Content */}
                 <div className="flex-1 overflow-y-auto bg-slate-50">
                     <div className="max-w-5xl mx-auto py-6 px-6">
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-                            {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
-                            {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
-                            {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
-                            {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
-                            {activeTab === 'audit' && <AuditLogTab />}
-                        </div>
+                        {activeTab === 'insights' ? (
+                            <InsightsTab playbooks={playbooks} templates={companyTemplates} trainingUsers={trainingUsers} companyUsers={companyUsers} companyId={userInfo?.companyId || ''} />
+                        ) : (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                                {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
+                                {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
+                                {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
+                                {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
+                                {activeTab === 'audit' && <AuditLogTab />}
+                            </div>
+                        )}
                     </div>
                 </div>
 
