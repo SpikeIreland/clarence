@@ -1581,6 +1581,14 @@ function CompanyAdminContent() {
     const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([])
     const [usersLoading, setUsersLoading] = useState(false)
 
+    // Chat panel state
+    const [chatMessages, setChatMessages] = useState<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: Date }[]>([
+        { id: 'welcome', role: 'assistant', content: 'Welcome to Company Admin. I can help you with template management, playbook configuration, user access, and training setup. What would you like to know?', timestamp: new Date() }
+    ])
+    const [chatInput, setChatInput] = useState('')
+    const [chatLoading, setChatLoading] = useState(false)
+    const chatEndRef = useRef<HTMLDivElement>(null)
+
     const checkAuth = useCallback(async (): Promise<UserInfo | null> => {
         try {
             const supabase = createClient()
@@ -2129,6 +2137,33 @@ function CompanyAdminContent() {
         if (id && userInfo?.companyId) { const supabase = createClient(); await supabase.from('company_users').update({ invitation_sent: true, invitation_sent_at: new Date().toISOString() }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
     }
 
+    const sendAdminChatMessage = useCallback(async () => {
+        const msg = chatInput.trim()
+        if (!msg || chatLoading) return
+        setChatMessages(prev => [...prev, { id: `user-${Date.now()}`, role: 'user', content: msg, timestamp: new Date() }])
+        setChatInput('')
+        setChatLoading(true)
+        try {
+            const res = await fetch('/api/n8n/clarence-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: msg,
+                    context: 'company_admin',
+                    viewerUserId: userInfo?.userId,
+                    viewerCompanyId: userInfo?.companyId,
+                    dashboardData: { activeTab, templateCount: companyTemplates.length, playbookCount: playbooks.length, userCount: companyUsers.length, trainingUserCount: trainingUsers.length }
+                })
+            })
+            const data = res.ok ? await res.json() : null
+            setChatMessages(prev => [...prev, { id: `asst-${Date.now()}`, role: 'assistant', content: data?.response || data?.message || "I'm here to help with company administration. Could you rephrase your question?", timestamp: new Date() }])
+        } catch {
+            setChatMessages(prev => [...prev, { id: `asst-${Date.now()}`, role: 'assistant', content: "I'm having trouble connecting right now. Please try again.", timestamp: new Date() }])
+        } finally { setChatLoading(false) }
+    }, [chatInput, chatLoading, activeTab, userInfo, companyTemplates.length, playbooks.length, companyUsers.length, trainingUsers.length])
+
+    useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages])
+
     useEffect(() => {
         const init = async () => {
             console.log('=== INIT COMPANY ADMIN ===')
@@ -2154,33 +2189,151 @@ function CompanyAdminContent() {
 
     const pendingCount = { training: trainingUsers.filter(u => u.status === 'pending').length, users: companyUsers.filter(u => u.status === 'invited').length }
 
+    const navTabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+        { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+        { id: 'training', label: 'Training Access', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>, badge: pendingCount.training > 0 ? pendingCount.training : undefined },
+        { id: 'users', label: 'Users', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>, badge: pendingCount.users > 0 ? pendingCount.users : undefined },
+        { id: 'audit', label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
+        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> }
+    ]
+
     return (
-        <div className="min-h-screen bg-slate-100">
-            <header className="bg-white border-b border-slate-200 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => router.push('/auth/contracts-dashboard')} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg></button>
-                            <div><h1 className="text-xl font-bold text-slate-800">Company Admin</h1><p className="text-sm text-slate-500">{companyName}</p></div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <FeedbackButton position="header" />
-                            <div className="text-right"><p className="text-sm font-medium text-slate-700">{userInfo?.firstName} {userInfo?.lastName}</p><p className="text-xs text-slate-500">{userInfo?.email}</p></div>
-                            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center"><span className="text-white font-bold">{userInfo?.firstName?.[0] || 'A'}</span></div>
-                        </div>
+        <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
+            {/* Indigo Banner */}
+            <header className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => router.push('/auth/contracts-dashboard')} className="p-2 text-indigo-200 hover:text-white hover:bg-indigo-700 rounded-lg transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                    </button>
+                    <div className="h-6 w-px bg-indigo-400"></div>
+                    <div>
+                        <h1 className="text-lg font-bold text-white">Company Admin</h1>
+                        <p className="text-sm text-indigo-200">{companyName}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <FeedbackButton position="header" />
+                    <div className="text-right">
+                        <p className="text-sm font-medium text-white">{userInfo?.firstName} {userInfo?.lastName}</p>
+                        <p className="text-xs text-indigo-200">{userInfo?.email}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-indigo-800 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold">{userInfo?.firstName?.[0] || 'A'}</span>
                     </div>
                 </div>
             </header>
-            <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} pendingCount={pendingCount} />
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-                    {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
-                    {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
-                    {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
-                    {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
-                    {activeTab === 'audit' && <AuditLogTab />}
+
+            {/* Three-Panel Body */}
+            <div className="flex flex-1 overflow-hidden min-h-0">
+
+                {/* LEFT PANEL: Navigation */}
+                <div className="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
+                    <div className="p-4 border-b border-slate-200 bg-gradient-to-b from-indigo-50 to-white">
+                        <h2 className="text-sm font-semibold text-indigo-800 uppercase tracking-wider">Administration</h2>
+                        <p className="text-xs text-slate-500 mt-1">Manage your company settings</p>
+                    </div>
+                    <nav className="flex-1 py-2">
+                        {navTabs.map((tab) => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                                className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all border-l-[3px] ${
+                                    activeTab === tab.id
+                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-600'
+                                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-transparent'
+                                }`}>
+                                <span className={activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400'}>{tab.icon}</span>
+                                <span className="flex-1 text-left">{tab.label}</span>
+                                {tab.badge && tab.badge > 0 && (
+                                    <span className="px-2 py-0.5 text-xs font-bold bg-amber-500 text-white rounded-full">{tab.badge}</span>
+                                )}
+                            </button>
+                        ))}
+                    </nav>
+                    <div className="p-4 border-t border-slate-200 bg-slate-50">
+                        <p className="text-xs text-slate-400">{companyName}</p>
+                    </div>
                 </div>
-            </main>
+
+                {/* CENTER PANEL: Tab Content */}
+                <div className="flex-1 overflow-y-auto bg-slate-50">
+                    <div className="max-w-5xl mx-auto py-6 px-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                            {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
+                            {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
+                            {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
+                            {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
+                            {activeTab === 'audit' && <AuditLogTab />}
+                        </div>
+                    </div>
+                </div>
+
+                {/* RIGHT PANEL: Clarence Chat */}
+                <div className="w-80 flex-shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden min-h-0">
+                    {/* Chat Header */}
+                    <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-white flex-shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-md">
+                                <span className="text-white font-bold text-sm">C</span>
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-slate-800">CLARENCE</h3>
+                                <p className="text-xs text-slate-500">Admin Assistant</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Chat Messages */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+                        {chatMessages.map((message) => (
+                            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                                    message.role === 'user'
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                    <p className={`text-xs mt-1.5 ${message.role === 'user' ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                        {chatLoading && (
+                            <div className="flex justify-start">
+                                <div className="bg-slate-100 rounded-2xl px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Chat Input */}
+                    <div className="p-4 border-t border-slate-200 flex-shrink-0">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendAdminChatMessage()}
+                                placeholder="Ask about admin tasks..."
+                                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                            <button
+                                onClick={sendAdminChatMessage}
+                                disabled={!chatInput.trim() || chatLoading}
+                                className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-lg transition-colors"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2 text-center">Press Enter to send</p>
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }
