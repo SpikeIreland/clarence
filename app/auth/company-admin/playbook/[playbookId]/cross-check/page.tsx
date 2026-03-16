@@ -632,12 +632,25 @@ function CrossCheckContent() {
         }))
     }, [rules])
 
+    // Compute gap counts to match what GapAnalysis displays
+    const gapCount = useMemo(() => {
+        if (!compliance) return 0
+        const uncoveredRules = rules.filter(r =>
+            compliance.unmatchedCategories.includes(normaliseCategory(r.category))
+        ).length
+        const playbookCategories = new Set(rules.map(r => normaliseCategory(r.category)))
+        const unguidedClauses = templateClauses.filter(tc =>
+            !playbookCategories.has(normaliseCategory(tc.category_name || ''))
+        ).length
+        return uncoveredRules + unguidedClauses
+    }, [compliance, rules, templateClauses])
+
     if (loading) return <PlaybookIQLoading />
     if (!playbook) return null
 
     const tabs = [
         { id: 'categories' as const, label: 'Categories', count: compliance?.categories.length },
-        { id: 'gaps' as const, label: 'Gaps', count: compliance ? compliance.unmatchedCategories.length : 0 },
+        { id: 'gaps' as const, label: 'Gaps', count: gapCount },
         { id: 'redlines' as const, label: 'Red Lines', count: compliance?.redLineBreaches },
         { id: 'flexibility' as const, label: 'Flexibility', count: compliance?.flexibility.length },
     ]
