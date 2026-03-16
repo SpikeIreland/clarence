@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
-import { PlaybookRule, PlaybookRangeContext, normaliseCategory, getCategoryDisplayName, getEffectiveRangeContext, translateRulePosition } from '@/lib/playbook-compliance'
+import { normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compliance'
 import jsPDF from 'jspdf'
 import FeedbackButton from '@/app/components/FeedbackButton'
 
@@ -197,131 +197,6 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const menuRef = useRef<HTMLDivElement>(null)
     const renameInputRef = useRef<HTMLInputElement>(null)
 
-    // --- Rules viewer state ---
-    const [expandedPlaybookId, setExpandedPlaybookId] = useState<string | null>(null)
-    const [loadedRules, setLoadedRules] = useState<Record<string, PlaybookRule[]>>({})
-    const [rulesLoading, setRulesLoading] = useState<string | null>(null)
-    const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
-
-    // --- Rule editing state ---
-    const [editingRule, setEditingRule] = useState<PlaybookRule | null>(null)
-    const [editDraft, setEditDraft] = useState<Partial<PlaybookRule>>({})
-    const [savingRule, setSavingRule] = useState(false)
-    const [saveError, setSaveError] = useState<string | null>(null)
-
-    const handleEditRule = (rule: PlaybookRule) => {
-        setEditingRule(rule)
-        setEditDraft({
-            ideal_position: rule.ideal_position,
-            minimum_position: rule.minimum_position,
-            maximum_position: rule.maximum_position,
-            fallback_position: rule.fallback_position,
-            importance_level: rule.importance_level,
-            is_deal_breaker: rule.is_deal_breaker,
-            is_non_negotiable: rule.is_non_negotiable,
-            rationale: rule.rationale,
-            negotiation_tips: rule.negotiation_tips,
-            escalation_trigger: rule.escalation_trigger,
-            escalation_contact: rule.escalation_contact,
-            requires_approval_below: rule.requires_approval_below,
-            range_context: rule.range_context ? { ...rule.range_context } : null,
-        })
-        setSaveError(null)
-    }
-
-    const handleSaveRule = async () => {
-        if (!editingRule) return
-        setSavingRule(true)
-        setSaveError(null)
-        try {
-            const response = await fetch(`/api/playbooks/${editingRule.playbook_id}/rules/${editingRule.rule_id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(editDraft)
-            })
-            if (!response.ok) {
-                const errData = await response.json()
-                throw new Error(errData.error || 'Failed to save')
-            }
-            const { rule: updatedRule } = await response.json()
-            // Update local state
-            setLoadedRules(prev => {
-                const playbookRules = prev[editingRule.playbook_id] || []
-                return {
-                    ...prev,
-                    [editingRule.playbook_id]: playbookRules.map(r =>
-                        r.rule_id === editingRule.rule_id ? { ...r, ...updatedRule } : r
-                    )
-                }
-            })
-            setEditingRule(null)
-            setEditDraft({})
-        } catch (e) {
-            setSaveError(e instanceof Error ? e.message : 'Save failed')
-        } finally {
-            setSavingRule(false)
-        }
-    }
-
-    const getQualityFlags = (rule: PlaybookRule): string[] => {
-        if (!rule.quality_flags) return []
-        if (Array.isArray(rule.quality_flags)) return rule.quality_flags
-        if (typeof rule.quality_flags === 'string') {
-            try { return JSON.parse(rule.quality_flags) } catch { return [] }
-        }
-        return []
-    }
-
-    const qualityFlagLabel = (flag: string): string => {
-        const labels: Record<string, string> = {
-            duplicate_range_in_category: 'Duplicate range in category',
-            mixed_value_types: 'Mixed value types in scale',
-            duplicate_positions_in_category: 'Duplicate positions in category',
-            missing_range_context: 'Missing range context',
-            non_monotonic_scale: 'Non-monotonic scale values',
-        }
-        return labels[flag] || flag
-    }
-
-    const handleToggleRules = async (playbookId: string) => {
-        if (expandedPlaybookId === playbookId) {
-            setExpandedPlaybookId(null)
-            setExpandedCategory(null)
-            return
-        }
-        setExpandedPlaybookId(playbookId)
-        setExpandedCategory(null)
-
-        if (loadedRules[playbookId]) return
-
-        setRulesLoading(playbookId)
-        try {
-            const supabase = createClient()
-            const { data, error } = await supabase
-                .from('playbook_rules')
-                .select('*')
-                .eq('playbook_id', playbookId)
-                .eq('is_active', true)
-            if (error) throw error
-            setLoadedRules(prev => ({ ...prev, [playbookId]: (data || []) as PlaybookRule[] }))
-        } catch (e) {
-            console.error('Failed to load playbook rules:', e)
-        } finally {
-            setRulesLoading(null)
-        }
-    }
-
-    const groupRulesByCategory = (rules: PlaybookRule[]) => {
-        const groups = new Map<string, { displayName: string; rules: PlaybookRule[] }>()
-        for (const rule of rules) {
-            const normCat = normaliseCategory(rule.category)
-            if (!groups.has(normCat)) {
-                groups.set(normCat, { displayName: getCategoryDisplayName(normCat), rules: [] })
-            }
-            groups.get(normCat)!.rules.push(rule)
-        }
-        return Array.from(groups.entries()).sort((a, b) => a[1].displayName.localeCompare(b[1].displayName))
-    }
 
     // --- Observability: Log tab loaded ---
     useEffect(() => {
@@ -459,107 +334,6 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }
 
-    // Visual position bar for each playbook rule
-    const RulePositionBar = ({ rule }: { rule: PlaybookRule }) => {
-        const toPercent = (val: number) => ((val - 1) / 9) * 100
-        const rangeCtx = getEffectiveRangeContext(rule)
-        const label = (pos: number) => translateRulePosition(rule, pos)
-        const idealLabel = label(rule.ideal_position)
-        const minLabel = label(rule.minimum_position)
-        return (
-            <div className="mt-2 mb-1">
-                {/* Range context unit badge + info icon */}
-                <div className="flex items-center gap-1.5 mb-1">
-                    {rangeCtx && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-medium bg-indigo-50 text-indigo-600 rounded border border-indigo-100">
-                            {rangeCtx.range_unit || rangeCtx.value_type}
-                        </span>
-                    )}
-                    {rangeCtx?.source === 'inferred' && (
-                        <span className="text-[9px] text-slate-400 italic">typical range</span>
-                    )}
-                    {/* Info tooltip */}
-                    <div className="relative group/info ml-auto">
-                        <div className="w-4 h-4 rounded-full bg-slate-200 hover:bg-indigo-100 flex items-center justify-center cursor-help transition-colors">
-                            <span className="text-[9px] font-bold text-slate-500 group-hover/info:text-indigo-600">i</span>
-                        </div>
-                        <div className="absolute right-0 top-5 w-72 p-3 bg-white rounded-lg shadow-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed z-50 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150">
-                            <p className="font-semibold text-slate-800 mb-1.5">How to read this rule</p>
-                            <div className="space-y-1.5">
-                                <p><span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-600 align-middle mr-1"></span><b>Purple circle</b> — Ideal (preferred) position{idealLabel ? `: ${idealLabel}` : ''}</p>
-                                <p><span className="inline-block w-6 h-2 rounded bg-blue-100 border border-blue-200 align-middle mr-1"></span><b>Blue band</b> — Acceptable range ({minLabel || rule.minimum_position} to {label(rule.maximum_position) || rule.maximum_position})</p>
-                                <p><span className="inline-block w-1.5 h-2.5 rounded-full bg-slate-400 align-middle mr-1"></span><b>Grey dot</b> — Fallback position if negotiation stalls</p>
-                                {rule.requires_approval_below != null && (
-                                    <p><span className="inline-block w-0.5 h-3 border-l-2 border-dashed border-red-400 align-middle mr-1"></span><b>Red line</b> — Below this requires escalation approval</p>
-                                )}
-                            </div>
-                            {rangeCtx && (
-                                <div className="mt-2 pt-2 border-t border-slate-100">
-                                    <p className="text-slate-500">The 1–10 scale represents <b>{rangeCtx.range_unit || rangeCtx.value_type}</b>. Position 1 ({label(1) || '1'}) favours the providing party; position 10 ({label(10) || '10'}) favours the protected party.</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                {/* Position bar */}
-                <div className="relative h-6 w-full">
-                    {/* Full 1-10 track */}
-                    <div className="absolute top-2.5 left-0 right-0 h-1.5 bg-slate-100 rounded-full" />
-                    {/* Acceptable range band (min → max) */}
-                    <div className="absolute top-2 h-2.5 bg-blue-100 rounded-full border border-blue-200"
-                        style={{
-                            left: `${toPercent(rule.minimum_position)}%`,
-                            width: `${toPercent(rule.maximum_position) - toPercent(rule.minimum_position)}%`
-                        }} />
-                    {/* Escalation threshold (red dashed line) */}
-                    {rule.requires_approval_below != null && (
-                        <div className="absolute top-1 w-px h-4 border-l-2 border-dashed border-red-400"
-                            style={{ left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
-                    )}
-                    {/* Fallback position marker */}
-                    <div className="absolute top-2 w-1 h-2.5 bg-slate-400 rounded-full"
-                        style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }} />
-                    {/* Ideal position marker (prominent) */}
-                    <div className="absolute top-0.5 w-5 h-5 rounded-full bg-purple-600 border-2 border-white shadow-sm flex items-center justify-center"
-                        style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
-                        <span className="text-[8px] font-bold text-white">{rule.ideal_position}</span>
-                    </div>
-                </div>
-                {/* Scale labels — real-world if available, numeric fallback */}
-                {rangeCtx?.scale_points?.length ? (
-                    <div className="flex justify-between text-[9px] px-0.5 -mt-0.5">
-                        <span className="text-indigo-500 font-medium">{label(1) || '1'}</span>
-                        <span className="text-indigo-500 font-medium">{label(5) || '5'}</span>
-                        <span className="text-indigo-500 font-medium">{label(10) || '10'}</span>
-                    </div>
-                ) : (
-                    <div className="flex justify-between text-[9px] text-slate-300 px-0.5 -mt-0.5">
-                        <span>1</span><span>5</span><span>10</span>
-                    </div>
-                )}
-                {/* Metric chips — enhanced with real-world values */}
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
-                        Ideal: {label(rule.ideal_position) ? `${label(rule.ideal_position)} (${rule.ideal_position})` : rule.ideal_position}
-                    </span>
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 rounded">
-                        Range: {label(rule.minimum_position) || rule.minimum_position}–{label(rule.maximum_position) || rule.maximum_position}
-                    </span>
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
-                        Fallback: {label(rule.fallback_position) || rule.fallback_position}
-                    </span>
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 rounded">
-                        Importance: {rule.importance_level}/10
-                    </span>
-                    {rule.requires_approval_below != null && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-50 text-red-600 rounded">
-                            Escalate &lt;{label(rule.requires_approval_below) || rule.requires_approval_below}{rule.escalation_contact ? ` → ${rule.escalation_contact}` : ''}
-                        </span>
-                    )}
-                </div>
-            </div>
-        )
-    }
 
     const getStatusBadge = (status: Playbook['status'], isActive: boolean) => {
         if (isActive) return <span className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Active</span>
@@ -777,26 +551,15 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         {p.sourceFileName && <span>{p.sourceFileName}</span>}
                                         <span>{p.rulesExtracted} rules</span>
                                         {['parsed', 'active', 'inactive', 'review_required'].includes(p.status) && p.rulesExtracted > 0 && (
-                                            <>
-                                                <button
-                                                    onClick={() => handleToggleRules(p.playbookId)}
-                                                    className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
-                                                >
-                                                    {expandedPlaybookId === p.playbookId ? 'Hide Rules' : 'View Rules'}
-                                                    <svg className={`w-3.5 h-3.5 transition-transform ${expandedPlaybookId === p.playbookId ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                    </svg>
-                                                </button>
-                                                <a
-                                                    href={`/auth/company-admin/playbook/${p.playbookId}`}
-                                                    className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
-                                                >
-                                                    PlaybookIQ Review
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                                    </svg>
-                                                </a>
-                                            </>
+                                            <a
+                                                href={`/auth/company-admin/playbook/${p.playbookId}`}
+                                                className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                                            >
+                                                PlaybookIQ
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </a>
                                         )}
                                         {p.aiConfidenceScore != null && <span>{Math.round(p.aiConfidenceScore * 100)}% confidence</span>}
                                         <span>{new Date(p.createdAt).toLocaleDateString()}</span>
@@ -886,331 +649,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                 </div>
                             </div>
 
-                            {/* Expandable Rules Panel */}
-                            {expandedPlaybookId === p.playbookId && (
-                                <div className="mt-3 bg-slate-50 rounded-lg border border-slate-200 p-4">
-                                    {rulesLoading === p.playbookId ? (
-                                        <div className="flex items-center justify-center py-6">
-                                            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-3"></div>
-                                            <span className="text-sm text-slate-500">Loading rules...</span>
-                                        </div>
-                                    ) : !loadedRules[p.playbookId] || loadedRules[p.playbookId].length === 0 ? (
-                                        <p className="text-sm text-slate-500 text-center py-4">No rules found for this playbook.</p>
-                                    ) : (
-                                        <div className="space-y-1.5">
-                                            {groupRulesByCategory(loadedRules[p.playbookId]).map(([normCat, group]) => {
-                                                const isOpen = expandedCategory === `${p.playbookId}:${normCat}`
-                                                return (
-                                                    <div key={normCat} className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                                                        <button
-                                                            onClick={() => setExpandedCategory(isOpen ? null : `${p.playbookId}:${normCat}`)}
-                                                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
-                                                        >
-                                                            <div className="flex-1 min-w-0">
-                                                                <span className="text-sm font-semibold text-slate-800">{group.displayName}</span>
-                                                            </div>
-                                                            <span className="text-xs text-slate-400">{group.rules.length} rule{group.rules.length !== 1 ? 's' : ''}</span>
-                                                            <svg className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                            </svg>
-                                                        </button>
-
-                                                        {isOpen && (
-                                                            <div className="border-t border-slate-100 divide-y divide-slate-100">
-                                                                {group.rules.map((rule) => {
-                                                                    const flags = getQualityFlags(rule)
-                                                                    return (
-                                                                    <div key={rule.rule_id} className="px-4 py-3">
-                                                                        <div className="flex items-center gap-2 mb-1.5">
-                                                                            <span className="text-sm font-medium text-slate-800">{rule.clause_name}</span>
-                                                                            {rule.is_deal_breaker && (
-                                                                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded">Deal Breaker</span>
-                                                                            )}
-                                                                            {rule.is_non_negotiable && (
-                                                                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">Non-Negotiable</span>
-                                                                            )}
-                                                                            {flags.length > 0 && (
-                                                                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-600 rounded cursor-help"
-                                                                                    title={flags.map(f => qualityFlagLabel(f)).join(', ')}>
-                                                                                    {flags.length} issue{flags.length !== 1 ? 's' : ''}
-                                                                                </span>
-                                                                            )}
-                                                                            <button
-                                                                                onClick={(e) => { e.stopPropagation(); handleEditRule(rule) }}
-                                                                                className="ml-auto p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition"
-                                                                                title="Edit rule"
-                                                                            >
-                                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                                                </svg>
-                                                                            </button>
-                                                                        </div>
-                                                                        <RulePositionBar rule={rule} />
-                                                                        {rule.rationale && (
-                                                                            <p className="mt-1.5 text-xs text-slate-400 italic">{rule.rationale}</p>
-                                                                        )}
-                                                                    </div>
-                                                                    )
-                                                                })}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* ============================================================ */}
-            {/* RULE EDIT DRAWER — Slide-out panel for editing individual rules */}
-            {/* ============================================================ */}
-            {editingRule && (
-                <div className="fixed inset-0 z-50 flex">
-                    {/* Backdrop */}
-                    <div className="absolute inset-0 bg-black/30" onClick={() => { setEditingRule(null); setEditDraft({}) }} />
-                    {/* Drawer */}
-                    <div className="absolute right-0 top-0 bottom-0 w-full max-w-xl bg-white shadow-2xl overflow-y-auto">
-                        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 z-10">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-lg font-semibold text-slate-800">{editingRule.clause_name}</h3>
-                                    <span className="text-xs text-slate-500">{getCategoryDisplayName(normaliseCategory(editingRule.category))}</span>
-                                    {getQualityFlags(editingRule).length > 0 && (
-                                        <div className="flex gap-1 mt-1">
-                                            {getQualityFlags(editingRule).map(flag => (
-                                                <span key={flag} className="px-1.5 py-0.5 text-[10px] bg-amber-50 text-amber-600 rounded">
-                                                    {qualityFlagLabel(flag)}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                <button onClick={() => { setEditingRule(null); setEditDraft({}) }}
-                                    className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="px-6 py-5 space-y-6">
-                            {/* Source Quote (read-only) */}
-                            {editingRule.source_quote && (
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Source Quote</label>
-                                    <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 border border-slate-200 italic">
-                                        &ldquo;{editingRule.source_quote}&rdquo;
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Live Position Bar Preview */}
-                            <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-2">Position Preview</label>
-                                <RulePositionBar rule={{ ...editingRule, ...editDraft } as PlaybookRule} />
-                            </div>
-
-                            {/* Position Inputs */}
-                            <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-2">Positions (1-10)</label>
-                                <div className="grid grid-cols-4 gap-3">
-                                    {(['minimum_position', 'fallback_position', 'ideal_position', 'maximum_position'] as const).map(field => (
-                                        <div key={field}>
-                                            <label className="block text-[10px] text-slate-400 mb-0.5 capitalize">
-                                                {field.replace('_position', '')}
-                                            </label>
-                                            <input
-                                                type="number" min={1} max={10}
-                                                value={editDraft[field] ?? ''}
-                                                onChange={e => setEditDraft(prev => ({ ...prev, [field]: parseInt(e.target.value) || 1 }))}
-                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Range Context */}
-                            <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-2">Range Context</label>
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[10px] text-slate-400 mb-0.5">Value Type</label>
-                                            <select
-                                                value={editDraft.range_context?.value_type || ''}
-                                                onChange={e => setEditDraft(prev => ({
-                                                    ...prev,
-                                                    range_context: {
-                                                        ...(prev.range_context || { range_unit: null, scale_points: [], source: 'manual' as const }),
-                                                        value_type: e.target.value as PlaybookRangeContext['value_type'],
-                                                    } as PlaybookRangeContext
-                                                }))}
-                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                            >
-                                                <option value="">Select...</option>
-                                                <option value="duration">Duration</option>
-                                                <option value="percentage">Percentage</option>
-                                                <option value="currency">Currency</option>
-                                                <option value="count">Count</option>
-                                                <option value="boolean">Boolean</option>
-                                                <option value="text">Text/Scope</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] text-slate-400 mb-0.5">Range Unit</label>
-                                            <input
-                                                type="text"
-                                                value={editDraft.range_context?.range_unit || ''}
-                                                onChange={e => setEditDraft(prev => ({
-                                                    ...prev,
-                                                    range_context: {
-                                                        ...(prev.range_context || { value_type: null, scale_points: [], source: 'manual' as const }),
-                                                        range_unit: e.target.value,
-                                                    } as PlaybookRangeContext
-                                                }))}
-                                                placeholder="e.g. years, % of fees, days"
-                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                    </div>
-                                    {/* Scale Points (1, 5, 10) */}
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">Scale Points</label>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {[1, 5, 10].map(pos => {
-                                                const sp = (editDraft.range_context?.scale_points || []).find(p => p.position === pos)
-                                                return (
-                                                    <div key={pos} className="bg-slate-50 rounded-lg p-2 border border-slate-200">
-                                                        <div className="text-[10px] font-medium text-indigo-500 mb-1">Position {pos}</div>
-                                                        <input
-                                                            type="text"
-                                                            value={sp?.label || ''}
-                                                            onChange={e => {
-                                                                const currentPoints = [...(editDraft.range_context?.scale_points || [])]
-                                                                const idx = currentPoints.findIndex(p => p.position === pos)
-                                                                const newPoint = { position: pos, label: e.target.value, value: sp?.value || 0 }
-                                                                if (idx >= 0) currentPoints[idx] = newPoint
-                                                                else currentPoints.push(newPoint)
-                                                                setEditDraft(prev => ({
-                                                                    ...prev,
-                                                                    range_context: {
-                                                                        ...(prev.range_context || { value_type: null, range_unit: null, source: 'manual' as const }),
-                                                                        scale_points: currentPoints.sort((a, b) => a.position - b.position),
-                                                                    } as PlaybookRangeContext
-                                                                }))
-                                                            }}
-                                                            placeholder="Label"
-                                                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500"
-                                                        />
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Details */}
-                            <div className="grid grid-cols-1 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Rationale</label>
-                                    <textarea
-                                        value={editDraft.rationale || ''}
-                                        onChange={e => setEditDraft(prev => ({ ...prev, rationale: e.target.value }))}
-                                        rows={2}
-                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Negotiation Tips</label>
-                                    <textarea
-                                        value={editDraft.negotiation_tips || ''}
-                                        onChange={e => setEditDraft(prev => ({ ...prev, negotiation_tips: e.target.value }))}
-                                        rows={2}
-                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Importance */}
-                            <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-1">
-                                    Importance Level: {editDraft.importance_level || 5}/10
-                                </label>
-                                <input
-                                    type="range" min={1} max={10}
-                                    value={editDraft.importance_level || 5}
-                                    onChange={e => setEditDraft(prev => ({ ...prev, importance_level: parseInt(e.target.value) }))}
-                                    className="w-full accent-indigo-600"
-                                />
-                            </div>
-
-                            {/* Flags */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={editDraft.is_deal_breaker || false}
-                                        onChange={e => setEditDraft(prev => ({ ...prev, is_deal_breaker: e.target.checked }))}
-                                        className="rounded border-slate-300 text-red-600 focus:ring-red-500" />
-                                    <span className="text-sm text-slate-700">Deal Breaker</span>
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={editDraft.is_non_negotiable || false}
-                                        onChange={e => setEditDraft(prev => ({ ...prev, is_non_negotiable: e.target.checked }))}
-                                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
-                                    <span className="text-sm text-slate-700">Non-Negotiable</span>
-                                </label>
-                            </div>
-
-                            {/* Escalation */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Escalation Threshold</label>
-                                    <input type="number" min={1} max={10}
-                                        value={editDraft.requires_approval_below ?? ''}
-                                        onChange={e => setEditDraft(prev => ({ ...prev, requires_approval_below: e.target.value ? parseInt(e.target.value) : null }))}
-                                        placeholder="Position"
-                                        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Escalation Contact</label>
-                                    <input type="text"
-                                        value={editDraft.escalation_contact || ''}
-                                        onChange={e => setEditDraft(prev => ({ ...prev, escalation_contact: e.target.value || null }))}
-                                        placeholder="e.g. Legal Director"
-                                        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                </div>
-                            </div>
-
-                            {/* Save Error */}
-                            {saveError && (
-                                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">
-                                    {saveError}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-3">
-                            <button
-                                onClick={() => { setEditingRule(null); setEditDraft({}) }}
-                                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-                            >Cancel</button>
-                            <button
-                                onClick={handleSaveRule}
-                                disabled={savingRule}
-                                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition disabled:opacity-50"
-                            >{savingRule ? 'Saving...' : 'Save Changes'}</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
@@ -2122,11 +1565,12 @@ function AuditLogTab() {
 
 function CompanyAdminContent() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [companyName, setCompanyName] = useState('')
-    // CHANGED: Default tab is now 'templates' instead of 'playbooks'
-    const [activeTab, setActiveTab] = useState<AdminTab>('templates')
+    const initialTab = (searchParams.get('tab') as AdminTab) || 'templates'
+    const [activeTab, setActiveTab] = useState<AdminTab>(initialTab)
     const [isAdmin, setIsAdmin] = useState(false)
     const [playbooks, setPlaybooks] = useState<Playbook[]>([])
     const [playbooksLoading, setPlaybooksLoading] = useState(false)
