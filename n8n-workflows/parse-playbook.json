@@ -7,13 +7,13 @@
                 "responseMode": "responseNode",
                 "options": {}
             },
-            "id": "ba9ff7fa-4297-4719-84aa-4a48de17600e",
+            "id": "9caa9926-76fc-4805-9d07-6790ff6ec827",
             "name": "Webhook - Parse Playbook",
             "type": "n8n-nodes-base.webhook",
             "typeVersion": 2,
             "position": [
-                1968,
-                -512
+                1760,
+                -448
             ],
             "webhookId": "parse-playbook-webhook"
         },
@@ -21,13 +21,13 @@
             "parameters": {
                 "jsCode": "// ============================================================================\n// SECTION 1: VALIDATE INPUT\n// ============================================================================\n\nconst body = $input.first().json.body;\n\nconst playbookId = body.playbook_id || body.playbookId;\nconst extractedText = body.extracted_text || body.extractedText || \"\";\n\nif (!playbookId) {\n  throw new Error(\"Missing required field: playbook_id\");\n}\n\nif (!extractedText || extractedText.length < 100) {\n  throw new Error(\n    \"Missing or insufficient extracted_text. Length: \" +\n      (extractedText?.length || 0) +\n      \". Text must be extracted client-side before calling this webhook.\",\n  );\n}\n\nreturn {\n  playbookId,\n  extractedText,\n  extractedTextLength: extractedText.length,\n  timestamp: new Date().toISOString(),\n};\n"
             },
-            "id": "1fe8ea6f-42cd-4f94-9b3e-d34bb732a4be",
+            "id": "7d1cceeb-ac56-4b61-bd10-71a4e9eacd48",
             "name": "Validate Input",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2192,
-                -512
+                1984,
+                -448
             ]
         },
         {
@@ -36,13 +36,13 @@
                 "query": "SELECT \n  p.playbook_id,\n  p.company_id,\n  p.playbook_name,\n  p.source_file_name,\n  p.source_file_path,\n  p.status,\n  p.playbook_perspective\nFROM company_playbooks p\nWHERE p.playbook_id = '{{ $json.playbookId }}'::uuid\n",
                 "options": {}
             },
-            "id": "6e96968a-4763-4f2c-b05a-a0fb41b70855",
+            "id": "eba017f1-2910-4206-b571-7372ab5bd63c",
             "name": "Get Playbook Metadata",
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.5,
             "position": [
-                2416,
-                -608
+                2208,
+                -544
             ],
             "credentials": {
                 "postgres": {
@@ -57,13 +57,13 @@
                 "query": "UPDATE company_playbooks\nSET \n  status = 'parsing',\n  parsing_started_at = NOW(),\n  updated_at = NOW()\nWHERE playbook_id = '{{ $('Validate Input').first().json.playbookId }}'::uuid\nRETURNING *",
                 "options": {}
             },
-            "id": "d5058566-d052-45f2-a528-69c7efe13086",
+            "id": "b63bcb03-47e4-4b55-a4e1-eb4c52f8b237",
             "name": "Update Status to Parsing",
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.5,
             "position": [
-                2640,
-                -608
+                2432,
+                -544
             ],
             "credentials": {
                 "postgres": {
@@ -76,39 +76,39 @@
             "parameters": {
                 "jsCode": "// ============================================================================\n// SMART PLAYBOOK EXTRACTION - Aligned to actual playbook_rules schema\n// V5: Rule count fix, range differentiation, provider perspective support\n// ============================================================================\n\nconst playbookData = $(\"Get Playbook Metadata\").first().json;\n\n// Read extracted text from Validate Input (sent by frontend)\nconst validateData = $(\"Validate Input\").first().json;\nconst extractedText = validateData.extractedText || \"\";\n\nif (!extractedText || extractedText.length < 100) {\n  throw new Error(\n    \"No usable text received from frontend extraction. Length: \" +\n      (extractedText?.length || 0),\n  );\n}\n\n// ============================================================================\n// PLAYBOOK PERSPECTIVE — customer or provider?\n// ============================================================================\n// Determines how positions are interpreted. If the playbook was uploaded by\n// a provider company, the positions represent the provider's goals (lower\n// numbers = stronger provider position). If customer, higher = stronger.\n\nconst perspective = playbookData.playbook_perspective || \"customer\";\n\n// ============================================================================\n// SMART EXTRACTION: Find and keep sections with negotiation rules\n// ============================================================================\n// Set to 80K: large enough to capture most playbooks in full, while the\n// reduced output fields (dropped talking_points, common_objections,\n// counter_arguments) keep total response within timeout.\n\nconst MAX_CHARS = 80000;\nconst originalLength = extractedText.length;\n\nlet processedText = extractedText;\nlet wasTruncated = false;\nlet extractionMethod = \"full\";\n\nif (extractedText.length > MAX_CHARS) {\n  wasTruncated = true;\n\n  const importantKeywords = [\n    \"position\",\n    \"limit\",\n    \"threshold\",\n    \"escalat\",\n    \"approv\",\n    \"accept\",\n    \"red line\",\n    \"redline\",\n    \"non-negotiable\",\n    \"mandatory\",\n    \"must not\",\n    \"minimum\",\n    \"maximum\",\n    \"range\",\n    \"cap\",\n    \"ceiling\",\n    \"floor\",\n    \"liability\",\n    \"indemnit\",\n    \"warrant\",\n    \"terminat\",\n    \"payment\",\n    \"intellectual property\",\n    \"confidential\",\n    \"data protection\",\n    \"service level\",\n    \"sla\",\n    \"penalty\",\n    \"breach\",\n    \"remedy\",\n    \"insurance\",\n    \"force majeure\",\n    \"governance\",\n    \"audit\",\n    \"preferred\",\n    \"ideal\",\n    \"fallback\",\n    \"walk away\",\n    \"deal breaker\",\n    \"negotiate\",\n    \"concession\",\n    \"trade-off\",\n    \"compromise\",\n    \"employment\",\n    \"tupe\",\n    \"benchmarking\",\n    \"change control\",\n    \"dispute\",\n    \"exit\",\n    \"transition\",\n    \"subcontract\",\n  ];\n\n  const sections = extractedText.split(/\\n{2,}|\\r\\n{2,}/);\n\n  const scoredSections = sections.map((section, index) => {\n    const lowerSection = section.toLowerCase();\n    let score = 0;\n    importantKeywords.forEach((keyword) => {\n      if (lowerSection.includes(keyword.toLowerCase())) score += 2;\n    });\n    if (\n      /\\d+%|\\$[\\d,]+|£[\\d,]+|€[\\d,]+|\\d+\\s*(days|months|years|hours)/i.test(\n        section,\n      )\n    )\n      score += 3;\n    if (/position\\s*[:\\-]?\\s*\\d/i.test(section)) score += 5;\n    if (/^[\\d\\.]+\\s+[A-Z]|^[A-Z][a-z]+\\s+[A-Z][a-z]+\\s*:/m.test(section))\n      score += 2;\n    if (index < 10) score += 1;\n    return { section, score, index };\n  });\n\n  const sortedSections = scoredSections\n    .filter((s) => s.section.trim().length > 50)\n    .sort((a, b) => {\n      if (b.score !== a.score) return b.score - a.score;\n      return a.index - b.index;\n    });\n\n  let currentLength = 0;\n  const selectedSections = [];\n\n  const introSections = scoredSections.slice(0, 5).map((s) => s.section);\n  introSections.forEach((s) => {\n    selectedSections.push(s);\n    currentLength += s.length;\n  });\n\n  for (const item of sortedSections) {\n    if (currentLength + item.section.length > MAX_CHARS - 1000) break;\n    if (!selectedSections.includes(item.section)) {\n      selectedSections.push(item.section);\n      currentLength += item.section.length;\n    }\n  }\n\n  const sectionOrderMap = new Map(scoredSections.map((s, i) => [s.section, i]));\n  selectedSections.sort(\n    (a, b) => (sectionOrderMap.get(a) || 0) - (sectionOrderMap.get(b) || 0),\n  );\n\n  processedText = selectedSections.join(\"\\n\\n\");\n  extractionMethod = \"smart_keyword\";\n\n  processedText += `\\n\\n[SMART EXTRACTION: Selected ${selectedSections.length} of ${sections.length} sections based on relevance. Original: ${originalLength} chars, Processed: ${processedText.length} chars]`;\n}\n\n// ============================================================================\n// Build perspective-aware scale definition\n// ============================================================================\n\nconst scaleDefinition =\n  perspective === \"provider\"\n    ? `═══════════════════════════════════════════════════\nPOSITION SCALE (1-10) — PROVIDER PERSPECTIVE\n═══════════════════════════════════════════════════\n\nTHIS IS A PROVIDER/SUPPLIER PLAYBOOK. Positions represent what the PROVIDER wants.\n\nPosition 1  = Weakest position for this provider (maximum concession to customer)\nPosition 5  = Balanced / Market standard\nPosition 10 = Strongest position for this provider (maximum protection for provider)\n\nThe scale is oriented so that:\n- Higher number = MORE favourable for the PROVIDER (supplier, vendor)\n- Lower number  = MORE concession to the CUSTOMER (buyer, tenant)\n\nExample: A provider wanting long payment terms (90 days) would set ideal_position HIGH (8-9).\nA provider accepting short payment terms (7 days) would set minimum_position LOW (2-3).`\n    : `═══════════════════════════════════════════════════\nPOSITION SCALE (1-10) — CUSTOMER PERSPECTIVE\n═══════════════════════════════════════════════════\n\nTHIS IS A CUSTOMER/BUYER PLAYBOOK. Positions represent what the CUSTOMER wants.\n\nPosition 1  = Maximum flexibility for the PROVIDING party (supplier, vendor, landlord, licensor)\nPosition 5  = Balanced / Market standard\nPosition 10 = Maximum protection for the PROTECTED party (customer, tenant, buyer, licensee)\n\nThe scale is oriented so that:\n- Higher number = MORE protection for the customer/buyer\n- Lower number  = MORE flexibility for the supplier/provider\n\nExample: A customer wanting short payment terms (7 days) would set ideal_position HIGH (8-9).\nA customer accepting long payment terms (90 days) would set minimum_position LOW (2-3).`;\n\n// ============================================================================\n// PROMPT V5 — Perspective-aware, range-differentiated, output-optimised\n// ============================================================================\n\nconst systemPrompt = `You are an expert at extracting negotiation rules from corporate contract playbooks.\n\nCRITICAL INSTRUCTION: You MUST extract EVERY negotiation rule, position, red line, escalation trigger, and policy directive from the document. Do NOT summarise, consolidate, or skip rules. A large corporate playbook may contain 80-150+ rules. If you extract fewer than 30, you have almost certainly missed rules.\n\n${scaleDefinition}\n\n═══════════════════════════════════════════════════\nFOUR POSITION VALUES PER RULE\n═══════════════════════════════════════════════════\n\n- ideal_position: The company's PREFERRED opening position (where they want to start).\n- minimum_position: The absolute FLOOR. Below this is unacceptable.\n- maximum_position: Best case / aspirational ceiling.\n- fallback_position: Compromise if ideal is rejected. Between minimum and ideal.\n\nRULES:\n- minimum_position <= fallback_position <= ideal_position <= maximum_position\n- All four values MUST be different from each other when the playbook provides enough context.\n- Use the FULL 1-10 range. Do not cluster everything around 5-6.\n\n═══════════════════════════════════════════════════\nCRITICAL — EVERY RULE MUST HAVE UNIQUE POSITIONS\n═══════════════════════════════════════════════════\n\nWRONG — identical positions across rules in a category:\n  \"Liability Cap\":       ideal=8, min=6, max=10, fallback=7\n  \"Consequential Loss\":  ideal=8, min=6, max=10, fallback=7  ← WRONG: copied\n  \"Indemnity Scope\":     ideal=8, min=6, max=10, fallback=7  ← WRONG: copied\n\nRIGHT — each rule reflects its SPECIFIC playbook guidance:\n  \"Liability Cap\":       ideal=8, min=5, max=10, fallback=7  (% of fees — cap at 150%)\n  \"Consequential Loss\":  ideal=9, min=7, max=10, fallback=8  (scope — must exclude)\n  \"Indemnity Scope\":     ideal=7, min=4, max=9,  fallback=6  (scope — IP indemnity only)\n\nEvery clause deals with a DIFFERENT aspect — even within the same category. Read the playbook text for EACH clause and assign positions based on what IT says, not what the category says.\n\nEach clause also has its OWN unit of measurement:\n- \"Liability Cap\" → % of fees\n- \"Consequential Loss\" → scope (broad to narrow)\n- \"Indemnity Period\" → months\n- \"Service Credits\" → % of monthly charges\nDo NOT apply one measure to all clauses in a section.\n\n═══════════════════════════════════════════════════\nCATEGORY MEASURE GUIDE\n═══════════════════════════════════════════════════\n\nUse the correct unit for each clause. Override when the clause clearly deals with something different.\n\nliability: % of annual fees (caps), scope (exclusions), months (indemnity periods)\npayment: days (terms), % (interest rates), days (dispute windows)\ntermination: months (notice), scope (rights), days (cure periods)\nconfidentiality: years (duration), scope (definition breadth)\nservice_levels: % uptime, % monthly charges (credits), scope (remedies)\ninsurance: GBP/USD coverage amounts\ndata_protection: hours (breach notification), scope (audit rights), days (data return)\nintellectual_property: years (licence), scope (ownership)\n\n═══════════════════════════════════════════════════\nRANGE CONTEXT — REQUIRED FOR EACH RULE\n═══════════════════════════════════════════════════\n\n\"range_context\": {\n  \"value_type\": \"duration\" | \"percentage\" | \"currency\" | \"count\" | \"boolean\" | \"text\",\n  \"range_unit\": \"<e.g. '% of annual fees', 'months notice', 'GBP', 'days'>\",\n  \"scale_points\": [\n    { \"position\": 1, \"label\": \"<value at pos 1>\", \"value\": <number> },\n    { \"position\": 5, \"label\": \"<value at pos 5>\", \"value\": <number> },\n    { \"position\": 10, \"label\": \"<value at pos 10>\", \"value\": <number> }\n  ],\n  \"source\": \"parsed\"\n}\n\n- EXACTLY 3 scale_points: positions 1, 5, and 10.\n- Each rule's range_context MUST match THAT rule's unit, not the category default.\n- For qualitative clauses, use value_type \"text\" and descriptive labels.\n\n═══════════════════════════════════════════════════\nOTHER FIELDS — KEEP TEXT SHORT (max 12 words)\n═══════════════════════════════════════════════════\n\n- clause_code: Short ID (e.g. \"LIA-001\", \"TERM-002\")\n- clause_name: Specific title (e.g. \"Liability Cap\", not just \"Liability\")\n- category: One of: liability, termination, payment, intellectual_property, confidentiality, data_protection, service_levels, warranties, indemnification, insurance, governance, employment, audit, benchmarking, dispute_resolution, change_control, exit_transition, subcontracting, force_majeure, other\n- rationale: Why this matters (max 12 words)\n- negotiation_tips: Key tactic (max 12 words)\n- escalation_trigger: What triggers escalation (max 12 words, or null)\n- escalation_contact: Role to escalate to (e.g. \"Legal Director\")\n- requires_approval_below: Position needing approval (integer 1-10, or null)\n- importance_level: Criticality 1-10\n- is_deal_breaker: true if walking away is required when breached\n- is_non_negotiable: true if position cannot change at all\n\n═══════════════════════════════════════════════════\nQUALITY CHECKS — VERIFY BEFORE RETURNING\n═══════════════════════════════════════════════════\n\n1. DIFFERENTIATION: Scan your output. If ANY 2 rules in the same category share the SAME ideal_position AND minimum_position, go back and fix them. Each rule MUST have unique position values.\n2. FULL RANGE: Across all rules, positions should span at least 3 to 9.\n3. CORRECT MEASURES: Each rule's range_context.range_unit must match THAT clause's unit.\n4. POSITION ORDER: minimum <= fallback <= ideal <= maximum for every rule.\n5. COMPLETENESS: Count your rules. This playbook may contain 80-150 rules. Extract ALL of them.\n\nIMPORTANT OUTPUT RULES:\n1. Number clause_codes sequentially within each category\n2. Return ONLY valid JSON, no markdown backticks\n\n{\n  \"playbook_summary\": \"...\",\n  \"playbook_perspective\": \"${perspective}\",\n  \"extraction_confidence\": 0.85,\n  \"total_rules_extracted\": 45,\n  \"rules\": [{ ... }]\n}`;\n\nconst userPrompt = `Extract ALL negotiation rules from this ${perspective === \"provider\" ? \"PROVIDER\" : \"CUSTOMER\"} playbook. Be thorough — extract every rule, red line, position directive, escalation trigger, and approval threshold.\n\nThis playbook is written from the ${perspective === \"provider\" ? \"PROVIDER/SUPPLIER\" : \"CUSTOMER/BUYER\"} perspective. Position values should reflect what the ${perspective === \"provider\" ? \"provider\" : \"customer\"} wants.\n\nIMPORTANT: Each clause MUST have its own unique position values and unit of measurement. Do NOT copy positions across clauses in the same category.\n\nPLAYBOOK: ${playbookData.playbook_name}\n${wasTruncated ? `[Note: Key sections extracted via ${extractionMethod}. Focus on extracting rules from ALL sections provided.]` : \"\"}\n\n---\n${processedText}\n---\n\nExtract EVERY rule with unique positions and per-clause range_context. Count them — aim for completeness. Keep text fields under 12 words. Return ONLY the JSON object.`;\n\nreturn {\n  playbookId: playbookData.playbook_id,\n  companyId: playbookData.company_id,\n  playbookName: playbookData.playbook_name,\n  perspective,\n  systemPrompt,\n  userPrompt,\n  originalLength,\n  processedLength: processedText.length,\n  wasTruncated,\n  extractionMethod,\n};\n"
             },
-            "id": "ed9ba746-bc38-44cb-bda0-fea22f4870cb",
+            "id": "64deac1b-b09e-43e8-a31f-1b4a8accef6e",
             "name": "Prepare Claude Prompt",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2864,
-                -512
+                2656,
+                -448
             ]
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================================\n// SECTION 3: PROCESS CLAUDE RESPONSE - Aligned to actual schema\n// ============================================================================\n\nconst prepData = $(\"Prepare Claude Prompt\").first().json;\nconst claudeResponse = $input.first().json;\n\nconst responseText = claudeResponse.content?.[0]?.text || \"\";\n\nif (!responseText) {\n  throw new Error(\"Empty response from Claude API\");\n}\n\nlet jsonStr = responseText.trim();\n\nif (jsonStr.includes(\"```json\")) {\n  jsonStr = jsonStr.split(\"```json\")[1].split(\"```\")[0].trim();\n} else if (jsonStr.includes(\"```\")) {\n  jsonStr = jsonStr.split(\"```\")[1].split(\"```\")[0].trim();\n}\n\nif (!jsonStr.startsWith(\"{\")) {\n  const jsonMatch = jsonStr.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    jsonStr = jsonMatch[0];\n  }\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  throw new Error(\n    \"Failed to parse Claude response as JSON: \" +\n      e.message +\n      \". Response preview: \" +\n      responseText.substring(0, 500),\n  );\n}\n\nconst rules = parsed.rules || [];\nconst extractionConfidence = parsed.extraction_confidence || 0.7;\nconst playbookSummary = parsed.playbook_summary || \"\";\n\nif (rules.length === 0) {\n  throw new Error(\n    \"No rules extracted from playbook. The document may not contain recognizable negotiation rules.\",\n  );\n}\n\n// Map to actual playbook_rules schema\nconst rulesForInsert = rules.map((rule, index) => {\n  // Enforce valid position ordering: minimum <= fallback <= ideal <= maximum\n  const rawIdeal = rule.ideal_position || rule.default_position || 5;\n  const rawMin = rule.minimum_position || 3;\n  const rawMax = rule.maximum_position || 10;\n  const rawFallback = rule.fallback_position || rawIdeal;\n\n  // Sort into correct order then clamp 1-10\n  const sorted = [rawMin, rawFallback, rawIdeal, rawMax].sort((a, b) => a - b);\n  const minimum_position = Math.max(1, Math.min(10, sorted[0]));\n  const fallback_position = Math.max(1, Math.min(10, sorted[1]));\n  const ideal_position = Math.max(1, Math.min(10, sorted[2]));\n  const maximum_position = Math.max(1, Math.min(10, sorted[3]));\n\n  return {\n    playbook_id: prepData.playbookId,\n    clause_code:\n      rule.clause_code || `RULE-${String(index + 1).padStart(3, \"0\")}`,\n    clause_name: rule.clause_name || rule.rule_name || `Rule ${index + 1}`,\n    category: rule.category || \"general\",\n    ideal_position,\n    minimum_position,\n    maximum_position,\n    fallback_position,\n    rationale: rule.rationale || null,\n    negotiation_tips:\n      rule.negotiation_tips || rule.ai_negotiation_guidance || null,\n    talking_points: rule.talking_points || null,\n    common_objections: rule.common_objections || null,\n    counter_arguments: rule.counter_arguments || null,\n    escalation_trigger: rule.escalation_trigger || null,\n    escalation_contact: rule.escalation_contact || null,\n    requires_approval_below: rule.requires_approval_below || null,\n    importance_level: Math.max(1, Math.min(10, rule.importance_level || 5)),\n    is_deal_breaker: rule.is_deal_breaker || false,\n    is_non_negotiable: rule.is_non_negotiable || false,\n    display_order: index + 1,\n    is_active: true,\n    range_context: rule.range_context ? JSON.stringify(rule.range_context) : null,\n    source_quote: rule.source_quote || null,\n    quality_flags: JSON.stringify([]),\n  };\n});\n\nreturn {\n  playbookId: prepData.playbookId,\n  companyId: prepData.companyId,\n  playbookSummary,\n  extractionConfidence,\n  rulesCount: rules.length,\n  rules: rulesForInsert,\n};\n"
+                "jsCode": "// ============================================================================\n// SECTION 3: PROCESS CLAUDE RESPONSE - Aligned to actual schema\n// ============================================================================\n\nconst prepData = $(\"Prepare Claude Prompt\").first().json;\nconst claudeResponse = $input.first().json;\n\nconst responseText = claudeResponse.content?.[0]?.text || \"\";\n\nif (!responseText) {\n  throw new Error(\"Empty response from Claude API\");\n}\n\nlet jsonStr = responseText.trim();\n\nif (jsonStr.includes(\"```json\")) {\n  jsonStr = jsonStr.split(\"```json\")[1].split(\"```\")[0].trim();\n} else if (jsonStr.includes(\"```\")) {\n  jsonStr = jsonStr.split(\"```\")[1].split(\"```\")[0].trim();\n}\n\nif (!jsonStr.startsWith(\"{\")) {\n  const jsonMatch = jsonStr.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    jsonStr = jsonMatch[0];\n  }\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  throw new Error(\n    \"Failed to parse Claude response as JSON: \" +\n      e.message +\n      \". Response preview: \" +\n      responseText.substring(0, 500),\n  );\n}\n\nconst rules = parsed.rules || parsed.clause_inventory || [];\nconst extractionConfidence = parsed.extraction_confidence || 0.7;\nconst playbookSummary = parsed.playbook_summary || \"\";\n\nif (rules.length === 0) {\n  throw new Error(\n    \"No rules extracted from playbook. Keys found: \" + Object.keys(parsed).join(\", \") + \". The document may not contain recognizable negotiation rules.\",\n  );\n}\n\n// Map to actual playbook_rules schema\nconst rulesForInsert = rules.map((rule, index) => {\n  // Enforce valid position ordering: minimum <= fallback <= ideal <= maximum\n  const rawIdeal = rule.ideal_position || rule.default_position || 5;\n  const rawMin = rule.minimum_position || 3;\n  const rawMax = rule.maximum_position || 10;\n  const rawFallback = rule.fallback_position || rawIdeal;\n\n  // Sort into correct order then clamp 1-10\n  const sorted = [rawMin, rawFallback, rawIdeal, rawMax].sort((a, b) => a - b);\n  const minimum_position = Math.max(1, Math.min(10, sorted[0]));\n  const fallback_position = Math.max(1, Math.min(10, sorted[1]));\n  const ideal_position = Math.max(1, Math.min(10, sorted[2]));\n  const maximum_position = Math.max(1, Math.min(10, sorted[3]));\n\n  return {\n    playbook_id: prepData.playbookId,\n    clause_code:\n      rule.clause_code || `RULE-${String(index + 1).padStart(3, \"0\")}`,\n    clause_name: rule.clause_name || rule.rule_name || `Rule ${index + 1}`,\n    category: rule.category || \"general\",\n    ideal_position,\n    minimum_position,\n    maximum_position,\n    fallback_position,\n    rationale: rule.rationale || null,\n    negotiation_tips:\n      rule.negotiation_tips || rule.ai_negotiation_guidance || null,\n    talking_points: rule.talking_points || null,\n    common_objections: rule.common_objections || null,\n    counter_arguments: rule.counter_arguments || null,\n    escalation_trigger: rule.escalation_trigger || null,\n    escalation_contact: rule.escalation_contact || null,\n    requires_approval_below: rule.requires_approval_below || null,\n    importance_level: Math.max(1, Math.min(10, rule.importance_level || 5)),\n    is_deal_breaker: rule.is_deal_breaker || false,\n    is_non_negotiable: rule.is_non_negotiable || false,\n    display_order: index + 1,\n    is_active: true,\n    range_context: rule.range_context ? JSON.stringify(rule.range_context) : null,\n    source_quote: rule.source_quote || null,\n    quality_flags: JSON.stringify([]),\n  };\n});\n\nreturn {\n  playbookId: prepData.playbookId,\n  companyId: prepData.companyId,\n  playbookSummary,\n  extractionConfidence,\n  rulesCount: rules.length,\n  rules: rulesForInsert,\n};\n"
             },
-            "id": "0b7416e1-02ee-42d8-9704-c2fa63cee428",
+            "id": "e0a92204-0e95-4d68-ba72-30aed9cef9ec",
             "name": "Process Claude Response",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                3312,
-                -608
+                3104,
+                -544
             ]
         },
         {
             "parameters": {
-                "jsCode": "// Validate Extracted Rules — see n8n-workflows/validate-playbook-rules.js\n// Copy the full script from that file into this Code node.\n// This placeholder passes through unchanged for now.\nconst input = $input.first().json;\nreturn input;\n"
+                "jsCode": "// ============================================================================\n// VALIDATE PLAYBOOK RULES — Post-extraction quality checks\n// Location: n8n-workflows/validate-playbook-rules.js\n//\n// Runs AFTER Process Claude Response, BEFORE Split Into Rules.\n// Adds quality_flags to each rule and sets hasQualityIssues flag.\n//\n// Copy this code into the n8n \"Validate Extracted Rules\" Code node.\n// ============================================================================\n\nconst input = $input.first().json;\nconst rules = input.rules || [];\n\n// ============================================================================\n// VALIDATION CHECKS\n// ============================================================================\n\n// Group rules by normalised category\nconst categoryGroups = {};\nfor (const rule of rules) {\n  const cat = (rule.category || \"general\").toLowerCase().trim();\n  if (!categoryGroups[cat]) categoryGroups[cat] = [];\n  categoryGroups[cat].push(rule);\n}\n\nfor (const rule of rules) {\n  if (!rule.quality_flags) rule.quality_flags = [];\n  // Parse quality_flags if it's a string (from prior step)\n  if (typeof rule.quality_flags === \"string\") {\n    try {\n      rule.quality_flags = JSON.parse(rule.quality_flags);\n    } catch {\n      rule.quality_flags = [];\n    }\n  }\n}\n\n// --------------------------------------------------------------------------\n// CHECK 1: Duplicate range_unit + scale_points within same category\n// --------------------------------------------------------------------------\nfor (const [cat, catRules] of Object.entries(categoryGroups)) {\n  for (let i = 0; i < catRules.length; i++) {\n    for (let j = i + 1; j < catRules.length; j++) {\n      const riCtx =\n        typeof catRules[i].range_context === \"string\"\n          ? JSON.parse(catRules[i].range_context || \"{}\")\n          : catRules[i].range_context;\n      const rjCtx =\n        typeof catRules[j].range_context === \"string\"\n          ? JSON.parse(catRules[j].range_context || \"{}\")\n          : catRules[j].range_context;\n\n      if (!riCtx || !rjCtx) continue;\n\n      const iLabels = (riCtx.scale_points || [])\n        .map((sp) => sp.label)\n        .join(\"|\");\n      const jLabels = (rjCtx.scale_points || [])\n        .map((sp) => sp.label)\n        .join(\"|\");\n\n      if (\n        riCtx.range_unit === rjCtx.range_unit &&\n        iLabels === jLabels &&\n        iLabels.length > 0\n      ) {\n        if (!catRules[i].quality_flags.includes(\"duplicate_range_in_category\"))\n          catRules[i].quality_flags.push(\"duplicate_range_in_category\");\n        if (!catRules[j].quality_flags.includes(\"duplicate_range_in_category\"))\n          catRules[j].quality_flags.push(\"duplicate_range_in_category\");\n      }\n    }\n  }\n}\n\n// --------------------------------------------------------------------------\n// CHECK 2: Mixed value types within a single rule's scale_points\n// --------------------------------------------------------------------------\nfor (const rule of rules) {\n  const ctx =\n    typeof rule.range_context === \"string\"\n      ? JSON.parse(rule.range_context || \"{}\")\n      : rule.range_context;\n\n  if (!ctx?.scale_points?.length) {\n    if (!rule.quality_flags.includes(\"missing_range_context\"))\n      rule.quality_flags.push(\"missing_range_context\");\n    continue;\n  }\n\n  const labels = ctx.scale_points.map((sp) => (sp.label || \"\").toLowerCase());\n  const hasPercentage = labels.some((l) => l.includes(\"%\"));\n  const hasDuration = labels.some((l) =>\n    /year|month|day|week|hour|perpetual|indefinite/i.test(l),\n  );\n  const hasCurrency = labels.some((l) => /\\$|£|€|gbp|usd|eur/i.test(l));\n  const typeCount = [hasPercentage, hasDuration, hasCurrency].filter(\n    Boolean,\n  ).length;\n\n  if (typeCount > 1) {\n    if (!rule.quality_flags.includes(\"mixed_value_types\"))\n      rule.quality_flags.push(\"mixed_value_types\");\n  }\n}\n\n// --------------------------------------------------------------------------\n// CHECK 3: Duplicate positions within same category\n// --------------------------------------------------------------------------\nfor (const [cat, catRules] of Object.entries(categoryGroups)) {\n  for (let i = 0; i < catRules.length; i++) {\n    for (let j = i + 1; j < catRules.length; j++) {\n      if (\n        catRules[i].ideal_position === catRules[j].ideal_position &&\n        catRules[i].minimum_position === catRules[j].minimum_position &&\n        catRules[i].maximum_position === catRules[j].maximum_position\n      ) {\n        if (\n          !catRules[i].quality_flags.includes(\"duplicate_positions_in_category\")\n        )\n          catRules[i].quality_flags.push(\"duplicate_positions_in_category\");\n        if (\n          !catRules[j].quality_flags.includes(\"duplicate_positions_in_category\")\n        )\n          catRules[j].quality_flags.push(\"duplicate_positions_in_category\");\n      }\n    }\n  }\n}\n\n// --------------------------------------------------------------------------\n// CHECK 4: Nonsensical scale progression (position 1 label > position 10)\n// --------------------------------------------------------------------------\nfor (const rule of rules) {\n  const ctx =\n    typeof rule.range_context === \"string\"\n      ? JSON.parse(rule.range_context || \"{}\")\n      : rule.range_context;\n\n  if (!ctx?.scale_points?.length) continue;\n\n  const sorted = [...ctx.scale_points].sort((a, b) => a.position - b.position);\n  const values = sorted.map((sp) => sp.value).filter((v) => v != null);\n\n  if (values.length >= 2) {\n    // Check monotonic progression\n    let nonMonotonic = false;\n    for (let k = 1; k < values.length; k++) {\n      if (values[k] < values[k - 1]) {\n        nonMonotonic = true;\n        break;\n      }\n    }\n    // Note: some scales are intentionally descending (e.g., payment days: 90→7)\n    // So only flag if it's neither monotonically increasing nor decreasing\n    if (nonMonotonic) {\n      let allDescending = true;\n      for (let k = 1; k < values.length; k++) {\n        if (values[k] > values[k - 1]) {\n          allDescending = false;\n          break;\n        }\n      }\n      if (!allDescending) {\n        if (!rule.quality_flags.includes(\"non_monotonic_scale\"))\n          rule.quality_flags.push(\"non_monotonic_scale\");\n      }\n    }\n  }\n}\n\n// ============================================================================\n// STRINGIFY quality_flags for SQL insertion\n// ============================================================================\nfor (const rule of rules) {\n  rule.quality_flags = JSON.stringify(rule.quality_flags || []);\n}\n\n// ============================================================================\n// SUMMARY\n// ============================================================================\nconst flaggedRules = rules.filter((r) => {\n  const flags = JSON.parse(r.quality_flags || \"[]\");\n  return flags.length > 0;\n});\n\nconst hasQualityIssues = flaggedRules.length > 0;\n\nconst flagSummary = {};\nfor (const rule of rules) {\n  const flags = JSON.parse(rule.quality_flags || \"[]\");\n  for (const flag of flags) {\n    flagSummary[flag] = (flagSummary[flag] || 0) + 1;\n  }\n}\n\nreturn {\n  ...input,\n  rules,\n  hasQualityIssues,\n  flaggedRuleCount: flaggedRules.length,\n  flagSummary,\n};\n"
             },
-            "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
+            "id": "37460042-5f57-4775-9cd3-00fdd3875673",
             "name": "Validate Extracted Rules",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                3424,
-                -608
+                3328,
+                -544
             ]
         },
         {
@@ -116,13 +116,13 @@
                 "fieldToSplitOut": "rules",
                 "options": {}
             },
-            "id": "425e08da-8b37-4508-8733-3a4302c84b27",
+            "id": "336b7ed9-893a-4bf9-a6eb-7d63b2b9b12d",
             "name": "Split Into Rules",
             "type": "n8n-nodes-base.splitOut",
             "typeVersion": 1,
             "position": [
-                3536,
-                -608
+                3552,
+                -544
             ]
         },
         {
@@ -131,13 +131,13 @@
                 "query": "INSERT INTO playbook_rules (\n  playbook_id,\n  clause_code,\n  clause_name,\n  category,\n  ideal_position,\n  minimum_position,\n  maximum_position,\n  fallback_position,\n  rationale,\n  negotiation_tips,\n  talking_points,\n  common_objections,\n  counter_arguments,\n  escalation_trigger,\n  escalation_contact,\n  requires_approval_below,\n  importance_level,\n  is_deal_breaker,\n  is_non_negotiable,\n  display_order,\n  is_active,\n  range_context,\n  source_quote,\n  quality_flags\n) VALUES (\n  '{{ $json.playbook_id }}'::uuid,\n  '{{ ($json.clause_code || \"\").replace(/'/g, \"''\") }}',\n  '{{ ($json.clause_name || \"\").replace(/'/g, \"''\") }}',\n  '{{ ($json.category || \"general\").replace(/'/g, \"''\") }}',\n  {{ $json.ideal_position || 5 }},\n  {{ $json.minimum_position || 3 }},\n  {{ $json.maximum_position || 10 }},\n  {{ $json.fallback_position || 5 }},\n  {{ ($json.rationale != null && $json.rationale !== undefined) ? \"'\" + String($json.rationale).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.negotiation_tips != null && $json.negotiation_tips !== undefined) ? \"'\" + String($json.negotiation_tips).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.talking_points != null && $json.talking_points !== undefined) ? \"'\" + String($json.talking_points).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.common_objections != null && $json.common_objections !== undefined) ? \"'\" + String($json.common_objections).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.counter_arguments != null && $json.counter_arguments !== undefined) ? \"'\" + String($json.counter_arguments).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.escalation_trigger != null && $json.escalation_trigger !== undefined) ? \"'\" + String($json.escalation_trigger).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.escalation_contact != null && $json.escalation_contact !== undefined) ? \"'\" + String($json.escalation_contact).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.requires_approval_below != null && $json.requires_approval_below !== undefined) ? $json.requires_approval_below : \"NULL\" }},\n  {{ $json.importance_level || 5 }},\n  {{ $json.is_deal_breaker || false }},\n  {{ $json.is_non_negotiable || false }},\n  {{ $json.display_order || 1 }},\n  {{ $json.is_active !== false }},\n  {{ ($json.range_context != null && $json.range_context !== undefined) ? \"'\" + String($json.range_context).replace(/'/g, \"''\") + \"'::jsonb\" : \"NULL\" }},\n  {{ ($json.source_quote != null && $json.source_quote !== undefined) ? \"'\" + String($json.source_quote).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  {{ ($json.quality_flags != null && $json.quality_flags !== undefined) ? \"'\" + String($json.quality_flags).replace(/'/g, \"''\") + \"'::jsonb\" : \"'[]'::jsonb\" }}\n)\nRETURNING rule_id",
                 "options": {}
             },
-            "id": "2e9d791b-6a18-4ad1-90ac-3f40f037ac05",
+            "id": "c361b45a-468b-416c-8950-8c5655e77758",
             "name": "Insert Rule",
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.5,
             "position": [
-                3760,
-                -608
+                3776,
+                -544
             ],
             "credentials": {
                 "postgres": {
@@ -151,13 +151,13 @@
                 "aggregate": "aggregateAllItemData",
                 "options": {}
             },
-            "id": "8a3b85f5-50ba-44c1-8793-d5b395c38458",
+            "id": "b66f31ce-5431-4933-9096-d8c6b6db38e6",
             "name": "Aggregate Results",
             "type": "n8n-nodes-base.aggregate",
             "typeVersion": 1,
             "position": [
-                3984,
-                -608
+                4000,
+                -544
             ]
         },
         {
@@ -166,13 +166,13 @@
                 "query": "UPDATE company_playbooks\nSET \n  status = CASE \n    WHEN {{ $('Process Claude Response').first().json.extractionConfidence }} >= 0.7 AND {{ !$('Validate Extracted Rules').first().json.hasQualityIssues }} THEN 'parsed'\n    ELSE 'review_required'\n  END,\n  ai_confidence_score = {{ $('Process Claude Response').first().json.extractionConfidence }},\n  rules_extracted = {{ $('Process Claude Response').first().json.rulesCount }},\n  playbook_summary = '{{ ($('Process Claude Response').first().json.playbookSummary || \"\").replace(/'/g, \"''\").replace(/\\n/g, \" \") }}',\n  parsing_error = NULL,\n  updated_at = NOW()\nWHERE playbook_id = '{{ $('Validate Input').first().json.playbookId }}'::uuid\nRETURNING *",
                 "options": {}
             },
-            "id": "be0f1e36-5ddc-4ff2-b967-e9a2d52a46cb",
+            "id": "e83ff90d-0dbd-4c2a-a022-e400d2ac50e9",
             "name": "Update Playbook Complete",
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.5,
             "position": [
-                4208,
-                -608
+                4224,
+                -544
             ],
             "credentials": {
                 "postgres": {
@@ -185,13 +185,13 @@
             "parameters": {
                 "jsCode": "// ============================================================================\n// SECTION 4: BUILD SUCCESS RESPONSE\n// ============================================================================\n\nconst processedData = $('Process Claude Response').first().json;\nconst validationData = $('Validate Extracted Rules').first().json;\nconst aggregatedData = $('Aggregate Results').first().json;\nconst updatedPlaybook = $('Update Playbook Complete').first().json;\n\n// Count inserted rules from aggregated data\nconst insertedRulesCount = aggregatedData?.data?.length || processedData.rulesCount;\n\nreturn {\n  success: true,\n  playbookId: processedData.playbookId,\n  playbookName: updatedPlaybook.playbook_name,\n  status: updatedPlaybook.status,\n  summary: processedData.playbookSummary,\n  extractionConfidence: processedData.extractionConfidence,\n  rulesExtracted: processedData.rulesCount,\n  rulesInserted: insertedRulesCount,\n  requiresReview: processedData.extractionConfidence < 0.7 || (validationData?.hasQualityIssues || false),\n  qualityIssues: validationData?.hasQualityIssues || false,\n  flaggedRuleCount: validationData?.flaggedRuleCount || 0,\n  flagSummary: validationData?.flagSummary || {},\n  timestamp: new Date().toISOString()\n};\n"
             },
-            "id": "5d05a962-7fd2-4b5d-8ae2-59dd0668ffc0",
+            "id": "81186d18-17e5-4fc8-a1ea-73069c251ace",
             "name": "Build Response",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                4432,
-                -608
+                4448,
+                -544
             ]
         },
         {
@@ -218,13 +218,13 @@
                     }
                 }
             },
-            "id": "1b8679b0-71be-446a-96ef-b970a3de18a4",
+            "id": "70eef389-aed1-4a20-bc98-3681898363e1",
             "name": "Respond to Webhook",
             "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.1,
             "position": [
-                2864,
-                -704
+                2656,
+                -640
             ]
         },
         {
@@ -252,10 +252,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                3088,
-                -608
+                2880,
+                -544
             ],
-            "id": "186ebf15-ac54-4caf-9375-660974749f28",
+            "id": "0623e72d-a2ff-4e38-994f-dd7e43c7e44c",
             "name": "Claude AI Extract Rules",
             "credentials": {
                 "httpHeaderAuth": {
@@ -271,10 +271,10 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2416,
-                -416
+                2208,
+                -352
             ],
-            "id": "23724b69-573e-4954-8228-0b4c7c1e6e49",
+            "id": "323a3ffb-f6b8-4156-a700-89253491b989",
             "name": "Log Prepare Start Event"
         },
         {
@@ -284,10 +284,10 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                3088,
-                -416
+                2880,
+                -352
             ],
-            "id": "f5e47180-50f9-46ff-9651-6d841663af67",
+            "id": "7ee97961-2bda-4320-b3f5-22924524ceb3",
             "name": "Pepare Log AI Parse Event"
         },
         {
@@ -297,10 +297,10 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                4656,
-                -608
+                4672,
+                -544
             ],
-            "id": "f6e5efae-54bb-4a69-aecc-a74dabe8b24d",
+            "id": "d82f79a4-a35b-42c7-8bb1-c6055f4cd818",
             "name": "Log Prepare Completion Event"
         },
         {
@@ -330,10 +330,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                3312,
-                -416
+                3104,
+                -352
             ],
-            "id": "c6bde131-9147-4ad7-90e7-a120e5f7160d",
+            "id": "a26222a9-167b-405c-b6d3-46cd054bc3bb",
             "name": "Send Prompt to AI",
             "onError": "continueRegularOutput"
         },
@@ -364,10 +364,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                2640,
-                -416
+                2432,
+                -352
             ],
-            "id": "b18da68f-2f69-4a18-ab24-65ca55dddb75",
+            "id": "1fe5cf15-8b6e-431b-bbaf-0631890a6e6b",
             "name": "Playbook Input Validated",
             "onError": "continueRegularOutput"
         },
@@ -398,10 +398,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                4880,
-                -608
+                4896,
+                -544
             ],
-            "id": "ea2aa268-70b1-4681-b51d-a9dd8f4f65e2",
+            "id": "eec8a792-e308-490a-9be6-2a56a1eaa53a",
             "name": "Playbook Uploaded & Completed",
             "onError": "continueRegularOutput"
         }

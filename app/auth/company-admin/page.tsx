@@ -189,6 +189,8 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [parsingIds, setParsingIds] = useState<Set<string>>(new Set())
     const [parseError, setParseError] = useState<string | null>(null)
     const [parseProgress, setParseProgress] = useState<Record<string, string>>({})
+    const [parseStartTimes, setParseStartTimes] = useState<Record<string, number>>({})
+    const [elapsedDisplay, setElapsedDisplay] = useState<Record<string, string>>({})
     const [openMenuId, setOpenMenuId] = useState<string | null>(null)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
@@ -220,20 +222,86 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }, [renamingId])
 
+    // Auto-detect playbooks already in 'parsing' status on mount/refresh
+    // so progress shows even if user navigated away and came back
+    useEffect(() => {
+        const currentlyParsing = playbooks.filter(p => p.status === 'parsing')
+        if (currentlyParsing.length === 0) return
+        const now = Date.now()
+        setParseProgress(prev => {
+            const next = { ...prev }
+            let changed = false
+            for (const p of currentlyParsing) {
+                if (!next[p.playbookId]) {
+                    next[p.playbookId] = 'Parsing in progress — this may take a few minutes...'
+                    changed = true
+                }
+            }
+            return changed ? next : prev
+        })
+        setParseStartTimes(prev => {
+            const next = { ...prev }
+            let changed = false
+            for (const p of currentlyParsing) {
+                if (!next[p.playbookId]) {
+                    // Use createdAt as rough start estimate, else now
+                    next[p.playbookId] = p.createdAt ? new Date(p.createdAt).getTime() : now
+                    changed = true
+                }
+            }
+            return changed ? next : prev
+        })
+    }, [playbooks])
+
+    // Elapsed time ticker — updates every 10s for actively parsing playbooks
+    useEffect(() => {
+        const parsingPlaybooks = playbooks.filter(p => p.status === 'parsing' || parsingIds.has(p.playbookId))
+        if (parsingPlaybooks.length === 0) {
+            if (Object.keys(elapsedDisplay).length > 0) setElapsedDisplay({})
+            return
+        }
+        const tick = () => {
+            const now = Date.now()
+            const display: Record<string, string> = {}
+            for (const p of parsingPlaybooks) {
+                const start = parseStartTimes[p.playbookId] || now
+                const elapsed = Math.floor((now - start) / 1000)
+                if (elapsed < 60) {
+                    display[p.playbookId] = 'Just started...'
+                } else {
+                    const mins = Math.floor(elapsed / 60)
+                    display[p.playbookId] = `${mins} min${mins !== 1 ? 's' : ''} elapsed`
+                }
+            }
+            setElapsedDisplay(display)
+        }
+        tick()
+        const interval = setInterval(tick, 10000)
+        return () => clearInterval(interval)
+    }, [playbooks, parsingIds, parseStartTimes])
+
     // Clear progress messages when playbooks finish parsing
     useEffect(() => {
         if (Object.keys(parseProgress).length === 0 && parsingIds.size === 0) return
         const stillParsing = new Set(playbooks.filter(p => p.status === 'parsing').map(p => p.playbookId))
         // Clear progress messages for playbooks that finished parsing
         const updatedProgress = { ...parseProgress }
+        const updatedStartTimes = { ...parseStartTimes }
+        const updatedElapsed = { ...elapsedDisplay }
         let progressChanged = false
         for (const id of Object.keys(updatedProgress)) {
             if (!stillParsing.has(id) && !parsingIds.has(id)) {
                 delete updatedProgress[id]
+                delete updatedStartTimes[id]
+                delete updatedElapsed[id]
                 progressChanged = true
             }
         }
-        if (progressChanged) setParseProgress(updatedProgress)
+        if (progressChanged) {
+            setParseProgress(updatedProgress)
+            setParseStartTimes(updatedStartTimes)
+            setElapsedDisplay(updatedElapsed)
+        }
         // Clear parsingIds for playbooks whose status is no longer 'parsing'
         // (i.e. the parent refreshed and status changed to 'parsed' or 'parse_failed')
         if (parsingIds.size > 0) {
@@ -280,6 +348,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         setParsingIds(prev => new Set(prev).add(playbookId))
         setParseError(null)
         setParseProgress(prev => ({ ...prev, [playbookId]: 'Downloading document...' }))
+        setParseStartTimes(prev => ({ ...prev, [playbookId]: Date.now() }))
         try {
             await onParse(playbookId, sourceFilePath, sourceFileName)
             // Parse request sent — N8N processes in background.
@@ -424,12 +493,18 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                 </div>
                 {uploadError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{uploadError}</div>}
                 {parseError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{parseError}</div>}
-                {Object.entries(parseProgress).map(([id, msg]) => (
+                {Object.entries(parseProgress).map(([id, msg]) => {
+                    const pb = playbooks.find(p => p.playbookId === id)
+                    return (
                     <div key={id} className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                        {msg}
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                        <div className="flex-1">
+                            <span className="font-medium">{pb?.playbookName || 'Playbook'}</span>: {msg}
+                            {elapsedDisplay[id] && <span className="ml-2 text-blue-500">({elapsedDisplay[id]})</span>}
+                        </div>
                     </div>
-                ))}
+                    )
+                })}
             </div>
 
             {/* Playbooks List */}
@@ -547,6 +622,24 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         <p className="text-sm text-red-600 mb-2">{renameError}</p>
                                     )}
                                     {p.playbookSummary && <p className="text-sm text-slate-600 mb-3 line-clamp-2">{p.playbookSummary}</p>}
+                                    {(p.status === 'parsing' || parsingIds.has(p.playbookId)) && (
+                                        <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-medium text-blue-800">
+                                                        {parseProgress[p.playbookId] || 'Parsing in progress — this may take a few minutes...'}
+                                                    </p>
+                                                    <p className="text-xs text-blue-600 mt-0.5">
+                                                        {elapsedDisplay[p.playbookId] ? `${elapsedDisplay[p.playbookId]} — ` : ''}Please keep this page open. Large documents may take 2-5 minutes.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                                                <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                                            </div>
+                                        </div>
+                                    )}
                                     {p.parsingError && <p className="text-sm text-red-600 mb-3">Error: {p.parsingError}</p>}
                                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                                         {p.sourceFileName && <span>{p.sourceFileName}</span>}
@@ -577,10 +670,15 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         </button>
                                     )}
                                     {(p.status === 'parsing' || parsingIds.has(p.playbookId)) && (
-                                        <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg flex items-center gap-2">
-                                            <span className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
-                                            Parsing...
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg flex items-center gap-2">
+                                                <span className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
+                                                Parsing...
+                                            </span>
+                                            {elapsedDisplay[p.playbookId] && (
+                                                <span className="text-xs text-blue-500">{elapsedDisplay[p.playbookId]}</span>
+                                            )}
+                                        </div>
                                     )}
                                     {p.isActive ? (
                                         <button onClick={() => onDeactivate(p.playbookId)} className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg">Deactivate</button>
