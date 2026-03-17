@@ -14,6 +14,7 @@ import {
     scoreRule,
     normaliseCategory,
     checkSingleClauseCompliance,
+    filterRulesByScope,
 } from '@/lib/playbook-compliance'
 
 
@@ -36,6 +37,7 @@ export interface ComplianceCheckInput {
     companyId: string
     contractTypeKey?: string | null
     perspective?: PlaybookPerspective
+    scheduleType?: string | null
 }
 
 export interface ComplianceClauseSnapshot {
@@ -137,8 +139,13 @@ export async function checkCompliance(
     const cached = getCached(input)
     if (cached) return cached
 
+    // Filter rules by schedule scope when scheduleType is provided
+    const scopedRules = input.scheduleType
+        ? filterRulesByScope(playbookRules, 'schedule', input.scheduleType)
+        : filterRulesByScope(playbookRules, 'main_body')
+
     // No playbook rules → always clear
-    if (playbookRules.length === 0) {
+    if (scopedRules.length === 0) {
         const clearResult: ComplianceCheckResult = {
             severity: 'clear',
             overallScore: 100,
@@ -171,7 +178,7 @@ export async function checkCompliance(
 
     // Run single-clause compliance check (before/after)
     const singleCheck = checkSingleClauseCompliance(
-        playbookRules,
+        scopedRules,
         clauses,
         input.clauseId,
         input.proposedPosition,
@@ -181,7 +188,7 @@ export async function checkCompliance(
 
     // Find rules in the same normalised category as the target clause
     const targetNormCategory = normaliseCategory(input.clauseCategory)
-    const categoryRules = playbookRules.filter(
+    const categoryRules = scopedRules.filter(
         r => normaliseCategory(r.category) === targetNormCategory
     )
 

@@ -450,6 +450,37 @@
             "name": "Trigger Clause Range Mapping",
             "alwaysOutputData": false,
             "executeOnce": false
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://spikeislandstudios.app.n8n.cloud/webhook/detect-contract-schedules",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "contract_id",
+                            "value": "={{ $('Validate Input').first().json.contractId }}"
+                        },
+                        {
+                            "name": "contract_type_key",
+                            "value": "={{ $('Validate Input').first().json.contractTypeKey }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "timeout": 120000
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                -2160,
+                260
+            ],
+            "id": "sched-trigger-from-certify-001",
+            "name": "Trigger Schedule Detection",
+            "continueOnFail": true
         }
     ],
     "connections": {
@@ -616,6 +647,11 @@
                 [
                     {
                         "node": "Respond Complete",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Trigger Schedule Detection",
                         "type": "main",
                         "index": 0
                     }

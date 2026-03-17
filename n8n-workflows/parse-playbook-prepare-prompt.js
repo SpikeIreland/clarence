@@ -177,6 +177,25 @@ CATEGORIES
 Use one of: liability, termination, payment, intellectual_property, confidentiality, data_protection, service_levels, warranties, indemnification, insurance, governance, employment, audit, benchmarking, dispute_resolution, change_control, exit_transition, subcontracting, force_majeure, other
 
 ═══════════════════════════════════════════════════
+SCHEDULE-SPECIFIC RULES
+═══════════════════════════════════════════════════
+
+If the playbook contains rules that specifically apply to a CONTRACT SCHEDULE (appendix/annex), tag them with a "schedule_type" field.
+
+Examples of schedule-specific rules:
+- "In the SLA schedule, uptime must be >= 99.5%" → schedule_type: "service_levels"
+- "The pricing schedule must include annual indexation cap" → schedule_type: "pricing"
+- "Exit period must be at least 6 months" → schedule_type: "exit_transition"
+- "DPA must list all sub-processors" → schedule_type: "data_processing"
+
+Valid schedule_type values:
+scope_of_work, pricing, service_levels, data_processing, governance, exit_transition, insurance, change_control, disaster_recovery, security, benchmarking, subcontracting, other
+
+Rules in the MAIN BODY of the contract (not specific to any schedule) should have schedule_type: null.
+
+Most rules will be main body rules (schedule_type: null). Only tag rules as schedule-specific when they clearly relate to a particular schedule/appendix section.
+
+═══════════════════════════════════════════════════
 VALUE TYPES
 ═══════════════════════════════════════════════════
 
@@ -204,6 +223,7 @@ Return ONLY valid JSON (no markdown backticks):
       "clause_code": "LIA-001",
       "clause_name": "Liability Cap",
       "category": "liability",
+      "schedule_type": null,
       "source_quote": "The Provider's aggregate liability under this Agreement shall not exceed 150% of the annual charges paid or payable in the preceding 12-month period.",
       "unit_of_measurement": "% of annual fees",
       "value_type": "percentage",

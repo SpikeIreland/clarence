@@ -16,6 +16,7 @@ export interface DefaultRuleTemplate {
     clause_name: string
     clause_code: string
     category: string
+    schedule_type?: string | null
     customer_ideal: number
     customer_min: number
     customer_max: number
@@ -35,6 +36,7 @@ export interface DraftRule {
     clause_name: string
     clause_code: string | null
     category: string
+    schedule_type?: string | null
     ideal_position: number
     minimum_position: number
     maximum_position: number
@@ -231,7 +233,128 @@ export const DEFAULT_RULE_TEMPLATES: Record<string, DefaultRuleTemplate[]> = {
 }
 
 // ============================================================================
-// SECTION 4: DRAFT RULE GENERATOR
+// SECTION 4: DEFAULT SCHEDULE RULE TEMPLATES
+// ============================================================================
+
+export const DEFAULT_SCHEDULE_RULE_TEMPLATES: Record<string, DefaultRuleTemplate[]> = {
+    service_levels: [
+        {
+            clause_name: 'Uptime SLA Target',
+            clause_code: 'SCH-SLA-001',
+            category: 'service_levels',
+            schedule_type: 'service_levels',
+            customer_ideal: 8, customer_min: 5, customer_max: 10, customer_fallback: 6,
+            provider_ideal: 3, provider_min: 1, provider_max: 5, provider_fallback: 4,
+            importance_level: 9,
+            is_deal_breaker: true,
+            rationale: 'Core availability commitment — typically 99.5-99.9% for critical services',
+            negotiation_tips: 'Insist on clear measurement methodology and exclusion windows',
+        },
+        {
+            clause_name: 'Service Credits Cap',
+            clause_code: 'SCH-SLA-002',
+            category: 'service_levels',
+            schedule_type: 'service_levels',
+            customer_ideal: 7, customer_min: 4, customer_max: 9, customer_fallback: 5,
+            provider_ideal: 3, provider_min: 1, provider_max: 5, provider_fallback: 4,
+            importance_level: 7,
+            is_deal_breaker: false,
+            rationale: 'Maximum service credits payable when SLA targets are missed',
+            negotiation_tips: 'Ensure credits are not the sole remedy; 10-15% of monthly fees is market standard',
+        },
+        {
+            clause_name: 'Response Time SLA',
+            clause_code: 'SCH-SLA-003',
+            category: 'service_levels',
+            schedule_type: 'service_levels',
+            customer_ideal: 7, customer_min: 4, customer_max: 9, customer_fallback: 5,
+            provider_ideal: 4, provider_min: 2, provider_max: 6, provider_fallback: 5,
+            importance_level: 7,
+            is_deal_breaker: false,
+            rationale: 'Maximum response time for incidents by severity level',
+            negotiation_tips: 'Define severity levels clearly; P1 response should be under 1 hour',
+        },
+    ],
+    pricing: [
+        {
+            clause_name: 'Annual Indexation Cap',
+            clause_code: 'SCH-PRC-001',
+            category: 'payment',
+            schedule_type: 'pricing',
+            customer_ideal: 3, customer_min: 1, customer_max: 5, customer_fallback: 2,
+            provider_ideal: 7, provider_min: 4, provider_max: 9, provider_fallback: 6,
+            importance_level: 8,
+            is_deal_breaker: false,
+            rationale: 'Maximum annual price increase percentage — controls cost predictability',
+            negotiation_tips: 'Cap at CPI or 3-5%; avoid uncapped "reasonable increase" language',
+        },
+        {
+            clause_name: 'Volume Discount Thresholds',
+            clause_code: 'SCH-PRC-002',
+            category: 'payment',
+            schedule_type: 'pricing',
+            customer_ideal: 7, customer_min: 4, customer_max: 9, customer_fallback: 5,
+            provider_ideal: 3, provider_min: 1, provider_max: 5, provider_fallback: 4,
+            importance_level: 6,
+            is_deal_breaker: false,
+            rationale: 'Tiered discounts as consumption/volume increases',
+            negotiation_tips: 'Ensure thresholds are achievable and discounts are meaningful (10%+)',
+        },
+        {
+            clause_name: 'Rate Review Mechanism',
+            clause_code: 'SCH-PRC-003',
+            category: 'payment',
+            schedule_type: 'pricing',
+            customer_ideal: 7, customer_min: 4, customer_max: 9, customer_fallback: 5,
+            provider_ideal: 4, provider_min: 2, provider_max: 6, provider_fallback: 5,
+            importance_level: 7,
+            is_deal_breaker: false,
+            rationale: 'Process and timing for periodic rate reviews',
+            negotiation_tips: 'Annual review with benchmarking rights; lock rates for initial term minimum',
+        },
+    ],
+    exit_transition: [
+        {
+            clause_name: 'Minimum Exit Period',
+            clause_code: 'SCH-EXT-001',
+            category: 'termination',
+            schedule_type: 'exit_transition',
+            customer_ideal: 7, customer_min: 4, customer_max: 9, customer_fallback: 5,
+            provider_ideal: 4, provider_min: 2, provider_max: 6, provider_fallback: 5,
+            importance_level: 8,
+            is_deal_breaker: false,
+            rationale: 'Minimum transition period the provider must support on exit',
+            negotiation_tips: 'Ensure minimum 6 months for complex BPO; 3 months for SaaS',
+        },
+        {
+            clause_name: 'Knowledge Transfer Duration',
+            clause_code: 'SCH-EXT-002',
+            category: 'termination',
+            schedule_type: 'exit_transition',
+            customer_ideal: 7, customer_min: 4, customer_max: 9, customer_fallback: 5,
+            provider_ideal: 3, provider_min: 1, provider_max: 5, provider_fallback: 4,
+            importance_level: 7,
+            is_deal_breaker: false,
+            rationale: 'Time allocated for knowledge transfer to successor provider',
+            negotiation_tips: 'Include named key personnel; define minimum documentation deliverables',
+        },
+        {
+            clause_name: 'Data Migration Timeline',
+            clause_code: 'SCH-EXT-003',
+            category: 'termination',
+            schedule_type: 'exit_transition',
+            customer_ideal: 8, customer_min: 5, customer_max: 10, customer_fallback: 6,
+            provider_ideal: 3, provider_min: 1, provider_max: 5, provider_fallback: 4,
+            importance_level: 8,
+            is_deal_breaker: true,
+            rationale: 'Obligation to return/migrate all data within a defined period',
+            negotiation_tips: 'Insist on machine-readable format; data destruction certification post-migration',
+        },
+    ],
+}
+
+// ============================================================================
+// SECTION 5: DRAFT RULE GENERATOR
 // ============================================================================
 
 export function generateDefaultRules(
@@ -249,6 +372,7 @@ export function generateDefaultRules(
                 clause_name: tmpl.clause_name,
                 clause_code: tmpl.clause_code,
                 category: tmpl.category,
+                schedule_type: tmpl.schedule_type || null,
                 ideal_position: perspective === 'customer' ? tmpl.customer_ideal : tmpl.provider_ideal,
                 minimum_position: perspective === 'customer' ? tmpl.customer_min : tmpl.provider_min,
                 maximum_position: perspective === 'customer' ? tmpl.customer_max : tmpl.provider_max,

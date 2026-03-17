@@ -27,6 +27,7 @@ const ALLOWED_FIELDS = [
     'requires_approval_below',
     'quality_flags',
     'source_quote',
+    'schedule_type',
 ] as const
 
 function validatePositionOrdering(

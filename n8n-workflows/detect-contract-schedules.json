@@ -1,0 +1,251 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "detect-contract-schedules",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [-1200, 0],
+            "id": "sched-webhook-001",
+            "name": "Webhook",
+            "webhookId": "detect-contract-schedules-endpoint"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// VALIDATE INPUT\n// ============================================================================\n\nlet body = $input.first().json.body || $input.first().json || {};\n\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch(e) { throw new Error('Invalid JSON in request body'); }\n}\n\nconst contractId = body.contract_id || body.contractId;\nif (!contractId) throw new Error('contract_id is required');\n\nconst contractTypeKey = body.contract_type_key || body.contractTypeKey || null;\n\nconsole.log('=== DETECT CONTRACT SCHEDULES ===');\nconsole.log('Contract ID:', contractId);\nconsole.log('Contract Type Key:', contractTypeKey);\n\nreturn { json: { contractId, contractTypeKey } };\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [-960, 0],
+            "id": "sched-validate-001",
+            "name": "Validate Input",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT contract_id, contract_name, extracted_text, detected_contract_type, contract_type_key, clause_count\nFROM uploaded_contracts\nWHERE contract_id = $1::uuid;",
+                "options": {
+                    "queryReplacement": "={{ [$('Validate Input').first().json.contractId] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [-720, 0],
+            "id": "sched-get-contract-001",
+            "name": "Get Contract Text",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// CHECK CONTRACT EXISTS\n// ============================================================================\n\nconst contract = $('Get Contract Text').first().json;\nif (!contract || !contract.extracted_text) {\n  throw new Error('Contract not found or has no extracted text');\n}\n\nreturn { json: { contractId: $('Validate Input').first().json.contractId, status: 'processing' } };\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [-480, 0],
+            "id": "sched-check-contract-001",
+            "name": "Check Contract Exists",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE uploaded_contracts SET schedule_detection_status = 'processing' WHERE contract_id = $1::uuid;",
+                "options": {
+                    "queryReplacement": "={{ [$('Validate Input').first().json.contractId] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [-240, 0],
+            "id": "sched-mark-processing-001",
+            "name": "Mark Processing",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// PREPARE SCHEDULE DETECTION PROMPT\n// Builds claudeRequestBody for the HTTP Request node (Anthropic Messages API)\n// ============================================================================\n\nconst contract = $('Get Contract Text').first().json;\nconst contractTypeKey = $('Validate Input').first().json.contractTypeKey || contract.contract_type_key || 'service_agreement';\n\n// Expected schedules by contract type\nconst SCHEDULE_EXPECTATIONS = {\n  bpo_agreement: [\n    { type: 'scope_of_work', label: 'Scope of Work / Statement of Work', required: true },\n    { type: 'pricing', label: 'Pricing Schedule / Rate Card', required: true },\n    { type: 'service_levels', label: 'Service Level Agreement / SLA', required: true },\n    { type: 'data_processing', label: 'Data Processing Agreement / DPA', required: true },\n    { type: 'governance', label: 'Governance Schedule', required: true },\n    { type: 'exit_transition', label: 'Exit & Transition Plan', required: true },\n    { type: 'disaster_recovery', label: 'Disaster Recovery / Business Continuity', required: true },\n    { type: 'change_control', label: 'Change Control Procedure', required: false },\n    { type: 'insurance', label: 'Insurance Schedule', required: false },\n    { type: 'benchmarking', label: 'Benchmarking Schedule', required: false },\n    { type: 'subcontracting', label: 'Approved Subcontractors', required: false },\n  ],\n  it_outsourcing: [\n    { type: 'scope_of_work', label: 'Scope of Work', required: true },\n    { type: 'pricing', label: 'Pricing Schedule', required: true },\n    { type: 'service_levels', label: 'Service Level Agreement', required: true },\n    { type: 'data_processing', label: 'Data Processing Agreement', required: true },\n    { type: 'exit_transition', label: 'Exit & Transition Plan', required: true },\n    { type: 'disaster_recovery', label: 'Disaster Recovery', required: true },\n    { type: 'governance', label: 'Governance Schedule', required: false },\n    { type: 'security', label: 'Security Schedule', required: false },\n    { type: 'change_control', label: 'Change Control', required: false },\n  ],\n  managed_services: [\n    { type: 'scope_of_work', label: 'Scope of Work', required: true },\n    { type: 'pricing', label: 'Pricing Schedule', required: true },\n    { type: 'service_levels', label: 'Service Level Agreement', required: true },\n    { type: 'data_processing', label: 'Data Processing Agreement', required: false },\n    { type: 'governance', label: 'Governance Schedule', required: false },\n    { type: 'exit_transition', label: 'Exit & Transition Plan', required: false },\n    { type: 'change_control', label: 'Change Control', required: false },\n  ],\n  service_agreement: [\n    { type: 'scope_of_work', label: 'Scope of Work', required: false },\n    { type: 'pricing', label: 'Pricing Schedule', required: false },\n    { type: 'service_levels', label: 'Service Level Agreement', required: false },\n    { type: 'data_processing', label: 'Data Processing Agreement', required: false },\n    { type: 'insurance', label: 'Insurance Schedule', required: false },\n  ],\n  saas_agreement: [\n    { type: 'service_levels', label: 'Service Level Agreement', required: true },\n    { type: 'data_processing', label: 'Data Processing Agreement', required: true },\n    { type: 'pricing', label: 'Pricing / Subscription Terms', required: false },\n    { type: 'security', label: 'Security Schedule', required: false },\n    { type: 'disaster_recovery', label: 'Disaster Recovery', required: false },\n  ],\n  consultancy_agreement: [\n    { type: 'scope_of_work', label: 'Scope of Work / Statement of Work', required: false },\n    { type: 'pricing', label: 'Fee Schedule', required: false },\n  ],\n  maintenance_agreement: [\n    { type: 'service_levels', label: 'Service Level Agreement', required: false },\n    { type: 'pricing', label: 'Pricing Schedule', required: false },\n  ],\n};\n\nconst expectedSchedules = SCHEDULE_EXPECTATIONS[contractTypeKey] || SCHEDULE_EXPECTATIONS['service_agreement'];\n\nconst expectedListText = expectedSchedules.map(s =>\n  `- ${s.label} (type: ${s.type}) ${s.required ? '[REQUIRED]' : '[OPTIONAL]'}`\n).join('\\n');\n\n// Limit text to avoid exceeding context window\nconst MAX_CHARS = 120000;\nlet text = contract.extracted_text;\nif (text.length > MAX_CHARS) {\n  text = text.substring(0, MAX_CHARS) + '\\n\\n[TEXT TRUNCATED AT ' + MAX_CHARS + ' CHARACTERS]';\n}\n\nconst systemPrompt = `You are CLARENCE — a contract analysis engine specialising in identifying contract schedules, appendices, and annexes.\n\nYOUR TASK: Identify ALL schedules, appendices, annexes, and attachments in this contract document.\n\nSCHEDULES are separate sections typically found after the main body of a contract. They contain operational, commercial, or technical details such as:\n- Scope of Work / Statement of Work (deliverables, milestones)\n- Pricing / Rate Cards (fees, indexation, payment mechanics)\n- Service Level Agreements (SLA targets, KPIs, service credits)\n- Data Processing Agreements (GDPR, sub-processors, data handling)\n- Governance (steering committees, reporting, escalation)\n- Exit & Transition Plans (handover, knowledge transfer, data migration)\n- Insurance (coverage requirements)\n- Change Control (change request procedures)\n- Disaster Recovery / Business Continuity\n- Security Requirements\n- Benchmarking\n- Approved Subcontractors\n\nSCHEDULE DETECTION RULES:\n1. Look for headings like \"Schedule\", \"Appendix\", \"Annex\", \"Attachment\", \"Exhibit\", \"Addendum\"\n2. Also identify sections that function as schedules even if not formally labelled (e.g. a pricing table within a section)\n3. Classify each detected schedule into the correct schedule_type\n4. Note the approximate character position where each schedule starts and ends\n5. Provide a brief summary of what each schedule covers\n\nVALID SCHEDULE TYPES:\nscope_of_work, pricing, service_levels, data_processing, governance, exit_transition, insurance, change_control, disaster_recovery, security, benchmarking, subcontracting, other\n\nOUTPUT FORMAT — return ONLY valid JSON (no markdown backticks):\n\n{\n  \"detected_schedules\": [\n    {\n      \"schedule_type\": \"service_levels\",\n      \"schedule_label\": \"Schedule 3 - Service Levels\",\n      \"start_char\": 45000,\n      \"end_char\": 52000,\n      \"confidence\": 0.95,\n      \"summary\": \"Defines uptime SLA targets (99.5%), response time KPIs, service credit calculation methodology, and measurement periods.\"\n    }\n  ],\n  \"missing_expected\": [\n    {\n      \"schedule_type\": \"exit_transition\",\n      \"schedule_label\": \"Exit & Transition Plan\",\n      \"is_required\": true,\n      \"reason\": \"No exit or transition provisions found in any schedule or appendix.\"\n    }\n  ],\n  \"detection_summary\": \"Found 5 schedules. 2 required schedules are missing.\"\n}`;\n\nconst userPrompt = `Analyse this ${contract.detected_contract_type || contractTypeKey} contract and identify ALL schedules, appendices, and annexes.\n\nCONTRACT: ${contract.contract_name || 'Unnamed Contract'}\nCONTRACT TYPE: ${contractTypeKey}\n\nEXPECTED SCHEDULES FOR THIS CONTRACT TYPE:\n${expectedListText}\n\n---\n${text}\n---\n\nIdentify every schedule/appendix/annex. For each, classify its type, note its position in the document, and provide a brief summary. Also flag any EXPECTED schedules that are MISSING.\n\nReturn ONLY the JSON object.`;\n\n// Build the Anthropic Messages API request body\nconst claudeRequestBody = {\n  model: 'claude-sonnet-4-20250514',\n  max_tokens: 8000,\n  temperature: 0,\n  system: systemPrompt,\n  messages: [\n    { role: 'user', content: userPrompt }\n  ]\n};\n\nreturn {\n  json: {\n    contractId: $('Validate Input').first().json.contractId,\n    contractTypeKey,\n    contractName: contract.contract_name,\n    expectedSchedules,\n    claudeRequestBody,\n  }\n};\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [0, 0],
+            "id": "sched-prepare-prompt-001",
+            "name": "Prepare Detection Prompt",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.anthropic.com/v1/messages",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "anthropic-version",
+                            "value": "2023-06-01"
+                        },
+                        {
+                            "name": "content-type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "raw",
+                "rawContentType": "application/json",
+                "body": "={{ JSON.stringify($json.claudeRequestBody) }}",
+                "options": {
+                    "timeout": 120000
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [240, 0],
+            "id": "sched-claude-001",
+            "name": "Claude API - Detect Schedules",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "xYYWl2zK5GgqiQf8",
+                    "name": "Anthropic API Key"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// PROCESS CLAUDE DETECTION RESPONSE\n// Handles Anthropic Messages API response format from HTTP Request node\n// ============================================================================\n\nconst prepData = $('Prepare Detection Prompt').first().json;\nconst claudeResponse = $input.first().json;\n\n// Anthropic Messages API returns { content: [{ type: 'text', text: '...' }] }\nconst responseText = claudeResponse.content?.[0]?.text || claudeResponse.text || '';\n\nif (!responseText) {\n  throw new Error('Empty response from Claude API. Response: ' + JSON.stringify(claudeResponse).substring(0, 500));\n}\n\nlet jsonStr = responseText.trim();\n\n// Strip markdown code fences if present\nif (jsonStr.includes('```json')) {\n  jsonStr = jsonStr.split('```json')[1].split('```')[0].trim();\n} else if (jsonStr.includes('```')) {\n  jsonStr = jsonStr.split('```')[1].split('```')[0].trim();\n}\n\nif (!jsonStr.startsWith('{')) {\n  const jsonMatch = jsonStr.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) jsonStr = jsonMatch[0];\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  throw new Error(\n    'Failed to parse Claude response as JSON: ' + e.message +\n    '. Response preview: ' + responseText.substring(0, 500)\n  );\n}\n\nconst VALID_TYPES = [\n  'scope_of_work', 'pricing', 'service_levels', 'data_processing',\n  'governance', 'exit_transition', 'insurance', 'change_control',\n  'disaster_recovery', 'security', 'benchmarking', 'subcontracting', 'other'\n];\n\nconst detected = (parsed.detected_schedules || []).map(s => ({\n  schedule_type: VALID_TYPES.includes(s.schedule_type) ? s.schedule_type : 'other',\n  schedule_label: s.schedule_label || s.label || 'Unknown Schedule',\n  start_position: s.start_char || s.start_position || null,\n  end_position: s.end_char || s.end_position || null,\n  confidence_score: Math.max(0, Math.min(1, s.confidence || 0.5)),\n  summary: s.summary || null,\n  detection_method: 'ai',\n  status: 'detected',\n}));\n\nconst missing = (parsed.missing_expected || []).map(m => ({\n  schedule_type: m.schedule_type,\n  schedule_label: m.schedule_label || m.label,\n  is_required: m.is_required || false,\n  reason: m.reason || 'Not found in document',\n}));\n\nconsole.log('Detected schedules:', detected.length);\nconsole.log('Missing expected:', missing.length);\n\nreturn {\n  json: {\n    contractId: prepData.contractId,\n    detectedSchedules: detected,\n    missingExpected: missing,\n    detectionSummary: parsed.detection_summary || `Found ${detected.length} schedule(s). ${missing.filter(m => m.is_required).length} required schedule(s) missing.`,\n    scheduleCount: detected.length,\n  }\n};\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [480, 0],
+            "id": "sched-process-response-001",
+            "name": "Process Detection Response",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "-- Delete any previous detection results for this contract\nDELETE FROM contract_schedules WHERE contract_id = $1::uuid;\n\n-- Insert detected schedules\n{{ $json.detectedSchedules.length > 0 ? $json.detectedSchedules.map(s => `INSERT INTO contract_schedules (contract_id, schedule_type, schedule_label, detection_method, confidence_score, start_position, end_position, summary, status) VALUES ('${$json.contractId}', '${s.schedule_type}', '${s.schedule_label.replace(/'/g, \"''\")}', '${s.detection_method}', ${s.confidence_score}, ${s.start_position || 'NULL'}, ${s.end_position || 'NULL'}, '${(s.summary || '').replace(/'/g, \"''\")}', '${s.status}');`).join('\\n') : '-- No schedules detected' }}\n\n-- Update contract metadata\nUPDATE uploaded_contracts\nSET schedule_count = {{ $json.scheduleCount }},\n    schedule_detection_status = 'complete'\nWHERE contract_id = '{{ $json.contractId }}'::uuid;",
+                "options": {
+                    "queryReplacement": "={{ [$json.contractId] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [720, 0],
+            "id": "sched-insert-results-001",
+            "name": "Insert Detected Schedules",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ success: true, contractId: $('Validate Input').first().json.contractId, schedulesDetected: $('Process Detection Response').first().json.scheduleCount, missingRequired: $('Process Detection Response').first().json.missingExpected.filter(m => m.is_required).length, summary: $('Process Detection Response').first().json.detectionSummary }) }}",
+                "options": {
+                    "responseCode": 200
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [960, 0],
+            "id": "sched-respond-001",
+            "name": "Respond Success"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ success: false, error: $json.error?.message || $json.message || 'Schedule detection failed' }) }}",
+                "options": {
+                    "responseCode": 500
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [960, 240],
+            "id": "sched-respond-error-001",
+            "name": "Respond Error"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [{ "node": "Validate Input", "type": "main", "index": 0 }]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [{ "node": "Get Contract Text", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Get Contract Text": {
+            "main": [
+                [{ "node": "Check Contract Exists", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Check Contract Exists": {
+            "main": [
+                [{ "node": "Mark Processing", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Mark Processing": {
+            "main": [
+                [{ "node": "Prepare Detection Prompt", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Prepare Detection Prompt": {
+            "main": [
+                [{ "node": "Claude API - Detect Schedules", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Claude API - Detect Schedules": {
+            "main": [
+                [{ "node": "Process Detection Response", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Process Detection Response": {
+            "main": [
+                [{ "node": "Insert Detected Schedules", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Insert Detected Schedules": {
+            "main": [
+                [{ "node": "Respond Success", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    }
+}

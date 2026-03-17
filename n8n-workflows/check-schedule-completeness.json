@@ -1,0 +1,268 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "check-schedule-completeness",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [-1200, 0],
+            "id": "chk-webhook-001",
+            "name": "Webhook",
+            "webhookId": "check-schedule-completeness-endpoint"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// VALIDATE INPUT\n// ============================================================================\n\nlet body = $input.first().json.body || $input.first().json || {};\n\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch(e) { throw new Error('Invalid JSON in request body'); }\n}\n\nconst contractId = body.contract_id || body.contractId;\nconst scheduleId = body.schedule_id || body.scheduleId;\n\nif (!contractId) throw new Error('contract_id is required');\nif (!scheduleId) throw new Error('schedule_id is required');\n\nconsole.log('=== CHECK SCHEDULE COMPLETENESS ===');\nconsole.log('Contract ID:', contractId);\nconsole.log('Schedule ID:', scheduleId);\n\nreturn { json: { contractId, scheduleId } };\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [-960, 0],
+            "id": "chk-validate-001",
+            "name": "Validate Input",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT\n  cs.schedule_id, cs.contract_id, cs.schedule_type, cs.schedule_label,\n  cs.extracted_text, cs.summary,\n  uc.contract_type_key, uc.contract_name\nFROM contract_schedules cs\nJOIN uploaded_contracts uc ON uc.contract_id = cs.contract_id\nWHERE cs.schedule_id = $1::uuid\n  AND cs.contract_id = $2::uuid;",
+                "options": {
+                    "queryReplacement": "={{ [$('Validate Input').first().json.scheduleId, $('Validate Input').first().json.contractId] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [-720, 0],
+            "id": "chk-get-schedule-001",
+            "name": "Get Schedule Data",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT template_item_id, check_question, check_category, importance_level, display_order\nFROM schedule_checklist_templates\nWHERE contract_type_key = $1\n  AND schedule_type = $2\n  AND is_active = TRUE\nORDER BY display_order ASC;",
+                "options": {
+                    "queryReplacement": "={{ [$('Get Schedule Data').first().json.contract_type_key, $('Get Schedule Data').first().json.schedule_type] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [-480, 0],
+            "id": "chk-get-templates-001",
+            "name": "Get Checklist Templates",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// MARK PROCESSING + PREPARE PROMPT\n// ============================================================================\n\nconst schedule = $('Get Schedule Data').first().json;\nconst templateRows = $('Get Checklist Templates').all().map(item => item.json);\n\nif (!schedule || !schedule.schedule_id) {\n  throw new Error('Schedule not found');\n}\n\nconst scheduleText = schedule.extracted_text || schedule.summary || '';\nif (!scheduleText) {\n  throw new Error('Schedule has no extracted text or summary');\n}\n\n// If no templates, return empty result (no questions to check)\nif (!templateRows || templateRows.length === 0) {\n  // Return special marker so we skip the Claude call\n  return {\n    json: {\n      skipClaude: true,\n      contractId: schedule.contract_id,\n      scheduleId: schedule.schedule_id,\n      scheduleType: schedule.schedule_type,\n      checklistResults: [],\n      checklistScore: null,\n    }\n  };\n}\n\n// Build questions list for Claude\nconst questions = templateRows.map((t, i) => ({\n  index: i + 1,\n  template_item_id: t.template_item_id,\n  question: t.check_question,\n  category: t.check_category,\n  importance: t.importance_level,\n}));\n\nconst questionsText = questions.map(q =>\n  `${q.index}. [${q.category.toUpperCase()}] ${q.question}`\n).join('\\n');\n\nconst systemPrompt = `You are CLARENCE — a contract schedule completeness analyst.\n\nYou will be given the text of a contract schedule and a set of checklist questions. For each question, determine whether the schedule addresses that item.\n\nRESPONSE RULES:\n1. For each question, respond with:\n   - \"present\" — the schedule clearly addresses this item\n   - \"absent\" — the schedule does not address this item at all\n   - \"partial\" — the schedule mentions it but incompletely or ambiguously\n2. Provide a brief evidence quote (max 100 chars) from the schedule text supporting your answer\n3. Provide a confidence score (0.0-1.0) for each answer\n\nOUTPUT FORMAT — return ONLY valid JSON (no markdown backticks):\n{\n  \"results\": [\n    {\n      \"question_index\": 1,\n      \"result\": \"present\",\n      \"evidence\": \"The Provider shall maintain availability of 99.5%...\",\n      \"confidence\": 0.95\n    }\n  ]\n}`;\n\nconst userPrompt = `Analyse this ${schedule.schedule_type.replace(/_/g, ' ')} schedule and answer each checklist question.\n\nSCHEDULE: ${schedule.schedule_label}\nCONTRACT: ${schedule.contract_name || 'Unknown'}\n\n---\n${scheduleText}\n---\n\nCHECKLIST QUESTIONS:\n${questionsText}\n\nFor each question, determine if the item is present, absent, or partial. Provide evidence and confidence.\n\nReturn ONLY the JSON object.`;\n\nconst claudeRequestBody = {\n  model: 'claude-sonnet-4-20250514',\n  max_tokens: 4000,\n  temperature: 0,\n  system: systemPrompt,\n  messages: [\n    { role: 'user', content: userPrompt }\n  ]\n};\n\nreturn {\n  json: {\n    skipClaude: false,\n    contractId: schedule.contract_id,\n    scheduleId: schedule.schedule_id,\n    scheduleType: schedule.schedule_type,\n    questions,\n    claudeRequestBody,\n  }\n};\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [-240, 0],
+            "id": "chk-prepare-prompt-001",
+            "name": "Prepare Checklist Prompt",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict"
+                    },
+                    "conditions": [
+                        {
+                            "id": "skip-check",
+                            "leftValue": "={{ $json.skipClaude }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "notEquals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [0, 0],
+            "id": "chk-should-call-claude-001",
+            "name": "Has Questions?"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.anthropic.com/v1/messages",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "anthropic-version",
+                            "value": "2023-06-01"
+                        },
+                        {
+                            "name": "content-type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "raw",
+                "rawContentType": "application/json",
+                "body": "={{ JSON.stringify($('Prepare Checklist Prompt').first().json.claudeRequestBody) }}",
+                "options": {
+                    "timeout": 120000
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [240, -60],
+            "id": "chk-claude-001",
+            "name": "Claude API - Check Completeness",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "xYYWl2zK5GgqiQf8",
+                    "name": "Anthropic API Key"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// PROCESS CLAUDE CHECKLIST RESPONSE\n// ============================================================================\n\nconst prepData = $('Prepare Checklist Prompt').first().json;\nconst claudeResponse = $input.first().json;\n\nconst responseText = claudeResponse.content?.[0]?.text || claudeResponse.text || '';\n\nif (!responseText) {\n  throw new Error('Empty response from Claude API. Response: ' + JSON.stringify(claudeResponse).substring(0, 500));\n}\n\nlet jsonStr = responseText.trim();\n\n// Strip markdown code fences if present\nif (jsonStr.includes('```json')) {\n  jsonStr = jsonStr.split('```json')[1].split('```')[0].trim();\n} else if (jsonStr.includes('```')) {\n  jsonStr = jsonStr.split('```')[1].split('```')[0].trim();\n}\n\nif (!jsonStr.startsWith('{')) {\n  const jsonMatch = jsonStr.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) jsonStr = jsonMatch[0];\n}\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  throw new Error('Failed to parse Claude response: ' + e.message + '. Preview: ' + responseText.substring(0, 500));\n}\n\nconst VALID_RESULTS = ['present', 'absent', 'partial'];\nconst questions = prepData.questions;\n\n// Map Claude results back to template items\nconst checklistResults = (parsed.results || []).map(r => {\n  const qIdx = (r.question_index || r.index) - 1;\n  const question = questions[qIdx];\n  if (!question) return null;\n\n  return {\n    template_item_id: question.template_item_id,\n    check_question: question.question,\n    check_category: question.category,\n    check_result: VALID_RESULTS.includes(r.result) ? r.result : 'unchecked',\n    ai_evidence: (r.evidence || '').substring(0, 500),\n    ai_confidence: Math.max(0, Math.min(1, r.confidence || 0.5)),\n  };\n}).filter(Boolean);\n\n// Calculate completeness score\nconst totalWeight = questions.reduce((sum, q) => sum + q.importance, 0);\nlet earnedWeight = 0;\nfor (const result of checklistResults) {\n  const question = questions.find(q => q.template_item_id === result.template_item_id);\n  if (!question) continue;\n  if (result.check_result === 'present') earnedWeight += question.importance;\n  else if (result.check_result === 'partial') earnedWeight += question.importance * 0.5;\n}\nconst checklistScore = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : null;\n\nconsole.log('Checklist results:', checklistResults.length);\nconsole.log('Score:', checklistScore + '%');\n\nreturn {\n  json: {\n    contractId: prepData.contractId,\n    scheduleId: prepData.scheduleId,\n    scheduleType: prepData.scheduleType,\n    checklistResults,\n    checklistScore,\n  }\n};\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [480, -60],
+            "id": "chk-process-response-001",
+            "name": "Process Checklist Response",
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "-- Clear previous checklist results for this schedule\nDELETE FROM contract_schedule_checklist WHERE schedule_id = $1::uuid;\n\n-- Insert new results\n{{ $json.checklistResults.length > 0 ? $json.checklistResults.map(r => `INSERT INTO contract_schedule_checklist (contract_id, schedule_id, template_item_id, check_question, check_category, check_result, ai_evidence, ai_confidence) VALUES ('${$json.contractId}', '${$json.scheduleId}', ${r.template_item_id ? \"'\" + r.template_item_id + \"'\" : 'NULL'}, '${r.check_question.replace(/'/g, \"''\")}', '${r.check_category}', '${r.check_result}', '${(r.ai_evidence || '').replace(/'/g, \"''\")}', ${r.ai_confidence});`).join('\\n') : '-- No results to insert' }}\n\n-- Update schedule with checklist status and score\nUPDATE contract_schedules\nSET checklist_status = 'complete',\n    checklist_score = {{ $json.checklistScore !== null ? $json.checklistScore : 'NULL' }}\nWHERE schedule_id = '{{ $json.scheduleId }}'::uuid;",
+                "options": {
+                    "queryReplacement": "={{ [$json.scheduleId] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [720, -60],
+            "id": "chk-insert-results-001",
+            "name": "Insert Checklist Results",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ success: true, contractId: $json.contractId || $('Prepare Checklist Prompt').first().json.contractId, scheduleId: $json.scheduleId || $('Prepare Checklist Prompt').first().json.scheduleId, resultsCount: ($json.checklistResults || $('Process Checklist Response').first().json.checklistResults || []).length, checklistScore: $json.checklistScore !== undefined ? $json.checklistScore : ($('Process Checklist Response').first().json.checklistScore || null) }) }}",
+                "options": {
+                    "responseCode": 200
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [960, 0],
+            "id": "chk-respond-001",
+            "name": "Respond Success"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ success: false, error: $json.error?.message || $json.message || 'Schedule checklist check failed' }) }}",
+                "options": {
+                    "responseCode": 500
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [960, 240],
+            "id": "chk-respond-error-001",
+            "name": "Respond Error"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [{ "node": "Validate Input", "type": "main", "index": 0 }]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [{ "node": "Get Schedule Data", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Get Schedule Data": {
+            "main": [
+                [{ "node": "Get Checklist Templates", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Get Checklist Templates": {
+            "main": [
+                [{ "node": "Prepare Checklist Prompt", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Prepare Checklist Prompt": {
+            "main": [
+                [{ "node": "Has Questions?", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Has Questions?": {
+            "main": [
+                [{ "node": "Claude API - Check Completeness", "type": "main", "index": 0 }],
+                [{ "node": "Respond Success", "type": "main", "index": 0 }]
+            ]
+        },
+        "Claude API - Check Completeness": {
+            "main": [
+                [{ "node": "Process Checklist Response", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Process Checklist Response": {
+            "main": [
+                [{ "node": "Insert Checklist Results", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        },
+        "Insert Checklist Results": {
+            "main": [
+                [{ "node": "Respond Success", "type": "main", "index": 0 }],
+                [{ "node": "Respond Error", "type": "main", "index": 0 }]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    }
+}

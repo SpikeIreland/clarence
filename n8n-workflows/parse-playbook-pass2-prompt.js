@@ -46,7 +46,7 @@ Higher = MORE protection for the CUSTOMER.`;
 const clauseList = clauseInventory
   .map(
     (clause, i) =>
-      `<clause index="${i}" code="${clause.clause_code}" category="${clause.category}">
+      `<clause index="${i}" code="${clause.clause_code}" category="${clause.category}" schedule_type="${clause.schedule_type || 'null'}">
 <name>${clause.clause_name}</name>
 <unit>${clause.unit_of_measurement || "unknown"}</unit>
 <value_type>${clause.value_type || "text"}</value_type>
@@ -146,6 +146,7 @@ Return ONLY valid JSON (no markdown backticks):
       "clause_code": "LIA-001",
       "clause_name": "Liability Cap",
       "category": "liability",
+      "schedule_type": null,
       "source_quote": "<copied from Pass 1>",
       "ideal_position": 8,
       "minimum_position": 5,

@@ -39,6 +39,7 @@ export interface PlaybookRule {
     quality_flags: string[] | null
     display_order?: number
     updated_at?: string | null
+    schedule_type?: string | null      // null = main body rule, non-null = schedule-specific rule
 }
 
 export interface ContractClause {
@@ -794,4 +795,37 @@ export function checkSingleClauseCompliance(
         previousOverallScore: currentResult.overallScore,
         redLineBreaches: newResult.redLines.filter(rl => rl.status === 'breach'),
     }
+}
+
+
+// ============================================================================
+// SECTION 8: SCHEDULE-AWARE RULE FILTERING
+// ============================================================================
+
+/**
+ * Filter playbook rules by scope: main body only, schedule-specific, or all.
+ */
+export function filterRulesByScope(
+    rules: PlaybookRule[],
+    scope: 'main_body' | 'schedule' | 'all',
+    scheduleType?: string
+): PlaybookRule[] {
+    if (scope === 'main_body') return rules.filter(r => !r.schedule_type)
+    if (scope === 'schedule' && scheduleType) return rules.filter(r => r.schedule_type === scheduleType)
+    if (scope === 'schedule') return rules.filter(r => !!r.schedule_type)
+    return rules
+}
+
+/**
+ * Group schedule rules by their schedule_type.
+ */
+export function groupRulesByScheduleType(rules: PlaybookRule[]): Record<string, PlaybookRule[]> {
+    const groups: Record<string, PlaybookRule[]> = {}
+    for (const rule of rules) {
+        if (rule.schedule_type) {
+            if (!groups[rule.schedule_type]) groups[rule.schedule_type] = []
+            groups[rule.schedule_type].push(rule)
+        }
+    }
+    return groups
 }

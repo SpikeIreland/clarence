@@ -86,6 +86,7 @@ export async function POST(
             range_context: rule.range_context || null,
             display_order: rule.display_order ?? index + 1,
             is_active: true,
+            schedule_type: rule.schedule_type || null,
             created_at: now,
             updated_at: now,
         }))
