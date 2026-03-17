@@ -50,14 +50,14 @@ export default function PricingPage() {
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
               <div className="p-6 border-b border-slate-100">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium mb-4">
-                  Starter
+                  Explore
                 </div>
                 <h3 className="text-2xl font-bold text-slate-800 mb-2">
                   Free Trial
                 </h3>
                 <p className="text-slate-500 text-sm">
-                  Perfect for evaluating CLARENCE with your first contract
-                  negotiation.
+                  Explore the Clarence methodology with your first contract —
+                  on your own terms.
                 </p>
               </div>
 
@@ -67,7 +67,7 @@ export default function PricingPage() {
                   <span className="text-slate-500">/ trial</span>
                 </div>
                 <p className="text-sm text-slate-500 mt-2">
-                  1 contract session included
+                  1 contract session · Includes Clarence Academy access
                 </p>
               </div>
 
@@ -98,7 +98,7 @@ export default function PricingPage() {
 
               <div className="p-6 border-b border-slate-100 pt-10">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium mb-4">
-                  Professional
+                  Platform
                 </div>
                 <h3 className="text-2xl font-bold text-slate-800 mb-2">
                   Growing Teams
@@ -136,7 +136,7 @@ export default function PricingPage() {
                   href="/request-trial"
                   className="block w-full mt-6 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-center font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
                 >
-                  Get Started — £300/seat/month
+                  Start with Platform — £300/seat/month
                 </Link>
               </div>
             </div>
@@ -207,10 +207,10 @@ export default function PricingPage() {
                       Product
                     </th>
                     <th className="text-center py-4 px-4 font-semibold text-slate-800">
-                      Starter
+                      Explore
                     </th>
                     <th className="text-center py-4 px-4 font-semibold text-emerald-600">
-                      Professional
+                      Platform
                     </th>
                     <th className="text-center py-4 px-4 font-semibold text-slate-800">
                       Enterprise
@@ -251,10 +251,10 @@ export default function PricingPage() {
                       Feature
                     </th>
                     <th className="text-center py-4 px-4 font-semibold text-slate-800">
-                      Starter
+                      Explore
                     </th>
                     <th className="text-center py-4 px-4 font-semibold text-emerald-600">
-                      Professional
+                      Platform
                     </th>
                     <th className="text-center py-4 px-4 font-semibold text-slate-800">
                       Enterprise
@@ -294,7 +294,7 @@ export default function PricingPage() {
               />
               <FAQItem
                 question="What does £300/seat/month include?"
-                answer="The Professional plan gives each seat access to the full Clarence product suite including ContractCreate, Co-Create, Negotiate, Training Studio, and QuickCreate. You can run up to 10 active contracts with 5 respondents each, and have 5 team members on the platform."
+                answer="The Platform plan gives each seat access to the full Clarence product suite including ContractCreate, Co-Create, Negotiate, Training Studio, and QuickCreate. You can run up to 10 active contracts with 5 respondents each, and have 5 team members on the platform."
               />
               <FAQItem
                 question="What's included in the Evidence Package?"
@@ -310,7 +310,7 @@ export default function PricingPage() {
               />
               <FAQItem
                 question="Do I need a playbook to use Clarence?"
-                answer="No. Clarence works perfectly without a playbook — you get full access to mediation, leverage visibility, and all negotiation tools. But if you want compliance protection, Professional customers can upload an existing playbook for pre-negotiation cross-checks. Enterprise customers get the full playbook suite: AI-assisted builder, managed creation service, verification dashboard, and real-time enforcement."
+                answer="No. Clarence works perfectly without a playbook — you get full access to mediation, leverage visibility, and all negotiation tools. But if you want compliance protection, Platform customers can upload an existing playbook for pre-negotiation cross-checks. Enterprise customers get the full playbook suite: AI-assisted builder, managed creation service, verification dashboard, and real-time enforcement."
               />
               <FAQItem
                 question="Is my data secure?"

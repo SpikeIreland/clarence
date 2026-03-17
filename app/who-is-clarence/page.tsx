@@ -265,11 +265,11 @@ export default function WhoIsClarencePage() {
 
       {/* ── CTA + Footer ───────────────────────────────────────────────── */}
       <SectionCTA
-        title="Ready to See What Principled Negotiation Looks Like?"
-        subtitle="Experience the Clarence platform. Start with the Training Studio to rehearse, then bring those skills to your real agreements."
+        title="Ready to Join the Movement?"
+        subtitle="Clarence is more than a platform — it is a professional methodology. Start with the Academy, practise in the Training Studio, then bring principled negotiation to every agreement you make."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{
-          text: 'Try the Flight Simulator',
+          text: 'Explore the Academy',
           href: '/products/training',
         }}
       />

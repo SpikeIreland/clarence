@@ -3,7 +3,7 @@ import Link from 'next/link'
 import MainNavigation from '../components/MainNavigation'
 import FeatureListItem from '../components/FeatureListItem'
 import Footer from '../components/Footer'
-import { Shield, Lock, Server, Users, HeadphonesIcon, BookOpen, Bot } from 'lucide-react'
+import { Shield, Lock, Server, Users, HeadphonesIcon, BookOpen, Bot, GraduationCap } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Enterprise | CLARENCE - Principled Negotiation at Scale',
@@ -34,9 +34,9 @@ export default function EnterprisePage() {
               Clarence for Enterprise
             </h1>
             <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Principled negotiation at the scale your organisation demands.
-              Security, compliance, and a framework that serves every agreement
-              equally.
+              Professional excellence at scale. The Clarence methodology —
+              Academy certification, continuous development, and principled
+              agreement management — deployed across your organisation.
             </p>
 
             <div className="mt-10">
@@ -56,7 +56,7 @@ export default function EnterprisePage() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Built to Scale
+              Professional Excellence at Scale
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
               Everything you need to deploy principled agreement management
@@ -176,23 +176,25 @@ export default function EnterprisePage() {
             </div>
 
             <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
-              <Shield className="w-8 h-8 text-purple-600 mb-4" />
+              <GraduationCap className="w-8 h-8 text-purple-600 mb-4" />
               <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                Full Product Suite
+                Clarence Academy
               </h3>
               <p className="text-sm text-slate-600 mb-4">
-                Access to every Clarence product including upcoming releases and
-                early access to new features.
+                Structured professional development with certification. Your
+                team learns the Clarence methodology, practises against real
+                scenarios, and earns credentials that reflect genuine
+                competence — not attendance.
               </p>
               <ul className="space-y-2">
                 <FeatureListItem color="purple">
-                  All current and future products
+                  Academy certification programme
                 </FeatureListItem>
                 <FeatureListItem color="purple">
-                  Full + Custom evidence packages
+                  CPD-linked professional development
                 </FeatureListItem>
                 <FeatureListItem color="purple">
-                  Unlimited AI interactions
+                  Performance-based credentials, not course completion
                 </FeatureListItem>
               </ul>
             </div>

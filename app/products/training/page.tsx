@@ -29,20 +29,21 @@ export default function TrainingPage() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-sm font-medium mb-8">
               <GraduationCap className="w-4 h-4" />
-              <span>Flight Simulator</span>
+              <span>Professional Development</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               Training Studio
             </h1>
             <p className="text-2xl font-semibold text-amber-200 mb-6">
-              Rehearse the deal before you do the deal.
+              Where professional excellence is practised, not just discussed.
             </p>
             <p className="text-xl text-amber-100 max-w-2xl mx-auto leading-relaxed">
-              A flight simulator for contract negotiation. Your team rehearses
-              real scenarios against intelligent opponents, sharpens strategy on
-              your own playbooks, and builds confidence — before the stakes are
-              real.
+              The professional development environment for contract negotiation.
+              Rehearse real scenarios against opponents calibrated to your
+              weaknesses, receive performance feedback tied to your playbook
+              standards, and build the muscle memory that separates competent
+              negotiators from exceptional ones.
             </p>
 
             <div className="mt-10">
@@ -72,14 +73,15 @@ export default function TrainingPage() {
 
               <div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-6">
-                  Every Pilot Trains Before They Fly
+                  Every Expert Practises Before They Perform
                 </h2>
                 <p className="text-slate-600 mb-8 text-lg leading-relaxed">
-                  The Training Studio is your negotiation flight simulator. Same
-                  instruments as the real thing — same mediation engine, same
-                  leverage dynamics, same clause-by-clause structure. The only
-                  difference: nothing is binding. Make mistakes. Test strategies.
-                  Build muscle memory.
+                  The Training Studio is your professional development
+                  environment. Same methodology as live negotiation — same
+                  mediation engine, same leverage dynamics, same clause-by-clause
+                  structure. The only difference: nothing is binding. Make
+                  mistakes. Test strategies. Build the instincts that make
+                  principled negotiation second nature.
                 </p>
 
                 <div className="space-y-4">
@@ -301,8 +303,8 @@ export default function TrainingPage() {
       </section>
 
       <SectionCTA
-        title="Ready to Log Your First Hours?"
-        subtitle="Build your team's negotiation confidence in the flight simulator — then take what you've learned into the real thing."
+        title="Ready to Start Your Professional Development?"
+        subtitle="Begin with the Clarence Academy methodology, practise in the Training Studio, then bring those skills to your real agreements."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'See How It Works', href: '/how-it-works' }}
       />

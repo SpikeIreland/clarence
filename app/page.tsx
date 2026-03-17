@@ -60,9 +60,9 @@ export default function Home() {
 
             {/* Subtitle */}
             <p className="text-xl text-slate-600 mb-4 max-w-2xl mx-auto leading-relaxed">
-              Clarence is the principled intermediary that serves the agreement
-              itself. Neutral mediation for contract creation, negotiation, and
-              signing.
+              The professional excellence platform for contract negotiation.
+              Principled mediation, structured development, and a methodology
+              that changes how agreements get made.
             </p>
 
             {/* Brand echo — Create/Negotiate/Agree */}
@@ -106,8 +106,8 @@ export default function Home() {
               The Clarence Suite
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
-              Every tool built on the same principled framework — neutrality,
-              transparency, and fairness at every step.
+              A professional excellence platform — every tool built on the same
+              principled methodology, from first negotiation to ongoing development.
             </p>
           </div>
 
@@ -130,61 +130,77 @@ export default function Home() {
       </section>
 
       {/* ================================================================== */}
-      {/* JOURNEY SECTION — Condensed Create/Negotiate/Agree                 */}
+      {/* PROFESSIONAL EXCELLENCE LOOP                                       */}
       {/* ================================================================== */}
       <section className="py-16 bg-slate-50 border-t border-slate-200">
         <div className="container mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Your Agreement Journey
+              The Professional Excellence Loop
             </h2>
-            <p className="text-slate-600 max-w-xl mx-auto">
-              A principled framework that guides every agreement from first
-              conversation to final signature.
+            <p className="text-slate-600 max-w-2xl mx-auto">
+              Most platforms stop at the agreement. Clarence closes the loop —
+              connecting how your team learns, practises, performs, and improves.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Create */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-5xl mx-auto">
+            {/* Learn */}
             <div className="text-center">
               <div className="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-emerald-600">1</span>
               </div>
               <h3 className="text-xl font-bold text-emerald-600 mb-2">
-                Create
+                Learn
               </h3>
               <p className="text-sm text-slate-600">
-                Build your agreement and establish the intelligence that drives
-                principled negotiation — party-fit, leverage data, and starting
-                positions grounded in reality.
+                Structured methodology through the Clarence Academy. Not a
+                course — a professional standard for principled negotiation.
               </p>
             </div>
 
-            {/* Negotiate */}
+            {/* Practise */}
+            <div className="text-center">
+              <div className="w-14 h-14 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-amber-600">2</span>
+              </div>
+              <h3 className="text-xl font-bold text-amber-600 mb-2">
+                Practise
+              </h3>
+              <p className="text-sm text-slate-600">
+                The Training Studio: rehearse real scenarios against intelligent
+                opponents calibrated to your weaknesses. Build confidence before
+                the stakes are real.
+              </p>
+            </div>
+
+            {/* Perform */}
             <div className="text-center">
               <div className="w-14 h-14 bg-slate-200 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-slate-700">2</span>
+                <span className="text-2xl font-bold text-slate-700">3</span>
               </div>
               <h3 className="text-xl font-bold text-slate-800 mb-2">
-                Negotiate
+                Perform
               </h3>
               <p className="text-sm text-slate-600">
-                Principled mediation with full leverage visibility and
-                intelligent trade-off suggestions. Both parties see the same
-                data. No hidden agendas.
+                Create, negotiate, and agree with full mediation support,
+                leverage visibility, and playbook compliance. The methodology
+                in action.
               </p>
             </div>
 
-            {/* Agree */}
+            {/* Measure */}
             <div className="text-center">
               <div className="w-14 h-14 bg-violet-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-violet-600">3</span>
+                <span className="text-2xl font-bold text-violet-600">4</span>
               </div>
-              <h3 className="text-xl font-bold text-violet-600 mb-2">Agree</h3>
+              <h3 className="text-xl font-bold text-violet-600 mb-2">
+                Measure
+              </h3>
               <p className="text-sm text-slate-600">
-                A complete evidence package for every negotiation — executive
-                summaries, audit trails, and a governance handbook. This
-                agreement reflects reality, not theatre.
+                Performance scorecards, outcome analytics, and playbook
+                compliance tracking. Weaknesses feed back into targeted
+                development.
               </p>
             </div>
           </div>
@@ -194,7 +210,7 @@ export default function Home() {
               href="/how-it-works"
               className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
             >
-              See how the platform works
+              Explore the methodology
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -307,9 +323,9 @@ export default function Home() {
               </span>
             </div>
             <p className="text-slate-400 text-sm max-w-xl mx-auto">
-              Professionalism does not require hostility. Fairness is not
-              naivete. CLARENCE mediates with no hidden agendas and a principled
-              framework that serves both parties equally.
+              A professional excellence platform built on principled
+              methodology. CLARENCE does not just facilitate agreements — it
+              develops the practitioners who make them.
             </p>
           </div>
         </div>
@@ -320,9 +336,9 @@ export default function Home() {
       {/* ================================================================== */}
       <SectionCTA
         title="Change the Structure, Not the People"
-        subtitle="Better environments produce better decisions. Better decisions produce better agreements. Better agreements produce better relationships."
+        subtitle="Better environments produce better decisions. Better decisions produce better agreements. Better agreements produce better relationships. Start with the Clarence Academy."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
-        secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
+        secondaryCTA={{ text: 'Explore the Academy', href: '/products/training' }}
       />
 
       <Footer />

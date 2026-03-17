@@ -199,11 +199,11 @@ export const products: Product[] = [
   },
   {
     slug: 'training',
-    name: 'Training',
+    name: 'Training Studio',
     fullName: 'Clarence Training Studio',
-    tagline: 'Rehearse the deal before you do the deal',
+    tagline: 'Where professional excellence is practised, not just discussed',
     description:
-      'A flight simulator for contract negotiation. Your team rehearses real scenarios against intelligent opponents, sharpens strategy on your own playbooks, and builds confidence — before the stakes are real.',
+      'The professional development environment for contract negotiation. Your team rehearses real scenarios, receives performance feedback tied to your playbook standards, and builds the muscle memory that separates competent negotiators from exceptional ones.',
     category: 'negotiation',
     icon: 'GraduationCap',
     color: 'amber',
@@ -373,7 +373,7 @@ export const products: Product[] = [
 export const productCategories = [
   { key: 'creation' as const, label: 'Contract Creation' },
   { key: 'document' as const, label: 'Document & Knowledge' },
-  { key: 'negotiation' as const, label: 'Negotiation & Training' },
+  { key: 'negotiation' as const, label: 'Negotiation & Professional Development' },
   { key: 'protect' as const, label: 'Risk & Compliance' },
   { key: 'operations' as const, label: 'Operations' },
   { key: 'coming-soon' as const, label: 'Coming Soon' },

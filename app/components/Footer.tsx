@@ -30,8 +30,8 @@ export default function Footer() {
               </div>
             </Link>
             <p className="text-sm text-slate-500 leading-relaxed">
-              The principled platform for contract negotiation and agreement.
-              Neutral, transparent, fair.
+              The professional excellence platform for contract negotiation.
+              Principled methodology. Continuous development.
             </p>
           </div>
 

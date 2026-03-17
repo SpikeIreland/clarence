@@ -223,7 +223,7 @@ export default function HowItWorksPage() {
                       href="/products/training"
                       className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors"
                     >
-                      Training Studio <ArrowRight className="w-3 h-3" />
+                      Training Studio & Academy <ArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
                 </div>
@@ -375,10 +375,10 @@ export default function HowItWorksPage() {
 
       <SectionCTA
         title="This Is How Agreements Should Be Made"
-        subtitle="Start with the Training Studio to experience CLARENCE risk-free, then bring those skills to your real agreements."
+        subtitle="Start with the Clarence Academy to learn the methodology, practise in the Training Studio, then bring principled negotiation to your real agreements."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{
-          text: 'Try the Flight Simulator',
+          text: 'Explore the Academy',
           href: '/products/training',
         }}
       />

@@ -27,7 +27,7 @@ export default function ProductsPage() {
       <PageHero
         badge={{ icon: 'C', text: 'Product Suite' }}
         title="Tools Built to Agree"
-        subtitle="Every product built on the same principled framework — neutrality, transparency, and fairness from first draft to final signature."
+        subtitle="A professional excellence platform — every product built on the same principled methodology, from Academy certification to live agreement."
       />
 
       {/* ================================================================== */}
@@ -67,7 +67,7 @@ export default function ProductsPage() {
       <section className="py-16 bg-slate-50 border-t border-slate-200">
         <div className="container mx-auto px-6 text-center">
           <p className="text-sm text-slate-400 uppercase tracking-wider mb-4">
-            Powered by
+            The Clarence Methodology
           </p>
           <div className="text-2xl font-bold flex items-baseline justify-center gap-2 mb-4">
             <span className="text-emerald-600">Create</span>
@@ -77,8 +77,9 @@ export default function ProductsPage() {
             <span className="text-violet-600">Agree</span>
           </div>
           <p className="text-slate-600 max-w-xl mx-auto">
-            Every Clarence product follows the same principled mediation
-            framework — because better environments produce better agreements.
+            Every Clarence product follows the same principled methodology —
+            because better environments produce better practitioners, and
+            better practitioners produce better agreements.
           </p>
         </div>
       </section>
