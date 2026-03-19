@@ -113,13 +113,14 @@ const CERT_COLOURS: Record<string, { border: string; bg: string; text: string }>
 export async function generateMetadata({
     params,
 }: {
-    params: { slug: string }
+    params: Promise<{ slug: string }>
 }): Promise<Metadata> {
+    const { slug } = await params
     const supabase = createServiceRoleClient()
     const { data: course } = await supabase
         .from('academy_courses')
         .select('title, short_description')
-        .eq('slug', params.slug)
+        .eq('slug', slug)
         .eq('status', 'published')
         .single()
 
@@ -211,9 +212,10 @@ async function getAdjacentCourses(
 export default async function CourseDetailPage({
     params,
 }: {
-    params: { slug: string }
+    params: Promise<{ slug: string }>
 }) {
-    const course = await getCourse(params.slug)
+    const { slug } = await params
+    const course = await getCourse(slug)
 
     if (!course) {
         notFound()

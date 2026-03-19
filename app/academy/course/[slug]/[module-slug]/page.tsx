@@ -119,14 +119,15 @@ const LESSON_COLOURS: Record<string, string> = {
 export async function generateMetadata({
     params,
 }: {
-    params: { slug: string; 'module-slug': string }
+    params: Promise<{ slug: string; 'module-slug': string }>
 }): Promise<Metadata> {
+    const { slug, 'module-slug': moduleSlug } = await params
     const supabase = createServiceRoleClient()
 
     const { data: course } = await supabase
         .from('academy_courses')
         .select('course_id, title')
-        .eq('slug', params.slug)
+        .eq('slug', slug)
         .eq('status', 'published')
         .single()
 
@@ -136,7 +137,7 @@ export async function generateMetadata({
         .from('academy_modules')
         .select('title, description')
         .eq('course_id', course.course_id)
-        .eq('slug', params['module-slug'])
+        .eq('slug', moduleSlug)
         .eq('status', 'published')
         .single()
 
@@ -435,12 +436,13 @@ function ResourceLesson({ lesson }: { lesson: Lesson }) {
 export default async function ModulePage({
     params,
 }: {
-    params: { slug: string; 'module-slug': string }
+    params: Promise<{ slug: string; 'module-slug': string }>
 }) {
-    const course = await getCourseBySlug(params.slug)
+    const { slug, 'module-slug': moduleSlug } = await params
+    const course = await getCourseBySlug(slug)
     if (!course) notFound()
 
-    const module_ = await getModule(course.course_id, params['module-slug'])
+    const module_ = await getModule(course.course_id, moduleSlug)
     if (!module_) notFound()
 
     const [lessons, adjacent, allModules] = await Promise.all([
