@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "academy.clarencelegal.ai" }],
+      "destination": "/academy/:path*"
+    }
+  ]
+}
