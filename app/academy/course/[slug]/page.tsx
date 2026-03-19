@@ -148,6 +148,8 @@ async function getCourse(slug: string): Promise<Course | null> {
         .eq('is_active', true)
         .single()
 
+    console.log(`[getCourse] slug=${slug} data=${JSON.stringify(data)} error=${JSON.stringify(error)}`)
+
     if (error || !data) return null
     return data
 }
