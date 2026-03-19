@@ -641,7 +641,6 @@ export default async function ModulePage({
                                     {/* Lesson content by type */}
                                     <div className="bg-white rounded-xl border border-slate-200 p-6">
                                         {lesson.lesson_type === 'video' && (
-                                            /* @ts-expect-error Async Server Component */
                                             <VideoLesson lesson={lesson} />
                                         )}
                                         {lesson.lesson_type === 'context' && (
