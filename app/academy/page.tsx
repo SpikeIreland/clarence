@@ -216,7 +216,7 @@ export default async function AcademyLandingPage() {
                                 Platform
                             </Link>
                             <Link
-                                href="/auth/register"
+                                href="https://clarencelegal.ai/auth/register"
                                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors"
                             >
                                 Start Learning
@@ -264,7 +264,7 @@ export default async function AcademyLandingPage() {
                         {/* CTA Buttons */}
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
                             <Link
-                                href="/auth/register"
+                                href="https://clarencelegal.ai/auth/register"
                                 className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-base font-semibold transition-colors shadow-sm"
                             >
                                 Start Learning — Free
@@ -580,7 +580,7 @@ export default async function AcademyLandingPage() {
                         </p>
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                             <Link
-                                href="/auth/register"
+                                href="https://clarencelegal.ai/auth/register"
                                 className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-base font-semibold transition-colors shadow-sm"
                             >
                                 Start the Foundations Course — Free

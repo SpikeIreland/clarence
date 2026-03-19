@@ -258,7 +258,7 @@ export default async function CourseDetailPage({
                                 All Courses
                             </Link>
                             <Link
-                                href="/auth/register"
+                                href="https://clarencelegal.ai/auth/register"
                                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors"
                             >
                                 Start Learning
@@ -339,7 +339,7 @@ export default async function CourseDetailPage({
                         {/* CTA */}
                         <div className="flex flex-col sm:flex-row items-start gap-4">
                             <Link
-                                href="/auth/register"
+                                href="https://clarencelegal.ai/auth/register"
                                 className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-base font-semibold transition-colors shadow-sm"
                             >
                                 {course.access_tier === 'open'
@@ -518,7 +518,7 @@ export default async function CourseDetailPage({
                                     : 'Subscribe to the Clarence platform to access this course and the full Academy.'}
                         </p>
                         <Link
-                            href="/auth/register"
+                            href="https://clarencelegal.ai/auth/register"
                             className="inline-block px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-base font-semibold transition-colors shadow-sm"
                         >
                             {course.access_tier === 'open'
