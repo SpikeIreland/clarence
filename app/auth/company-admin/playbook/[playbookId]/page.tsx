@@ -171,6 +171,118 @@ function EditablePositionBar({ rule, onPositionChange }: {
 }
 
 // ============================================================================
+// GLOSSARY MODAL
+// ============================================================================
+
+const FLAG_DESCRIPTIONS: Record<string, string> = {
+    duplicate_range_in_category: 'Two rules in the same category share identical range units and scale points.',
+    missing_range_context: 'No scale points are defined — the position bar cannot map values to labels.',
+    mixed_value_types: 'Scale points mix different value types (e.g. percentages and free-text labels).',
+    duplicate_positions_in_category: 'Two rules in the same category have identical ideal, minimum, and maximum positions.',
+    non_monotonic_scale: 'Scale values do not progress consistently — neither fully ascending nor descending.',
+}
+
+function PlaybookGlossaryModal({ onClose }: { onClose: () => void }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[85vh] overflow-y-auto">
+                {/* Header */}
+                <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                    <div>
+                        <h2 className="text-base font-bold text-slate-800">PlaybookIQ — Label Guide</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">What the indicators on each rule card mean</p>
+                    </div>
+                    <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-6">
+                    {/* NON-NEGOTIABLE */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-100 text-orange-700 rounded uppercase">Non-Negotiable</span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded uppercase">Deal Breaker</span>
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                            These badges appear when the AI — or you — has flagged a rule as a hard requirement. They look similar but operate at <span className="font-medium">different thresholds</span> and carry different consequences:
+                        </p>
+                        <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden text-xs">
+                            <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">
+                                <span></span>
+                                <span>Deal Breaker</span>
+                                <span>Non-Negotiable</span>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                <div className="grid grid-cols-3 px-3 py-2 text-slate-600">
+                                    <span className="text-slate-400">Triggers when</span>
+                                    <span>Below <span className="font-medium">minimum</span> position</span>
+                                    <span>Below <span className="font-medium">ideal</span> position</span>
+                                </div>
+                                <div className="grid grid-cols-3 px-3 py-2 text-slate-600">
+                                    <span className="text-slate-400">Compliance score</span>
+                                    <span className="text-red-600 font-medium">0% — Breach</span>
+                                    <span className="text-orange-600 font-medium">30% — Fail</span>
+                                </div>
+                                <div className="grid grid-cols-3 px-3 py-2 text-slate-600">
+                                    <span className="text-slate-400">Meaning</span>
+                                    <span>Contract is unacceptable — do not sign</span>
+                                    <span>Firm preference; misses target but not a total blocker</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">Both are classified as <span className="font-medium">red lines</span> in the compliance report. You can toggle either flag manually using the checkboxes at the bottom of each rule card.</p>
+                    </div>
+
+                    <hr className="border-slate-100" />
+
+                    {/* FLAGS */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded">⚠ 1 flag</span>
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed mb-3">
+                            After a playbook is parsed, the system runs automated quality checks on every rule. A flag means one or more checks found a potential inconsistency worth reviewing before relying on the rule for compliance scoring.
+                        </p>
+                        <div className="space-y-2">
+                            {Object.entries(FLAG_DESCRIPTIONS).map(([key, desc]) => (
+                                <div key={key} className="flex gap-2.5">
+                                    <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                                    <div>
+                                        <span className="text-[11px] font-semibold text-slate-700 font-mono">{key}</span>
+                                        <p className="text-xs text-slate-500">{desc}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <hr className="border-slate-100" />
+
+                    {/* SOURCE QUOTE */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="px-3 py-1.5 bg-amber-50 border-l-2 border-amber-300 rounded-r text-[11px] text-amber-700">No source quote — rule inferred by AI</span>
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                            During parsing the AI is asked to extract a <span className="font-medium">verbatim quote</span> from the playbook document that directly supports each rule. When no such text exists — because the rule was implied rather than stated — this warning appears.
+                        </p>
+                        <p className="text-xs text-slate-500 mt-2">It does not mean the rule is wrong, but it is worth verifying that it reflects your actual policy. You can add or edit the source quote directly on the rule card.</p>
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 rounded-b-2xl">
+                    <p className="text-xs text-slate-400">These labels are set automatically during playbook parsing and can be adjusted manually at any time.</p>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
 // RULE CARD
 // ============================================================================
 
@@ -212,7 +324,10 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                         <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200">Needs Review</span>
                     )}
                     {rule.quality_flags && rule.quality_flags.length > 0 && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded" title={rule.quality_flags.join(', ')}>
+                        <span
+                            className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded cursor-help"
+                            title={rule.quality_flags.map(f => FLAG_DESCRIPTIONS[f] ?? f).join('\n')}
+                        >
                             ⚠ {rule.quality_flags.length} flag{rule.quality_flags.length > 1 ? 's' : ''}
                         </span>
                     )}
@@ -385,6 +500,7 @@ function PlaybookReviewContent() {
     const [searchTerm, setSearchTerm] = useState('')
     const [ruleViewMode, setRuleViewMode] = useState<'main_body' | 'schedule'>('main_body')
     const [saveAllStatus, setSaveAllStatus] = useState<string | null>(null)
+    const [showGlossary, setShowGlossary] = useState(false)
 
     // Auth + data loading
     useEffect(() => {
@@ -598,6 +714,7 @@ function PlaybookReviewContent() {
 
     return (
         <div className="min-h-screen bg-slate-50">
+            {showGlossary && <PlaybookGlossaryModal onClose={() => setShowGlossary(false)} />}
             {/* Header */}
             <div className="bg-white border-b border-slate-200 sticky top-0 z-40">
                 <div className="max-w-6xl mx-auto px-4 py-3">
@@ -698,6 +815,15 @@ function PlaybookReviewContent() {
                         className="px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                     >
                         {expandedCategories.size === categories.length ? 'Collapse All' : 'Expand All'}
+                    </button>
+
+                    {/* Label guide */}
+                    <button
+                        onClick={() => setShowGlossary(true)}
+                        className="w-6 h-6 flex items-center justify-center rounded-full border border-slate-300 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors text-xs font-bold"
+                        title="Label guide"
+                    >
+                        ?
                     </button>
 
                     <div className="flex-1" />
