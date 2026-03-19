@@ -83,6 +83,14 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <a
+                  href="https://academy.clarencelegal.ai"
+                  className="text-sm hover:text-white transition-colors"
+                >
+                  Clarence Academy
+                </a>
+              </li>
+              <li>
                 <Link
                   href="/enterprise"
                   className="text-sm hover:text-white transition-colors"

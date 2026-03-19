@@ -36,6 +36,34 @@ export default function ProductsPage() {
       <section className="py-20 bg-white">
         <div className="container mx-auto px-6">
           <div className="max-w-6xl mx-auto space-y-16">
+            {/* Academy */}
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">
+                Education &amp; Certification
+              </h2>
+              <div className="w-12 h-1 bg-emerald-500 rounded-full mb-8"></div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <a href="https://academy.clarencelegal.ai" className="group">
+                  <div className="relative bg-gradient-to-br from-emerald-50 to-white rounded-2xl p-6 border border-emerald-200 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                        <span className="text-emerald-600 font-bold text-sm">CA</span>
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-800">Clarence Academy</h3>
+                    </div>
+                    <p className="text-sm text-slate-500 mb-2">The professional standard for principled negotiation</p>
+                    <p className="text-sm text-slate-600 mb-4 line-clamp-2">
+                      A structured training programme in principled negotiation. Open to everyone. Certification on completion.
+                    </p>
+                    <span className="text-sm font-medium text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1 group-hover:gap-2 transition-all">
+                      Visit the Academy
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </span>
+                  </div>
+                </a>
+              </div>
+            </div>
+
             {productCategories.map((category) => {
               const categoryProducts = products.filter(
                 (p) => p.category === category.key

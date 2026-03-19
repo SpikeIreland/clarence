@@ -238,6 +238,14 @@ export default function MainNavigation() {
               Who is Clarence?
             </Link>
 
+            {/* Academy */}
+            <a
+              href="https://academy.clarencelegal.ai"
+              className="px-4 py-2 text-sm font-medium rounded-lg transition-colors text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            >
+              Academy
+            </a>
+
             {/* Resources Dropdown */}
             <div ref={resourcesRef} className="relative">
               <button
@@ -428,6 +436,12 @@ export default function MainNavigation() {
             >
               Who is Clarence?
             </Link>
+            <a
+              href="https://academy.clarencelegal.ai"
+              className="block px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
+            >
+              Academy
+            </a>
 
             <div className="border-t border-slate-100 my-2"></div>
 

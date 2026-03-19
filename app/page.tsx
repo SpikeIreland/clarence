@@ -338,7 +338,7 @@ export default function Home() {
         title="Change the Structure, Not the People"
         subtitle="Better environments produce better decisions. Better decisions produce better agreements. Better agreements produce better relationships. Start with the Clarence Academy."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
-        secondaryCTA={{ text: 'Explore the Academy', href: '/products/training' }}
+        secondaryCTA={{ text: 'Explore the Academy', href: 'https://academy.clarencelegal.ai' }}
       />
 
       <Footer />
