@@ -500,7 +500,7 @@ function CreatePlaybookContent() {
                                     </svg>
                                 </div>
                                 <h3 className="text-sm font-semibold text-slate-800 mb-1">I have a document</h3>
-                                <p className="text-xs text-slate-500">Upload a playbook document (PDF or Word) and Clarence will extract the rules automatically.</p>
+                                <p className="text-xs text-slate-500">Upload an existing contract (PDF or Word) and Clarence will extract your negotiation rules automatically.</p>
                             </button>
                             <button
                                 onClick={() => update({ step: 'setup', sourcePath: 'scratch' })}
@@ -595,7 +595,7 @@ function CreatePlaybookContent() {
                 {/* ── STEP 3A: UPLOAD ── */}
                 {state.step === 'upload' && (
                     <>
-                        <ClarenceGuide text="Upload your playbook document and I'll extract the negotiation rules automatically. I can handle PDF and Word documents." />
+                        <ClarenceGuide text="Upload an existing contract and I'll extract the negotiation rules from it to build your playbook. I can handle PDF and Word documents." />
 
                         <div className="bg-white rounded-xl border border-slate-200 p-6">
                             {state.uploadStatus === 'idle' && (
@@ -627,7 +627,7 @@ function CreatePlaybookContent() {
                                 <div className="flex flex-col items-center py-12">
                                     <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
                                     <p className="text-sm font-medium text-slate-700 mb-1">
-                                        {state.uploadStatus === 'extracting' ? 'Extracting text from document...' : 'AI is parsing your playbook rules...'}
+                                        {state.uploadStatus === 'extracting' ? 'Extracting text from document...' : 'AI is extracting negotiation rules from your contract...'}
                                     </p>
                                     <p className="text-xs text-slate-400">
                                         {state.uploadStatus === 'parsing' && 'This usually takes 1-3 minutes'}
