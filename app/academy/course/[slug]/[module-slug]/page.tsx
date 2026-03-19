@@ -531,7 +531,7 @@ export default async function ModulePage({
                                         return (
                                             <Link
                                                 key={m.module_id}
-                                                href={`/course/${course.slug}/${m.slug}`}
+                                                href={`https://academy.clarencelegal.ai/course/${course.slug}/${m.slug}`}
                                                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${isCurrent
                                                         ? 'bg-emerald-50 text-emerald-700 font-medium'
                                                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
@@ -679,7 +679,7 @@ export default async function ModulePage({
                         <div className="mt-12 pt-8 border-t border-slate-200 flex items-center justify-between">
                             {adjacent.prev ? (
                                 <Link
-                                    href={`/course/${course.slug}/${adjacent.prev.slug}`}
+                                    href={`https://academy.clarencelegal.ai/course/${course.slug}/${adjacent.prev.slug}`}
                                     className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-emerald-700 transition-colors"
                                 >
                                     <ArrowLeft className="w-4 h-4" />
@@ -690,7 +690,7 @@ export default async function ModulePage({
                                 </Link>
                             ) : (
                                 <Link
-                                    href={`/course/${course.slug}`}
+                                    href={`https://academy.clarencelegal.ai/course/${course.slug}`}
                                     className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-emerald-700 transition-colors"
                                 >
                                     <ArrowLeft className="w-4 h-4" />
@@ -703,7 +703,7 @@ export default async function ModulePage({
 
                             {adjacent.next ? (
                                 <Link
-                                    href={`/course/${course.slug}/${adjacent.next.slug}`}
+                                    href={`https://academy.clarencelegal.ai/course/${course.slug}/${adjacent.next.slug}`}
                                     className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-emerald-700 transition-colors text-right"
                                 >
                                     <div>

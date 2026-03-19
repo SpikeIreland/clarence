@@ -375,7 +375,7 @@ export default async function CourseDetailPage({
                             {modules.map((module, index) => (
                                 <Link
                                     key={module.module_id}
-                                    href={`/course/${course.slug}/${module.slug}`}
+                                    href={`https://academy.clarencelegal.ai/course/${course.slug}/${module.slug}`}
                                     className="group block bg-white rounded-xl border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all p-5"
                                 >
                                     <div className="flex items-start gap-4">
@@ -539,7 +539,7 @@ export default async function CourseDetailPage({
                     <div className="max-w-4xl flex items-center justify-between">
                         {adjacent.prev ? (
                             <Link
-                                href={`/course/${adjacent.prev.slug}`}
+                                href={`https://academy.clarencelegal.ai/course/${adjacent.prev.slug}`}
                                 className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-emerald-700 transition-colors"
                             >
                                 <ArrowLeft className="w-4 h-4" />
@@ -554,7 +554,7 @@ export default async function CourseDetailPage({
 
                         {adjacent.next ? (
                             <Link
-                                href={`/course/${adjacent.next.slug}`}
+                                href={`https://academy.clarencelegal.ai/course/${adjacent.next.slug}`}
                                 className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-emerald-700 transition-colors text-right"
                             >
                                 <div>

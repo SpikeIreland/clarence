@@ -318,7 +318,7 @@ export default async function AcademyLandingPage() {
                             return (
                                 <Link
                                     key={course.course_id}
-                                    href={`/course/${course.slug}`}
+                                    href={`https://academy.clarencelegal.ai/course/${course.slug}`}
                                     className="group bg-white rounded-xl border border-slate-200 hover:border-emerald-300 hover:shadow-lg transition-all p-6 flex flex-col"
                                 >
                                     {/* Icon & Order */}
@@ -636,7 +636,7 @@ export default async function AcademyLandingPage() {
                                 {courses.slice(0, 4).map((course) => (
                                     <li key={course.course_id}>
                                         <Link
-                                            href={`/course/${course.slug}`}
+                                            href={`https://academy.clarencelegal.ai/course/${course.slug}`}
                                             className="text-sm text-slate-400 hover:text-white transition-colors"
                                         >
                                             {course.title}
@@ -655,7 +655,7 @@ export default async function AcademyLandingPage() {
                                 {courses.slice(4).map((course) => (
                                     <li key={course.course_id}>
                                         <Link
-                                            href={`/course/${course.slug}`}
+                                            href={`https://academy.clarencelegal.ai/course/${course.slug}`}
                                             className="text-sm text-slate-400 hover:text-white transition-colors"
                                         >
                                             {course.title}
