@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import AcademyAdminTab from '@/app/components/admin/AcademyAdminTab'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -170,7 +171,7 @@ function BetaTestingAdminDashboard() {
     const [loading, setLoading] = useState(true)
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats' | 'videos' | 'marketing'>('users')
+    const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats' | 'videos' | 'marketing' | 'academy'>('users')
 
     // Create user state
     const [createForm, setCreateForm] = useState({
@@ -1104,6 +1105,16 @@ function BetaTestingAdminDashboard() {
                                 }`}
                         >
                             🎬 Videos ({videoStats.published}/{videoStats.total})
+                        </button>
+
+                        <button
+                            onClick={() => setActiveTab('academy')}
+                            className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'academy'
+                                ? 'border-[#2563eb] text-[#2563eb]'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                                }`}
+                        >
+                            🎓 Academy
                         </button>
                     </div>
                 </div>
@@ -2175,6 +2186,8 @@ function BetaTestingAdminDashboard() {
                 {/* ========================================================== */}
                 {/* TAB 6: MARKETING AGENTS                                      */}
                 {/* ========================================================== */}
+                {activeTab === 'academy' && <AcademyAdminTab />}
+
                 {activeTab === 'marketing' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center mb-6">
