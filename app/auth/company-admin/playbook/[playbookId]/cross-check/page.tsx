@@ -3,6 +3,10 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
+    RadarChart, Radar, PolarGrid, PolarAngleAxis,
+    ResponsiveContainer,
+} from 'recharts'
+import {
     PlaybookRule,
     ContractClause,
     ComplianceResult,
@@ -137,7 +141,7 @@ function StatusIcon({ status }: { status: RuleStatus | string }) {
 }
 
 // ============================================================================
-// ALIGNMENT BAR — Read-only position bar with template position overlay
+// DIVERGING BAR — Centred on playbook ideal; bar extends toward template position
 // ============================================================================
 
 function AlignmentBar({ rule, templatePosition }: {
@@ -146,16 +150,55 @@ function AlignmentBar({ rule, templatePosition }: {
 }) {
     const toPercent = (val: number) => ((val - 1) / 9) * 100
     const rangeCtx = getEffectiveRangeContext(rule)
-    const label = (pos: number) => translateRulePosition(rule, pos)
 
-    const positionColor = (pos: number | null) => {
-        if (pos == null) return 'bg-slate-300'
-        if (pos >= rule.minimum_position) return 'bg-emerald-500'
-        return 'bg-red-500'
+    const idealPct  = toPercent(rule.ideal_position)
+    const minPct    = toPercent(rule.minimum_position)
+    const maxPct    = toPercent(rule.maximum_position)
+
+    // Diverging bar: from ideal toward template
+    let barLeft  = idealPct
+    let barWidth = 0
+    let barColor = 'bg-slate-300'
+    let gapLabel: string | null = null
+    let gapColor = 'text-slate-400'
+
+    if (templatePosition != null) {
+        const tPct = toPercent(templatePosition)
+        const diff = templatePosition - rule.ideal_position
+
+        if (diff < 0) {
+            // Template is below ideal → bar extends left
+            barLeft  = tPct
+            barWidth = idealPct - tPct
+            if (templatePosition < rule.minimum_position) {
+                barColor  = 'bg-red-400'
+                gapColor  = 'text-red-500'
+                gapLabel  = `${Math.abs(diff)} below ideal · breaches minimum`
+            } else {
+                barColor  = 'bg-amber-400'
+                gapColor  = 'text-amber-500'
+                gapLabel  = `${Math.abs(diff)} below ideal`
+            }
+        } else if (diff > 0) {
+            // Template is above ideal → bar extends right
+            barLeft  = idealPct
+            barWidth = tPct - idealPct
+            barColor  = 'bg-emerald-400'
+            gapColor  = 'text-emerald-600'
+            gapLabel  = `${diff} above ideal`
+        } else {
+            gapLabel = 'Exact match'
+            gapColor = 'text-emerald-600'
+        }
     }
+
+    const diamondColor = templatePosition == null
+        ? 'bg-slate-300'
+        : templatePosition >= rule.minimum_position ? 'bg-emerald-500' : 'bg-red-500'
 
     return (
         <div className="mt-1.5 mb-1">
+            {/* Unit badge */}
             {rangeCtx && (
                 <div className="flex items-center gap-1.5 mb-1">
                     <span className="px-1.5 py-0.5 text-[9px] font-medium bg-indigo-50 text-indigo-600 rounded border border-indigo-100">
@@ -166,28 +209,29 @@ function AlignmentBar({ rule, templatePosition }: {
                     )}
                 </div>
             )}
+
             {/* Bar */}
             <div className="relative h-8">
                 {/* Track */}
                 <div className="absolute top-3 left-0 right-0 h-2 bg-slate-100 rounded-full" />
-                {/* Acceptable range (min to max) */}
-                <div className="absolute top-3 h-2 bg-blue-100 rounded-full border border-blue-200"
-                    style={{
-                        left: `${toPercent(rule.minimum_position)}%`,
-                        width: `${toPercent(rule.maximum_position) - toPercent(rule.minimum_position)}%`,
-                    }} />
-                {/* Ideal position marker */}
-                <div className="absolute top-2 w-3 h-3 rounded-full bg-purple-600 border-2 border-white shadow-sm z-10"
-                    style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }} />
-                {/* Fallback marker */}
-                <div className="absolute top-2.5 w-1.5 h-2 rounded-full bg-slate-400"
-                    style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }} />
-                {/* Template position */}
+                {/* Acceptable range band */}
+                <div className="absolute top-3 h-2 bg-blue-50 border border-blue-100 rounded-full"
+                    style={{ left: `${minPct}%`, width: `${maxPct - minPct}%` }} />
+                {/* Diverging bar */}
+                {barWidth > 0 && (
+                    <div className={`absolute top-3 h-2 rounded-full ${barColor} opacity-80`}
+                        style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
+                )}
+                {/* Ideal centre line */}
+                <div className="absolute top-1.5 w-0.5 h-5 bg-purple-500 rounded-full z-10"
+                    style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }} />
+                {/* Template position diamond */}
                 {templatePosition != null && (
-                    <div className={`absolute top-1.5 w-4 h-4 rounded-sm ${positionColor(templatePosition)} border-2 border-white shadow-md z-20`}
+                    <div className={`absolute top-1.5 w-4 h-4 rounded-sm ${diamondColor} border-2 border-white shadow-md z-20`}
                         style={{ left: `${toPercent(templatePosition)}%`, transform: 'translateX(-50%) rotate(45deg)' }} />
                 )}
             </div>
+
             {/* Scale labels */}
             {rangeCtx && rangeCtx.scale_points.length > 0 && (
                 <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
@@ -202,6 +246,91 @@ function AlignmentBar({ rule, templatePosition }: {
                         ))}
                 </div>
             )}
+
+            {/* Gap label */}
+            {gapLabel && (
+                <div className={`text-[9px] mt-0.5 font-medium ${gapColor}`}>{gapLabel}</div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================================
+// SNAPSHOT PANEL — Radar overview + aligned/partial/misaligned counts
+// ============================================================================
+
+function SnapshotPanel({ compliance }: { compliance: ComplianceResult }) {
+    const radarData = compliance.categories.map(cat => ({
+        subject: cat.name.length > 14 ? cat.name.slice(0, 12) + '…' : cat.name,
+        score: cat.score,
+        fullMark: 100,
+    }))
+
+    const aligned    = compliance.categories.filter(c => c.score >= 80).length
+    const partial    = compliance.categories.filter(c => c.score >= 60 && c.score < 80).length
+    const misaligned = compliance.categories.filter(c => c.score < 60).length
+
+    return (
+        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4 flex items-center gap-6">
+            {/* Radar chart */}
+            <div className="w-52 h-44 flex-shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData} margin={{ top: 8, right: 20, bottom: 8, left: 20 }}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis
+                            dataKey="subject"
+                            tick={{ fontSize: 8, fill: '#94a3b8' }}
+                        />
+                        <Radar
+                            name="Alignment"
+                            dataKey="score"
+                            stroke="#6366f1"
+                            fill="#6366f1"
+                            fillOpacity={0.18}
+                            strokeWidth={1.5}
+                        />
+                    </RadarChart>
+                </ResponsiveContainer>
+            </div>
+
+            {/* Divider */}
+            <div className="w-px self-stretch bg-slate-100" />
+
+            {/* Counters + legend */}
+            <div className="flex-1 space-y-3">
+                <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                    Alignment Snapshot
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                    <div>
+                        <div className="text-2xl font-bold text-emerald-600">{aligned}</div>
+                        <div className="text-[10px] text-slate-500">Aligned <span className="text-slate-300">(≥80%)</span></div>
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-amber-500">{partial}</div>
+                        <div className="text-[10px] text-slate-500">Partial <span className="text-slate-300">(60–79%)</span></div>
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-red-500">{misaligned}</div>
+                        <div className="text-[10px] text-slate-500">Misaligned <span className="text-slate-300">(&lt;60%)</span></div>
+                    </div>
+                </div>
+                {/* Bar legend */}
+                <div className="flex items-center gap-4 text-[9px] text-slate-400 pt-1 border-t border-slate-100">
+                    <span className="flex items-center gap-1">
+                        <span className="w-3 h-0.5 bg-purple-500 inline-block rounded" /> Ideal position
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="w-3 h-1.5 bg-emerald-400 inline-block rounded opacity-80" /> Above ideal
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="w-3 h-1.5 bg-amber-400 inline-block rounded opacity-80" /> Below ideal
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <span className="w-3 h-1.5 bg-red-400 inline-block rounded opacity-80" /> Breach
+                    </span>
+                </div>
+            </div>
         </div>
     )
 }
@@ -774,6 +903,9 @@ function CrossCheckContent() {
                     </div>
                 ) : (
                     <>
+                        {/* Snapshot panel */}
+                        <SnapshotPanel compliance={compliance} />
+
                         {/* Tabs */}
                         <div className="flex items-center gap-1 mb-4 bg-white rounded-lg border border-slate-200 p-1 w-fit">
                             {tabs.map(tab => (
