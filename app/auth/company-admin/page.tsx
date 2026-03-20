@@ -1565,6 +1565,7 @@ function deriveHealthSignal(p: Omit<Person, 'healthSignal'>): 'green' | 'amber' 
 function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[]): Person[] {
     const map = new Map<string, Person>()
     companyUsers.forEach(u => {
+        if (!u.email) return
         const key = u.email.toLowerCase()
         const base: Omit<Person, 'healthSignal'> = {
             email: u.email, fullName: u.fullName,
@@ -1576,6 +1577,7 @@ function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[])
         map.set(key, { ...base, healthSignal: deriveHealthSignal(base) })
     })
     trainingUsers.forEach(u => {
+        if (!u.email) return
         const key = u.email.toLowerCase()
         const existing = map.get(key)
         if (existing) {
