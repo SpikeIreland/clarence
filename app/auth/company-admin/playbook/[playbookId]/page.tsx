@@ -306,7 +306,7 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
         rule.ideal_position === rule.fallback_position
 
     return (
-        <div className={`rounded-lg border p-4 transition-all ${isDirty ? 'border-amber-300 bg-amber-50/30 shadow-sm' : 'border-slate-200 bg-white'}`}>
+        <div id={`rule-${rule.rule_id}`} className={`rounded-lg border p-4 transition-all ${isDirty ? 'border-amber-300 bg-amber-50/30 shadow-sm' : 'border-slate-200 bg-white'}`}>
             {/* Header row */}
             <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -737,7 +737,25 @@ function PlaybookReviewContent() {
                                         <span>{Math.round(playbook.ai_confidence_score * 100)}% confidence</span>
                                     )}
                                     {needsReviewCount > 0 && (
-                                        <span className="text-red-600 font-medium">{needsReviewCount} need review</span>
+                                        <button
+                                            className="text-red-600 font-medium underline decoration-dotted hover:text-red-700 transition-colors"
+                                            title="Click to jump to first rule needing review"
+                                            onClick={() => {
+                                                const firstFlagged = rules.find(r =>
+                                                    r.ideal_position === r.minimum_position &&
+                                                    r.ideal_position === r.maximum_position &&
+                                                    r.ideal_position === r.fallback_position
+                                                )
+                                                if (!firstFlagged) return
+                                                const el = document.getElementById(`rule-${firstFlagged.rule_id}`)
+                                                if (!el) return
+                                                el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                                el.classList.add('ring-2', 'ring-red-400', 'ring-offset-2')
+                                                setTimeout(() => el.classList.remove('ring-2', 'ring-red-400', 'ring-offset-2'), 2000)
+                                            }}
+                                        >
+                                            {needsReviewCount} need review
+                                        </button>
                                     )}
                                 </div>
                             </div>
