@@ -237,13 +237,19 @@ function AlignmentBar({ rule, templatePosition }: {
                 <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
                     {rangeCtx.scale_points
                         .filter((_, i, arr) => i === 0 || i === arr.length - 1 || arr.length <= 5)
-                        .map(sp => (
-                            <span key={sp.position}
-                                className="absolute transform -translate-x-1/2"
-                                style={{ left: `${toPercent(sp.position)}%` }}>
-                                {sp.label}
-                            </span>
-                        ))}
+                        .map((sp, idx, arr) => {
+                            const pct = toPercent(sp.position)
+                            const isFirst = idx === 0
+                            const isLast  = idx === arr.length - 1
+                            const transform = isFirst ? 'none' : isLast ? 'translateX(-100%)' : 'translateX(-50%)'
+                            return (
+                                <span key={sp.position}
+                                    className="absolute"
+                                    style={{ left: `${pct}%`, transform }}>
+                                    {sp.label}
+                                </span>
+                            )
+                        })}
                 </div>
             )}
 
