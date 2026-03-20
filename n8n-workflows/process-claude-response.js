@@ -48,8 +48,11 @@ try {
   // ============================================================================
   // STEP 3: Truncation recovery
   //
-  // Claude truncates mid-string inside clause_inventory. We try to salvage
+  // Claude truncates mid-string inside the rules array. We try to salvage
   // every rule object that completed before the cut-off.
+  //
+  // The Claude prompt instructs Claude to use "rules" as the array key.
+  // We also check "clause_inventory" as a legacy fallback.
   //
   // Strategy A — depth tracking (fast, accurate):
   //   Walk forward tracking brace depth; record every position where a
@@ -66,7 +69,10 @@ try {
   wasTruncated = true;
   let recovered = false;
 
-  const arrayStart = jsonStr.indexOf('"clause_inventory"');
+  // The prompt uses "rules" as the array key; "clause_inventory" is a legacy fallback
+  const arrayKey = jsonStr.includes('"rules"') ? '"rules"' : '"clause_inventory"';
+
+  const arrayStart = jsonStr.indexOf(arrayKey);
   if (arrayStart !== -1) {
     const bracketOpen = jsonStr.indexOf("[", arrayStart);
     if (bracketOpen !== -1) {
@@ -109,7 +115,8 @@ try {
           recovered = true;
           parsed.playbook_summary = parsed.playbook_summary || null;
           parsed.extraction_confidence = parsed.extraction_confidence || null;
-          parsed.total_rules_extracted = (parsed.clause_inventory || []).length;
+          const ruleArray = parsed.rules || parsed.clause_inventory || [];
+          parsed.total_rules_extracted = ruleArray.length;
           parsed._truncation_recovered = true;
           parsed._recovery_strategy = "depth-tracking";
           parsed._original_error = firstError.message;
@@ -121,7 +128,6 @@ try {
 
       // ---- Strategy B: backward scan through all '}' positions -------------
       if (!recovered) {
-        // Collect every '}' position inside the rules section
         const closingBraces = [];
         for (let i = bracketOpen + 1; i < jsonStr.length; i++) {
           if (jsonStr[i] === "}") closingBraces.push(i);
@@ -138,7 +144,8 @@ try {
             recovered = true;
             parsed.playbook_summary = parsed.playbook_summary || null;
             parsed.extraction_confidence = parsed.extraction_confidence || null;
-            parsed.total_rules_extracted = (parsed.clause_inventory || []).length;
+            const ruleArray = parsed.rules || parsed.clause_inventory || [];
+            parsed.total_rules_extracted = ruleArray.length;
             parsed._truncation_recovered = true;
             parsed._recovery_strategy = "backward-scan";
             parsed._original_error = firstError.message;
@@ -155,7 +162,7 @@ try {
       `Failed to parse Claude response and truncation recovery failed.\n` +
       `Original error: ${firstError.message}\n` +
       `Response length: ${rawContent.length} chars\n` +
-      `clause_inventory found: ${jsonStr.includes('"clause_inventory"')}\n` +
+      `Array key found: ${jsonStr.includes('"rules"') ? '"rules"' : jsonStr.includes('"clause_inventory"') ? '"clause_inventory"' : 'neither'}\n` +
       `Tip: increase max_tokens on the Claude node, or reduce document size.`
     );
   }
@@ -165,9 +172,10 @@ try {
 // STEP 4: Normalise output
 // ============================================================================
 
-const clauseInventory = parsed.clause_inventory || [];
+// Claude prompt uses "rules"; "clause_inventory" kept as legacy fallback
+const rules = parsed.rules || parsed.clause_inventory || [];
 
-if (clauseInventory.length === 0) {
+if (rules.length === 0) {
   throw new Error(
     "Claude returned 0 rules. The document may be too short, in an unsupported " +
     "format, or the response was truncated before any rules were extracted."
@@ -185,8 +193,8 @@ return {
   perspective: parsed.playbook_perspective || upstreamContext.perspective || "customer",
   playbook_summary: parsed.playbook_summary || null,
   extraction_confidence: parsed.extraction_confidence || null,
-  total_rules_extracted: clauseInventory.length,
-  clause_inventory: clauseInventory,
+  total_rules_extracted: rules.length,
+  rules,
   // Pass the processed text through for Pass 2
   extractedText: upstreamContext.extractedText || "",
   // Diagnostic fields
