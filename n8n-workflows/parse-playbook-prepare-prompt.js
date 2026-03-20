@@ -114,19 +114,46 @@ if (extractedText.length > MAX_CHARS) {
 // PASS 1 PROMPT — Clause Inventory (no positions, no ranges)
 // ============================================================================
 
-const systemPrompt = `You are an expert at extracting negotiation rules from corporate contract playbooks.
+const systemPrompt = `You are an expert at extracting negotiation rules from corporate contract documents.
 
-YOUR TASK (PASS 1 OF 2): Identify EVERY negotiation rule, clause, and policy directive in this playbook. For each one, extract:
+═══════════════════════════════════════════════════
+STEP 1: DETERMINE DOCUMENT TYPE
+═══════════════════════════════════════════════════
+
+Before extracting rules, determine what kind of document this is:
+
+**PLAYBOOK** (negotiation policy document):
+- Contains negotiation GUIDANCE, RANGES, and POLICIES (e.g. "aim for 150% but accept no less than 100%")
+- References ideal positions, fallbacks, red lines, escalation procedures
+- Uses language like "our position is...", "acceptable range...", "escalate if...", "walk away if..."
+- Typically an internal policy document, NOT signed by counterparties
+
+**CONTRACT** (executed or draft agreement):
+- Contains SPECIFIC AGREED TERMS (e.g. "liability shall not exceed 150% of annual charges")
+- Uses binding legal language: "shall", "agrees to", "the parties acknowledge"
+- Has specific parties named, defined terms, signature blocks
+- Contains single fixed values, NOT negotiation ranges
+
+Set "document_type" to "playbook" or "contract" in your output. This affects how Pass 2 processes positions.
+
+YOUR TASK (PASS 1 OF 2): Identify EVERY negotiation rule, clause, and policy directive in this document. For each one, extract:
 1. The clause name and category
 2. A VERBATIM quote from the document (the exact text that defines this rule)
 3. The correct unit of measurement for THIS specific clause
 4. Whether it is a deal breaker or non-negotiable
 
+IF THIS IS A CONTRACT (not a playbook):
+- Extract the stated contractual terms as clauses — they represent the current agreed position
+- Set escalation_trigger, escalation_contact, and requires_approval_below to null (contracts don't have these)
+- Set is_deal_breaker and is_non_negotiable to false (these are playbook concepts)
+- The source_quote should be the exact contractual clause text
+- In Pass 2, the system will infer reasonable negotiation ranges around the stated contract terms
+
 ═══════════════════════════════════════════════════
 CRITICAL: SOURCE QUOTES
 ═══════════════════════════════════════════════════
 
-For each rule, you MUST include a "source_quote" field containing the EXACT text from the playbook document that defines this rule. This quote will be used in Pass 2 to ensure accurate position mapping.
+For each rule, you MUST include a "source_quote" field containing the EXACT text from the document that defines this rule. This quote will be used in Pass 2 to ensure accurate position mapping.
 
 RULES for source_quote:
 - Copy the text VERBATIM from the document — do NOT paraphrase, summarise, or invent text
@@ -214,7 +241,8 @@ OUTPUT FORMAT
 Return ONLY valid JSON (no markdown backticks):
 
 {
-  "playbook_summary": "Brief summary of the playbook (1-2 sentences)",
+  "document_type": "playbook",
+  "playbook_summary": "Brief summary of the document (1-2 sentences)",
   "playbook_perspective": "${perspective}",
   "extraction_confidence": 0.85,
   "total_rules_extracted": 45,
@@ -237,28 +265,32 @@ Return ONLY valid JSON (no markdown backticks):
   ]
 }
 
+NOTE: "document_type" must be either "playbook" or "contract". This is critical for Pass 2 processing.
+
 ═══════════════════════════════════════════════════
 COMPLETENESS CHECK
 ═══════════════════════════════════════════════════
 
-A large corporate playbook may contain 80-150+ rules. If you extract fewer than 30, you have almost certainly missed rules. Count your output and verify completeness.
+For PLAYBOOKS: A large corporate playbook may contain 80-150+ rules. If you extract fewer than 30, you have almost certainly missed rules.
 
-Number clause_codes sequentially within each category (LIA-001, LIA-002, TERM-001, etc.).`;
+For CONTRACTS: A contract typically contains 15-60 clauses with specific terms. Extract every clause that contains a measurable, scorable term. Focus on terms covering liability, payment, termination, confidentiality, IP, data protection, SLAs, warranties, indemnification, insurance, and governance.
 
-const userPrompt = `Identify ALL negotiation rules in this ${perspective === "provider" ? "PROVIDER" : "CUSTOMER"} playbook. This is Pass 1 of 2 — extract the clause inventory with VERBATIM source quotes. Do NOT assign position values yet.
+Count your output and verify completeness. Number clause_codes sequentially within each category (LIA-001, LIA-002, TERM-001, etc.).`;
 
-This playbook is written from the ${perspective === "provider" ? "PROVIDER/SUPPLIER" : "CUSTOMER/BUYER"} perspective.
+const userPrompt = `First, determine if this document is a PLAYBOOK (negotiation policy) or a CONTRACT (executed/draft agreement). Then identify ALL rules/clauses. This is Pass 1 of 2 — extract the clause inventory with VERBATIM source quotes. Do NOT assign position values yet.
+
+This document is from the ${perspective === "provider" ? "PROVIDER/SUPPLIER" : "CUSTOMER/BUYER"} perspective.
 
 CRITICAL: For each rule's source_quote, copy the EXACT text from the document. If the document says "1-5 years", write "1-5 years" — not "1-3 years" or any other value. Accuracy of quotes is essential for Pass 2.
 
-PLAYBOOK: ${playbookData.playbook_name}
+DOCUMENT: ${playbookData.playbook_name}
 ${wasTruncated ? `[Note: Key sections extracted via ${extractionMethod}. Focus on extracting rules from ALL sections provided.]` : ""}
 
 ---
 ${processedText}
 ---
 
-Extract EVERY rule with accurate source quotes and per-clause units. Count them — aim for completeness. Return ONLY the JSON object.`;
+Set "document_type" to "playbook" or "contract" based on your analysis. Extract EVERY rule/clause with accurate source quotes and per-clause units. Count them — aim for completeness. Return ONLY the JSON object.`;
 
 return {
   playbookId: playbookData.playbook_id,

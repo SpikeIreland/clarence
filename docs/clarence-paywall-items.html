@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLARENCE — Paywall Items & Entitlement Gates</title>
+  <style>
+    @page { margin: 1.5cm; size: A4; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      line-height: 1.5;
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header { border-bottom: 3px solid #10b981; padding-bottom: 1rem; margin-bottom: 2rem; }
+    .header h1 { font-size: 1.5rem; color: #0f172a; }
+    .header p { color: #64748b; font-size: 0.85rem; margin-top: 0.25rem; }
+
+    /* Section headings */
+    h2 { font-size: 1.15rem; color: #0f172a; margin: 2rem 0 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid #e2e8f0; }
+    h3 { font-size: 0.95rem; color: #475569; margin: 1.25rem 0 0.5rem; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.85rem; }
+    th { background: #f1f5f9; text-align: left; padding: 0.5rem 0.75rem; font-weight: 600; color: #334155; border: 1px solid #e2e8f0; }
+    td { padding: 0.5rem 0.75rem; border: 1px solid #e2e8f0; vertical-align: top; }
+    tr:nth-child(even) td { background: #f8fafc; }
+
+    /* Badges */
+    .badge { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .badge-sub { background: #dbeafe; color: #1e40af; }
+    .badge-addon { background: #fef3c7; color: #92400e; }
+    .badge-usage { background: #ede9fe; color: #5b21b6; }
+    .badge-one { background: #d1fae5; color: #065f46; }
+
+    /* Check/cross */
+    .yes { color: #059669; font-weight: 600; }
+    .no { color: #cbd5e1; }
+    .limit { color: #0369a1; font-weight: 500; }
+
+    /* Notes */
+    .note { font-size: 0.8rem; color: #64748b; margin-top: 0.5rem; font-style: italic; }
+    .footer-doc { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.75rem; color: #94a3b8; }
+
+    @media print {
+      body { padding: 0; }
+      h2 { page-break-after: avoid; }
+      table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>CLARENCE — Paywall Items & Entitlement Gates</h1>
+    <p>Internal reference document &middot; Model C (Confidence-First Hybrid) &middot; March 2026</p>
+  </div>
+
+  <!-- ================================================================== -->
+  <h2>1. Stripe Product Catalogue (7 Products)</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Product Name</th>
+        <th style="width:8%">Type</th>
+        <th style="width:12%">Price</th>
+        <th style="width:10%">Billing</th>
+        <th style="width:48%">What It Unlocks</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Platform Base</strong></td>
+        <td><span class="badge badge-sub">Sub</span></td>
+        <td>&pound;299/mo</td>
+        <td>Per org</td>
+        <td>Core subscription: 3 seats, 10 contracts/mo, 500 AI interactions, access to Quick Create, Contract Create, Co-Create, Admin Risk Dashboard, Document Package</td>
+      </tr>
+      <tr>
+        <td><strong>Additional Seat</strong></td>
+        <td><span class="badge badge-addon">Add-on</span></td>
+        <td>&pound;49/mo</td>
+        <td>Per seat</td>
+        <td>Extra team member seat beyond the 3 included in Platform Base</td>
+      </tr>
+      <tr>
+        <td><strong>Academy Seat</strong></td>
+        <td><span class="badge badge-addon">Add-on</span></td>
+        <td>&pound;29/mo</td>
+        <td>Per seat</td>
+        <td>Clarence Academy access for one team member: structured methodology training, progress tracking, certification pathway</td>
+      </tr>
+      <tr>
+        <td><strong>Training Studio</strong></td>
+        <td><span class="badge badge-addon">Add-on</span></td>
+        <td>&pound;99/mo</td>
+        <td>Per org</td>
+        <td>Full Training Studio access for the organisation: scenario library, AI opponents, performance analytics, team benchmarking</td>
+      </tr>
+      <tr>
+        <td><strong>Playbook &amp; Compliance</strong></td>
+        <td><span class="badge badge-addon">Add-on</span></td>
+        <td>&pound;149/mo</td>
+        <td>Per org</td>
+        <td>1 playbook included: custom clause libraries, position frameworks, fallback logic, compliance scoring, deviation alerts</td>
+      </tr>
+      <tr>
+        <td><strong>Additional Playbook</strong></td>
+        <td><span class="badge badge-one">One-off</span></td>
+        <td>&pound;49/mo</td>
+        <td>Per playbook</td>
+        <td>Each additional playbook beyond the 1 included in the Playbook &amp; Compliance add-on</td>
+      </tr>
+      <tr>
+        <td><strong>Additional Contract</strong></td>
+        <td><span class="badge badge-usage">Usage</span></td>
+        <td>&pound;15 each</td>
+        <td>Per contract</td>
+        <td>Each additional active contract beyond the 10 included in Platform Base</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="note">Explore tier is free (no Stripe product required). Enterprise is custom-quoted.</p>
+
+  <!-- ================================================================== -->
+  <h2>2. Entitlement Gates by Tier</h2>
+
+  <h3>2a. Limits &amp; Quotas</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30%">Entitlement</th>
+        <th style="width:20%">Explore (Free)</th>
+        <th style="width:25%">Platform (&pound;299/mo)</th>
+        <th style="width:25%">Enterprise (Custom)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Active contracts</td>
+        <td class="limit">1</td>
+        <td class="limit">10 (then &pound;15 each)</td>
+        <td class="yes">Unlimited</td>
+      </tr>
+      <tr>
+        <td>Respondents per contract</td>
+        <td class="limit">1</td>
+        <td class="limit">Up to 4</td>
+        <td class="yes">Unlimited</td>
+      </tr>
+      <tr>
+        <td>Team seats</td>
+        <td class="limit">1</td>
+        <td class="limit">3 (then &pound;49/seat)</td>
+        <td class="yes">Unlimited</td>
+      </tr>
+      <tr>
+        <td>AI interactions / month</td>
+        <td class="limit">50</td>
+        <td class="limit">500</td>
+        <td class="yes">Unlimited</td>
+      </tr>
+      <tr>
+        <td>Playbooks</td>
+        <td class="no">&mdash;</td>
+        <td class="limit">1 (with add-on, then &pound;49 each)</td>
+        <td class="yes">Unlimited</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2b. Feature Access (Boolean Gates)</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30%">Feature</th>
+        <th style="width:20%">Explore (Free)</th>
+        <th style="width:25%">Platform (&pound;299/mo)</th>
+        <th style="width:25%">Enterprise (Custom)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Quick Create</td>
+        <td class="yes">&#10003;</td>
+        <td class="yes">&#10003;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Contract Create</td>
+        <td class="no">&#10007;</td>
+        <td class="yes">&#10003;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Co-Create (multi-party)</td>
+        <td class="no">&#10007;</td>
+        <td class="yes">&#10003;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Training Studio</td>
+        <td class="no">&#10007;</td>
+        <td>Add-on (&pound;99/mo)</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Academy</td>
+        <td class="yes">&#10003; (included)</td>
+        <td>Add-on (&pound;29/seat)</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Playbook &amp; Compliance</td>
+        <td class="no">&#10007;</td>
+        <td>Add-on (&pound;149/mo)</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Admin Risk Dashboard</td>
+        <td class="no">&#10007;</td>
+        <td class="yes">&#10003;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Document Package</td>
+        <td class="no">&#10007;</td>
+        <td class="yes">&#10003;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>SSO / API Access</td>
+        <td class="no">&#10007;</td>
+        <td class="no">&#10007;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+      <tr>
+        <td>Dedicated Account Manager</td>
+        <td class="no">&#10007;</td>
+        <td class="no">&#10007;</td>
+        <td class="yes">&#10003;</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2>3. Example Configurations (from Pricing Page)</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Scenario</th>
+        <th style="width:40%">Components</th>
+        <th style="width:12%">Monthly</th>
+        <th style="width:26%">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Solo Practitioner</strong></td>
+        <td>Platform Base</td>
+        <td>&pound;299</td>
+        <td>3 seats included (1 used), 10 contracts</td>
+      </tr>
+      <tr>
+        <td><strong>Small Team (5)</strong></td>
+        <td>Platform Base + 2 Additional Seats + Training Studio</td>
+        <td>&pound;496</td>
+        <td>&pound;299 + &pound;98 + &pound;99</td>
+      </tr>
+      <tr>
+        <td><strong>Growing Firm (10)</strong></td>
+        <td>Platform Base + 7 Additional Seats + Training Studio + Playbook &amp; Compliance</td>
+        <td>&pound;890</td>
+        <td>&pound;299 + &pound;343 + &pound;99 + &pound;149</td>
+      </tr>
+      <tr>
+        <td><strong>Enterprise (50+)</strong></td>
+        <td>Custom pricing</td>
+        <td>Custom</td>
+        <td>Volume discounts, SSO, API, dedicated AM</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2>4. Implementation Notes</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:25%">Area</th>
+        <th style="width:75%">Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Stripe Setup</strong></td>
+        <td>7 products in Stripe Product Catalogue. Platform Base as a recurring subscription; add-ons as separate recurring products linked to the same customer; Additional Contract as metered/usage-based billing.</td>
+      </tr>
+      <tr>
+        <td><strong>Database</strong></td>
+        <td>Entitlement table per organisation: tier, active add-ons, seat count, contract usage, AI interaction count (resettable monthly). Synced via Stripe webhooks.</td>
+      </tr>
+      <tr>
+        <td><strong>Paywall Enforcement</strong></td>
+        <td>Middleware or API-level checks against entitlement table. Boolean gates for feature access; counter checks for quotas (contracts, seats, AI interactions).</td>
+      </tr>
+      <tr>
+        <td><strong>Upgrade Flow</strong></td>
+        <td>In-app prompts redirect to Stripe Checkout or Stripe Customer Portal for subscription management.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer-doc">
+    <p>CLARENCE &middot; Internal Document &middot; Not for external distribution &middot; Generated March 2026</p>
+  </div>
+
+</body>
+</html>

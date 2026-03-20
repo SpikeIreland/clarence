@@ -1,0 +1,119 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "path": "clause-chat-api-get",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                0,
+                0
+            ],
+            "id": "53658c28-a21e-471f-ba1e-ffbb3959e748",
+            "name": "Webhook",
+            "webhookId": "38a7b555-14fb-4209-b29f-c7c224c34f6d"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format messages for frontend\nconst messages = $input.all().map(item => ({\n  messageId: item.json.message_id,\n  sessionId: item.json.session_id,\n  positionId: item.json.position_id,\n  sender: item.json.sender,\n  senderUserId: item.json.sender_user_id,\n  message: item.json.message,\n  messageType: item.json.message_type,\n  relatedPositionChange: item.json.related_position_change,\n  triggeredBy: item.json.triggered_by,\n  createdAt: item.json.created_at\n}));\n\nreturn messages;"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                448,
+                0
+            ],
+            "id": "a3efe1e9-4eb5-43a3-8f46-54aebb6cf2e8",
+            "name": "Format Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {
+                    "responseCode": 200,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.4,
+            "position": [
+                672,
+                0
+            ],
+            "id": "518ea10d-6d99-46e3-94b8-922152d84225",
+            "name": "Respond to Webhook"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  message_id,\n  session_id,\n  position_id,\n  sender,\n  sender_user_id,\n  message,\n  message_type,\n  related_position_change,\n  triggered_by,\n  created_at\nFROM clause_chat_messages\nWHERE session_id = '{{ $json.query.session_id }}'::uuid\n{{ $json.query.position_id ? \"AND position_id = '\" + $json.query.position_id + \"'::uuid\" : ($json.query.general === 'true' ? \"AND position_id IS NULL\" : \"\") }}\nORDER BY created_at ASC\nLIMIT 100;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                224,
+                0
+            ],
+            "id": "05629992-61f1-4636-9e49-3481d523426f",
+            "name": "Get Messages",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Get Messages",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Response": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Messages": {
+            "main": [
+                [
+                    {
+                        "node": "Format Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

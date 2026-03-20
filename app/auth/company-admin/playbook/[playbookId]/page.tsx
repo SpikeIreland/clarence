@@ -66,6 +66,48 @@ function EditablePositionBar({ rule, onPositionChange }: {
     const rangeCtx = getEffectiveRangeContext(rule)
     const label = (pos: number) => translateRulePosition(rule, pos)
 
+    // Generate interpolated labels so every dropdown position (1-10) gets a unique label
+    const interpolatedLabel = (pos: number): string | null => {
+        if (!rangeCtx?.scale_points?.length) return null
+        const pts = [...rangeCtx.scale_points].sort((a, b) => a.position - b.position)
+        // Exact match
+        const exact = pts.find(p => p.position === pos)
+        if (exact) return exact.label
+        // For text/boolean types, show nearest label with position qualifier
+        if (rangeCtx.value_type === 'text' || rangeCtx.value_type === 'boolean') {
+            const nearest = pts.reduce((prev, curr) =>
+                Math.abs(curr.position - pos) < Math.abs(prev.position - pos) ? curr : prev
+            )
+            return nearest.label
+        }
+        // For numeric types, interpolate the value between surrounding scale points
+        const below = pts.filter(p => p.position < pos).pop()
+        const above = pts.find(p => p.position > pos)
+        if (below && above) {
+            const ratio = (pos - below.position) / (above.position - below.position)
+            const interpolated = below.value + ratio * (above.value - below.value)
+            const unit = rangeCtx.range_unit || ''
+            // Format based on value type
+            if (rangeCtx.value_type === 'percentage') {
+                return `${Math.round(interpolated)}${unit.includes('%') ? '%' : ' ' + unit}`
+            }
+            if (rangeCtx.value_type === 'currency') {
+                if (interpolated >= 1000000) return `£${(interpolated / 1000000).toFixed(1)}M`
+                if (interpolated >= 1000) return `£${Math.round(interpolated / 1000)}K`
+                return `£${Math.round(interpolated)}`
+            }
+            // Duration or count
+            const rounded = interpolated >= 10 ? Math.round(interpolated) : Math.round(interpolated * 10) / 10
+            const unitWord = unit.replace(/[()]/g, '').trim()
+            return `${rounded} ${unitWord}`
+        }
+        // Outside range — use nearest
+        const nearest = pts.reduce((prev, curr) =>
+            Math.abs(curr.position - pos) < Math.abs(prev.position - pos) ? curr : prev
+        )
+        return nearest.label
+    }
+
     const handleBarClick = (e: React.MouseEvent<HTMLDivElement>, field: string) => {
         const rect = e.currentTarget.getBoundingClientRect()
         const x = e.clientX - rect.left
@@ -144,9 +186,10 @@ function EditablePositionBar({ rule, onPositionChange }: {
             {/* Editable position chips */}
             <div className="flex flex-wrap gap-1.5 mt-2">
                 {[
-                    { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-purple-100 text-purple-700' },
+                    { key: 'importance_level', label: 'Importance', value: rule.importance_level, bg: 'bg-amber-50 text-amber-700' },
                     { key: 'minimum_position', label: 'Min', value: rule.minimum_position, bg: 'bg-red-50 text-red-600' },
                     { key: 'maximum_position', label: 'Max', value: rule.maximum_position, bg: 'bg-emerald-50 text-emerald-600' },
+                    { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-purple-100 text-purple-700' },
                     { key: 'fallback_position', label: 'Fallback', value: rule.fallback_position, bg: 'bg-slate-100 text-slate-600' },
                 ].map(p => (
                     <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
@@ -157,14 +200,11 @@ function EditablePositionBar({ rule, onPositionChange }: {
                             className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
                         >
                             {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                                <option key={n} value={n}>{n}{label(n) ? ` (${label(n)})` : ''}</option>
+                                <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
                             ))}
                         </select>
                     </div>
                 ))}
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 rounded">
-                    Importance: {rule.importance_level}/10
-                </span>
             </div>
         </div>
     )

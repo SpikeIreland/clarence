@@ -17,6 +17,7 @@ const perspective = batchData.perspective || "customer";
 const clauseInventory = batchData.batchClauses || [];
 const extractedText = batchData.extractedText || "";
 const playbookName = batchData.playbookName || "";
+const documentType = batchData.documentType || "playbook";
 
 if (!clauseInventory.length) {
   return { skipAI: true, rules: [] };
@@ -62,10 +63,44 @@ const clauseList = clauseInventory
 // PASS 2 PROMPT
 // ============================================================================
 
-const systemPrompt = `You are an expert at mapping negotiation positions from corporate contract playbooks.
+// Build contract-specific guidance if document is a contract
+const contractGuidance = documentType === "contract" ? `
+═══════════════════════════════════════════════════
+IMPORTANT: THIS IS A CONTRACT (not a playbook)
+═══════════════════════════════════════════════════
+
+The source document is an executed or draft CONTRACT, not a negotiation playbook. The source quotes contain SPECIFIC AGREED TERMS rather than negotiation ranges.
+
+Your job is to INFER reasonable negotiation positions around the stated contract term, using your knowledge of market standards and typical negotiation ranges for ${perspective === "provider" ? "PROVIDER" : "CUSTOMER"} organisations.
+
+HOW TO MAP CONTRACT TERMS TO POSITIONS:
+1. The stated contract term represents WHERE the negotiation landed — typically near the middle of what was acceptable to both parties.
+2. Build a realistic negotiation range AROUND that stated term:
+   - ideal_position: What the ${perspective === "provider" ? "provider" : "customer"} would have PREFERRED (more favourable than the stated term)
+   - fallback_position: Place near the stated contract term (since that is what was actually agreed)
+   - minimum_position: The worst the ${perspective === "provider" ? "provider" : "customer"} should accept
+   - maximum_position: The best-case aspiration
+3. Spread positions across the 1-10 range. Do NOT set all four positions to the same value.
+
+EXAMPLE (Customer perspective):
+- Contract says: "Liability cap of 100% of annual charges"
+  → ideal_position: 8 (aim for 150-200%)
+  → fallback_position: 6 (100% is acceptable, near where it landed)
+  → minimum_position: 4 (below 75% is concerning)
+  → maximum_position: 10 (uncapped or 300%+)
+
+EXAMPLE (Provider perspective):
+- Contract says: "Notice period of 90 days"
+  → ideal_position: 7 (aim for 120+ days)
+  → fallback_position: 5 (90 days is market standard)
+  → minimum_position: 3 (30 days is too short)
+  → maximum_position: 9 (180 days)
+` : "";
+
+const systemPrompt = `You are an expert at mapping negotiation positions from corporate contract documents.
 
 YOUR TASK (PASS 2 OF 2): For each clause provided, assign position values and build a range_context scale. The clause inventory (names, categories, units, and SOURCE QUOTES) was extracted in Pass 1.
-
+${contractGuidance}
 ${scaleDefinition}
 
 ═══════════════════════════════════════════════════
@@ -86,7 +121,10 @@ RULES:
 CRITICAL — ANCHOR TO SOURCE QUOTES
 ═══════════════════════════════════════════════════
 
-Each clause's <source_quote> contains the EXACT text from the playbook. Your positions MUST reflect the values stated in the source quote.
+Each clause's <source_quote> contains the EXACT text from the document. Your positions MUST reflect the values stated in the source quote.
+${documentType === "contract" ? `
+For CONTRACTS: The source quote shows the agreed term. Use it as the anchor point for your fallback_position, then infer ideal/minimum/maximum around it based on market knowledge.` : `
+For PLAYBOOKS: The source quote contains negotiation guidance with ranges. Map the stated preferred position to ideal_position, the stated floor to minimum_position, etc.`}
 
 EXAMPLES:
 - If source_quote says "1-5 years": position 1 label ≤1 year, position 10 label ≥5 years
@@ -107,7 +145,7 @@ RANGE CONTEXT — REQUIRED FOR EACH RULE
     { "position": 5, "label": "<value at pos 5>", "value": <number> },
     { "position": 10, "label": "<value at pos 10>", "value": <number> }
   ],
-  "source": "parsed"
+  "source": "${documentType === "contract" ? "inferred_from_contract" : "parsed"}"
 }
 
 RULES for scale_points:
@@ -174,13 +212,14 @@ Return ONLY valid JSON (no markdown backticks):
   ]
 }`;
 
-const userPrompt = `Assign positions and range_context for these ${clauseInventory.length} clauses from the "${playbookName}" ${perspective === "provider" ? "PROVIDER" : "CUSTOMER"} playbook.
+const docTypeLabel = documentType === "contract" ? "CONTRACT" : "PLAYBOOK";
+const userPrompt = `Assign positions and range_context for these ${clauseInventory.length} clauses from the "${playbookName}" ${perspective === "provider" ? "PROVIDER" : "CUSTOMER"} ${docTypeLabel.toLowerCase()}.
 
-CRITICAL: Your positions and scale_points MUST match the source quotes provided. Do NOT invent values that contradict the quotes.
+${documentType === "contract" ? `IMPORTANT: This is a CONTRACT, not a playbook. The source quotes contain agreed terms, not negotiation ranges. Infer realistic negotiation positions around each stated term based on market standards and ${perspective} perspective. Spread positions across the 1-10 range — do NOT set all four positions to the same value.` : `CRITICAL: Your positions and scale_points MUST match the source quotes provided. Do NOT invent values that contradict the quotes.`}
 
 ${clauseList}
 
-${extractedText ? `\nFor reference, here is the relevant playbook text:\n---\n${extractedText.substring(0, 40000)}\n---` : ""}
+${extractedText ? `\nFor reference, here is the relevant document text:\n---\n${extractedText.substring(0, 40000)}\n---` : ""}
 
 Assign positions and range_context for ALL ${clauseInventory.length} clauses above. Each must have unique positions and a range_context with correctly-typed scale_points matching its unit. Return ONLY the JSON object.`;
 

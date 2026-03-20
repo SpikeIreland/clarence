@@ -191,6 +191,7 @@ return {
   companyId: prepareData.companyId || null,
   playbookName: prepareData.playbookName || null,
   perspective: parsed.playbook_perspective || prepareData.perspective || "customer",
+  documentType: parsed.document_type || "playbook",
   playbook_summary: parsed.playbook_summary || null,
   extraction_confidence: parsed.extraction_confidence || null,
   total_rules_extracted: rules.length,

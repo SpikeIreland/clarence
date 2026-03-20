@@ -15,6 +15,7 @@ import { getRoleContext, type PartyRole } from '@/lib/role-matrix'
 import Anthropic from '@anthropic-ai/sdk'
 import { buildSessionContext } from '@/lib/session-context-builder'
 import { buildSessionPrompts } from '@/lib/session-prompt-builder'
+import { validateResponse, buildQualityMeta, logIntegrityResult, generateCorrectionCandidates, type QualityMeta } from '@/lib/integrity-engine'
 
 // ============================================================================
 // SECTION 1: TYPES
@@ -202,16 +203,52 @@ export async function POST(request: NextRequest) {
 
                 console.log('Session Claude response received, length:', responseText.length, 'tokens:', claudeResponse.usage?.output_tokens)
 
+                // --- INTEGRITY ENGINE: Quality Gate (Phase 1) ---
+                let finalResponseText = responseText
+                let qualityMeta: QualityMeta | null = null
+
+                try {
+                    if (contextResult.context) {
+                        const integrityResult = validateResponse(
+                            responseText,
+                            contextResult.context,
+                            sessionRoleContext
+                        )
+                        finalResponseText = integrityResult.responseText
+                        qualityMeta = buildQualityMeta(integrityResult)
+
+                        // Fire-and-forget log + correction candidate generation (no await)
+                        logIntegrityResult(
+                            integrityResult,
+                            body.sessionId!,
+                            sessionViewerRole,
+                            body.contractTypeKey || null
+                        )
+                        generateCorrectionCandidates(
+                            integrityResult,
+                            contextResult.context,
+                            body.contractTypeKey || contextResult.context.session.contractTypeKey || null
+                        )
+
+                        console.log(`[IntegrityEngine] Verdict: ${integrityResult.overallVerdict}, Score: ${integrityResult.score}, Time: ${integrityResult.gateTimeMs}ms`)
+                    }
+                } catch (integrityError) {
+                    // Quality gate must NEVER break the chat
+                    console.warn('[IntegrityEngine] Gate error (passthrough):', integrityError)
+                }
+                // --- END INTEGRITY ENGINE ---
+
                 return NextResponse.json({
-                    response: responseText,
-                    message: responseText,
+                    response: finalResponseText,
+                    message: finalResponseText,
                     success: true,
                     _debug: {
                         clauseContextFound: !!contextResult.context?.clauseContext,
                         clauseIdSent: body.clauseId || null,
                         clauseNameSent: body.clauseName || null,
                         buildTime: contextResult.buildTime,
-                    }
+                    },
+                    _quality: qualityMeta,
                 })
             } catch (claudeError) {
                 console.error('Claude API call failed:', claudeError)

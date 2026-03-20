@@ -284,6 +284,32 @@ ${trainingSection}`
         playbookText += `\nReference these rules when advising on relevant clauses. Flag any deal breakers or non-negotiable positions immediately.\n`
     }
 
+    // Corrections Library (Integrity Engine Phase 2)
+    let correctionsText = ''
+    if (ctx.corrections.hasCorrections) {
+        correctionsText = `\n=== KNOWN CORRECTIONS ===\nThe following ${ctx.corrections.totalCorrections} correction(s) have been validated for this contract type. You MUST apply them:\n`
+
+        // Group corrections by error type
+        const byType: Record<string, typeof ctx.corrections.activeCorrections> = {}
+        for (const c of ctx.corrections.activeCorrections) {
+            const type = c.errorType || 'general'
+            if (!byType[type]) byType[type] = []
+            byType[type].push(c)
+        }
+
+        for (const [type, corrections] of Object.entries(byType)) {
+            const typeLabel = type === 'party_name' ? 'Party Names'
+                : type === 'terminology' ? 'Terminology'
+                : type === 'position_data' ? 'Position Data'
+                : type === 'leverage_data' ? 'Leverage Data'
+                : 'General'
+            correctionsText += `\n[${typeLabel}]\n`
+            for (const c of corrections) {
+                correctionsText += `- ${c.correction}\n`
+            }
+        }
+    }
+
     // Party-to-party chat
     let partyChatText = ''
     if (ctx.partyChat.length > 0) {
@@ -382,6 +408,7 @@ ${focusedClauseText}
 ${strategicText}
 
 ${playbookText}
+${correctionsText}
 
 ${partyChatText}
 

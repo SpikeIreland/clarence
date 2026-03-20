@@ -65,6 +65,11 @@ export interface SessionContext {
         activeRules: PlaybookRule[]
         activeAlerts: unknown[]
     }
+    corrections: {
+        hasCorrections: boolean
+        totalCorrections: number
+        activeCorrections: CorrectionEntry[]
+    }
     touchpoint: {
         userMessage: string
     }
@@ -145,6 +150,16 @@ interface PlaybookRule {
     importanceLevel: string | null
     isDealBreaker: boolean
     isNonNegotiable: boolean
+}
+
+export interface CorrectionEntry {
+    correctionId: string
+    contractTypeKey: string
+    clauseCategory: string | null
+    errorType: string
+    errorPattern: string
+    correction: string
+    confidence: number
 }
 
 // ============================================================================
@@ -370,7 +385,39 @@ export async function buildSessionContext(
         }
 
         // ------------------------------------------------------------------
-        // QUERY 7: Position labels for ALL clauses
+        // QUERY 7: Corrections Library (Integrity Engine Phase 2)
+        // ------------------------------------------------------------------
+        let correctionEntries: CorrectionEntry[] = []
+        const resolvedContractTypeKey = passedContext?.contractTypeKey || (sessionRow.contract_type_key as string) || null
+
+        if (resolvedContractTypeKey) {
+            const { data: corrections } = await supabase
+                .from('clarence_corrections')
+                .select(`
+                    correction_id, contract_type_key, clause_category,
+                    error_type, error_pattern, correction, confidence
+                `)
+                .eq('contract_type_key', resolvedContractTypeKey)
+                .eq('is_active', true)
+                .order('confidence', { ascending: false })
+                .limit(10)
+
+            if (corrections) {
+                correctionEntries = corrections.map((c: Record<string, unknown>) => ({
+                    correctionId: c.correction_id as string,
+                    contractTypeKey: c.contract_type_key as string,
+                    clauseCategory: c.clause_category as string | null,
+                    errorType: c.error_type as string,
+                    errorPattern: c.error_pattern as string,
+                    correction: c.correction as string,
+                    confidence: c.confidence as number,
+                }))
+            }
+            console.log('[ContextBuilder] Corrections loaded:', correctionEntries.length, 'for', resolvedContractTypeKey)
+        }
+
+        // ------------------------------------------------------------------
+        // QUERY 8: Position labels for ALL clauses
         // ------------------------------------------------------------------
         const allClauseIds = positions
             .map((p: Record<string, unknown>) => p.clause_id)
@@ -643,6 +690,11 @@ export async function buildSessionContext(
                 totalRules: playbookRules.length,
                 activeRules: playbookRules,
                 activeAlerts: [],
+            },
+            corrections: {
+                hasCorrections: correctionEntries.length > 0,
+                totalCorrections: correctionEntries.length,
+                activeCorrections: correctionEntries,
             },
             touchpoint: {
                 userMessage,
