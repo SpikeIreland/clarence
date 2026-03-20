@@ -86,7 +86,7 @@ interface CompanyTemplate {
     sourceFileName?: string
 }
 
-type AdminTab = 'insights' | 'playbooks' | 'templates' | 'training' | 'users' | 'audit'
+type AdminTab = 'insights' | 'playbooks' | 'templates' | 'people' | 'audit'
 
 // ============================================================================
 // SECTION 2: API CONFIGURATION
@@ -132,14 +132,13 @@ function CompanyAdminLoading() {
 interface TabNavigationProps {
     activeTab: AdminTab
     onTabChange: (tab: AdminTab) => void
-    pendingCount: { training: number; users: number }
+    peoplePendingCount: number
 }
 
-function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationProps) {
+function TabNavigation({ activeTab, onTabChange, peoplePendingCount }: TabNavigationProps) {
     const tabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: 'training', label: 'Training Access', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>, badge: pendingCount.training > 0 ? pendingCount.training : undefined },
-        { id: 'users', label: 'Users', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>, badge: pendingCount.users > 0 ? pendingCount.users : undefined },
+        { id: 'people', label: 'People', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
         { id: 'audit', label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
         { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> }
     ]
@@ -1531,112 +1530,232 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
 }
 
 // ============================================================================
-// SECTION 6: TRAINING ACCESS TAB COMPONENT
+// SECTION 6: PEOPLE TAB COMPONENT (consolidates Users + Training Access)
 // ============================================================================
 
-interface TrainingAccessTabProps {
-    users: TrainingUser[]
-    isLoading: boolean
-    onAddUser: (email: string, fullName: string, approvalType: string) => Promise<void>
-    onRemoveUser: (id: string) => Promise<void>
-    onSendInvite: (id: string, email: string) => Promise<void>
-    onRefresh: () => void
+interface Person {
+    email: string
+    fullName: string
+    // From company_users
+    systemUserId?: string
+    userId?: string
+    role?: 'admin' | 'manager' | 'user' | 'viewer'
+    systemStatus?: 'invited' | 'active' | 'suspended' | 'removed'
+    approvalRole?: 'negotiator' | 'approver' | 'admin'
+    systemInvitedAt?: string
+    lastActiveAt?: string
+    // From approved_training_users
+    trainingUserId?: string
+    trainingType?: 'training_partner' | 'training_admin' | 'ai_enabled'
+    trainingStatus?: 'pending' | 'active' | 'suspended' | 'expired'
+    sessionsCompleted?: number
+    trainingInvitationSent?: boolean
+    // Derived
+    healthSignal: 'green' | 'amber' | 'red'
 }
 
-function TrainingAccessTab({ users, isLoading, onAddUser, onRemoveUser, onSendInvite, onRefresh }: TrainingAccessTabProps) {
-    const [showAddForm, setShowAddForm] = useState(false)
-    const [newEmail, setNewEmail] = useState('')
-    const [newFullName, setNewFullName] = useState('')
-    const [newApprovalType, setNewApprovalType] = useState('training_partner')
-    const [isSubmitting, setIsSubmitting] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault(); setError(null); setIsSubmitting(true)
-        try { await onAddUser(newEmail, newFullName, newApprovalType); setShowAddForm(false); setNewEmail(''); setNewFullName('') } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setIsSubmitting(false) }
-    }
-
-    return (
-        <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-                <div><h3 className="text-lg font-semibold text-slate-800">Training Access</h3><p className="text-sm text-slate-500 mt-1">Manage who can access the Training Studio</p></div>
-                <div className="flex items-center gap-2">
-                    <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Refresh</button>
-                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{showAddForm ? 'Cancel' : '+ Add User'}</button>
-                </div>
-            </div>
-
-            {showAddForm && (
-                <form onSubmit={handleSubmit} className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="grid grid-cols-3 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="John Smith" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Access Type</label><select value={newApprovalType} onChange={(e) => setNewApprovalType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="training_partner">Training Partner</option><option value="training_admin">Training Admin</option><option value="ai_enabled">AI Enabled</option></select></div>
-                    </div>
-                    {error && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
-                    <div className="mt-4 flex justify-end"><button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">{isSubmitting ? 'Adding...' : 'Add & Send Invite'}</button></div>
-                </form>
-            )}
-
-            {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
-            ) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No training users yet</p></div>
-            ) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">User</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Access Type</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Status</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Added</th><th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div><p className="font-medium text-slate-800">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.approvalType === 'training_admin' ? 'bg-purple-100 text-purple-700' : user.approvalType === 'ai_enabled' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.approvalType.replace('_', ' ')}</span></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{!user.invitationSent && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Send Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
-        </div>
-    )
+function deriveHealthSignal(p: Omit<Person, 'healthSignal'>): 'green' | 'amber' | 'red' {
+    if (p.systemStatus === 'suspended') return 'red'
+    if (p.systemStatus === 'active') return 'green'
+    if (p.systemStatus === 'invited') return 'amber'
+    if (p.trainingStatus === 'active') return 'green'
+    return 'amber'
 }
 
-// ============================================================================
-// SECTION 7: USERS TAB COMPONENT
-// ============================================================================
+function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[]): Person[] {
+    const map = new Map<string, Person>()
+    companyUsers.forEach(u => {
+        const key = u.email.toLowerCase()
+        const base: Omit<Person, 'healthSignal'> = {
+            email: u.email, fullName: u.fullName,
+            systemUserId: u.id, userId: u.userId,
+            role: u.role, systemStatus: u.status,
+            approvalRole: u.approvalRole,
+            systemInvitedAt: u.invitedAt, lastActiveAt: u.lastActiveAt,
+        }
+        map.set(key, { ...base, healthSignal: deriveHealthSignal(base) })
+    })
+    trainingUsers.forEach(u => {
+        const key = u.email.toLowerCase()
+        const existing = map.get(key)
+        if (existing) {
+            existing.trainingUserId = u.id
+            existing.trainingType = u.approvalType
+            existing.trainingStatus = u.status
+            existing.sessionsCompleted = u.sessionsCompleted
+            existing.trainingInvitationSent = u.invitationSent
+            existing.healthSignal = deriveHealthSignal(existing)
+        } else {
+            const base: Omit<Person, 'healthSignal'> = {
+                email: u.email, fullName: u.fullName,
+                trainingUserId: u.id, trainingType: u.approvalType,
+                trainingStatus: u.status, sessionsCompleted: u.sessionsCompleted,
+                trainingInvitationSent: u.invitationSent,
+            }
+            map.set(key, { ...base, healthSignal: deriveHealthSignal(base) })
+        }
+    })
+    return Array.from(map.values()).sort((a, b) => a.fullName.localeCompare(b.fullName))
+}
 
-interface UsersTabProps {
-    users: CompanyUser[]
+interface PeopleTabProps {
+    companyUsers: CompanyUser[]
+    trainingUsers: TrainingUser[]
     isLoading: boolean
-    onAddUser: (email: string, fullName: string, role: string) => Promise<void>
-    onRemoveUser: (id: string) => Promise<void>
-    onSendInvite: (id: string, email: string) => Promise<void>
+    onAddPerson: (email: string, fullName: string, role: string, approvalRole: string, grantTraining: boolean, trainingType: string) => Promise<void>
+    onRemoveSystemUser: (id: string) => Promise<void>
+    onRemoveTrainingUser: (id: string) => Promise<void>
+    onSendSystemInvite: (id: string, email: string) => Promise<void>
+    onSendTrainingInvite: (id: string, email: string) => Promise<void>
     onUpdateApprovalRole: (id: string, approvalRole: string) => Promise<void>
     onRefresh: () => void
 }
 
-function UsersTab({ users, isLoading, onAddUser, onRemoveUser, onSendInvite, onUpdateApprovalRole, onRefresh }: UsersTabProps) {
+function PeopleTab({ companyUsers, trainingUsers, isLoading, onAddPerson, onRemoveSystemUser, onRemoveTrainingUser, onSendSystemInvite, onSendTrainingInvite, onUpdateApprovalRole, onRefresh }: PeopleTabProps) {
     const [showAddForm, setShowAddForm] = useState(false)
     const [newEmail, setNewEmail] = useState('')
     const [newFullName, setNewFullName] = useState('')
     const [newRole, setNewRole] = useState('user')
+    const [newApprovalRole, setNewApprovalRole] = useState('negotiator')
+    const [grantTraining, setGrantTraining] = useState(false)
+    const [newTrainingType, setNewTrainingType] = useState('training_partner')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
+    const people = mergePeople(companyUsers, trainingUsers)
+    const activeCount = people.filter(p => p.healthSignal === 'green').length
+    const pendingCount = people.filter(p => p.healthSignal === 'amber').length
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault(); setError(null); setIsSubmitting(true)
-        try { await onAddUser(newEmail, newFullName, newRole); setShowAddForm(false); setNewEmail(''); setNewFullName('') } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setIsSubmitting(false) }
+        try {
+            await onAddPerson(newEmail, newFullName, newRole, newApprovalRole, grantTraining, newTrainingType)
+            setShowAddForm(false); setNewEmail(''); setNewFullName('')
+            setNewRole('user'); setNewApprovalRole('negotiator'); setGrantTraining(false)
+        } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setIsSubmitting(false) }
     }
 
     return (
         <div className="p-6">
+            {/* Header */}
             <div className="flex items-center justify-between mb-6">
-                <div><h3 className="text-lg font-semibold text-slate-800">Company Users</h3><p className="text-sm text-slate-500 mt-1">Manage users in your organization</p></div>
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-800">People</h3>
+                    <p className="text-sm text-slate-500 mt-1">{people.length} {people.length === 1 ? 'person' : 'people'} · <span className="text-emerald-600">{activeCount} active</span> · <span className="text-amber-600">{pendingCount} pending</span></p>
+                </div>
                 <div className="flex items-center gap-2">
                     <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Refresh</button>
-                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{showAddForm ? 'Cancel' : '+ Add User'}</button>
+                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{showAddForm ? 'Cancel' : '+ Add Person'}</button>
                 </div>
             </div>
 
+            {/* Add Person Form */}
             {showAddForm && (
                 <form onSubmit={handleSubmit} className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="grid grid-cols-3 gap-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-4">New Person</h4>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="John Smith" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Role</label><select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="admin">Admin</option><option value="manager">Manager</option><option value="user">User</option><option value="viewer">Viewer</option></select></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Jane Smith" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">System Role</label><select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="admin">Admin</option><option value="manager">Manager</option><option value="user">User</option><option value="viewer">Viewer</option></select></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Approval Role</label><select value={newApprovalRole} onChange={(e) => setNewApprovalRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="negotiator">Negotiator</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div>
+                    </div>
+                    <div className="border-t border-slate-200 pt-4">
+                        <label className="flex items-center gap-3 cursor-pointer select-none">
+                            <input type="checkbox" checked={grantTraining} onChange={(e) => setGrantTraining(e.target.checked)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded" />
+                            <span className="text-sm font-medium text-slate-700">Grant Training Studio access</span>
+                        </label>
+                        {grantTraining && (
+                            <div className="mt-3 ml-7"><label className="block text-sm font-medium text-slate-700 mb-1">Training Access Type</label><select value={newTrainingType} onChange={(e) => setNewTrainingType(e.target.value)} className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="training_partner">Training Partner</option><option value="training_admin">Training Admin</option><option value="ai_enabled">AI Enabled</option></select></div>
+                        )}
                     </div>
                     {error && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
                     <div className="mt-4 flex justify-end"><button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">{isSubmitting ? 'Adding...' : 'Add & Send Invite'}</button></div>
                 </form>
             )}
 
-            {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
-            ) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No users yet</p></div>
-            ) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">User</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Role</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Approval Role</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Status</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Added</th><th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div><p className="font-medium text-slate-800">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.role}</span></td><td className="py-3 px-4"><select value={user.approvalRole} onChange={(e) => onUpdateApprovalRole(user.id, e.target.value)} className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"><option value="negotiator">Negotiator</option><option value="approver">Approver</option><option value="admin">Admin</option></select></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{user.status === 'invited' && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
+            {/* Roster */}
+            {isLoading ? (
+                <div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+            ) : people.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                    <svg className="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    <p>No people yet. Add your first team member.</p>
+                </div>
+            ) : (
+                <div className="space-y-1.5">
+                    {/* Column headers */}
+                    <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                        <div className="w-3 flex-shrink-0"></div>
+                        <div className="flex-1 min-w-0">Person</div>
+                        <div className="w-32 flex-shrink-0">System Role</div>
+                        <div className="w-32 flex-shrink-0">Training</div>
+                        <div className="w-20 flex-shrink-0 text-center">Sessions</div>
+                        <div className="w-20 flex-shrink-0 text-center">Academy</div>
+                        <div className="w-24 flex-shrink-0 text-right">Actions</div>
+                    </div>
+                    {people.map((person) => (
+                        <div key={person.email} className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all">
+                            {/* Health signal */}
+                            <div className="w-3 flex-shrink-0">
+                                <span className={`block w-2.5 h-2.5 rounded-full ${person.healthSignal === 'green' ? 'bg-emerald-400' : person.healthSignal === 'amber' ? 'bg-amber-400' : 'bg-red-400'}`} title={person.healthSignal === 'green' ? 'Active' : person.healthSignal === 'amber' ? 'Pending' : 'Suspended'}></span>
+                            </div>
+                            {/* Name + email */}
+                            <div className="flex-1 min-w-0">
+                                <p className="font-medium text-slate-800 text-sm truncate">{person.fullName}</p>
+                                <p className="text-xs text-slate-500 truncate">{person.email}</p>
+                            </div>
+                            {/* System role + approval role */}
+                            <div className="w-32 flex-shrink-0 space-y-1">
+                                {person.role ? (
+                                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${person.role === 'admin' ? 'bg-purple-100 text-purple-700' : person.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{person.role}</span>
+                                ) : (
+                                    <span className="text-xs text-slate-300">no access</span>
+                                )}
+                                {person.approvalRole && person.systemUserId && (
+                                    <select value={person.approvalRole} onChange={(e) => onUpdateApprovalRole(person.systemUserId!, e.target.value)} className="block w-full px-1.5 py-0.5 text-xs border border-slate-200 rounded bg-white text-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200">
+                                        <option value="negotiator">Negotiator</option>
+                                        <option value="approver">Approver</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                )}
+                            </div>
+                            {/* Training access */}
+                            <div className="w-32 flex-shrink-0">
+                                {person.trainingType ? (
+                                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${person.trainingStatus === 'active' ? 'bg-emerald-100 text-emerald-700' : person.trainingStatus === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{person.trainingType.replace(/_/g, ' ')}</span>
+                                ) : (
+                                    <span className="text-xs text-slate-300">no access</span>
+                                )}
+                            </div>
+                            {/* Sessions completed */}
+                            <div className="w-20 flex-shrink-0 text-center">
+                                {person.sessionsCompleted !== undefined ? (
+                                    <span className="text-sm font-medium text-slate-700">{person.sessionsCompleted}</span>
+                                ) : <span className="text-xs text-slate-300">—</span>}
+                            </div>
+                            {/* Academy progress — coming soon */}
+                            <div className="w-20 flex-shrink-0 text-center">
+                                <span className="text-xs text-slate-300 italic">soon</span>
+                            </div>
+                            {/* Actions */}
+                            <div className="w-24 flex-shrink-0 flex items-center justify-end gap-2">
+                                {person.systemStatus === 'invited' && person.systemUserId && (
+                                    <button onClick={() => onSendSystemInvite(person.systemUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend</button>
+                                )}
+                                {person.trainingUserId && !person.trainingInvitationSent && (
+                                    <button onClick={() => onSendTrainingInvite(person.trainingUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Invite</button>
+                                )}
+                                {person.systemUserId && (
+                                    <button onClick={() => onRemoveSystemUser(person.systemUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                                )}
+                                {person.trainingUserId && !person.systemUserId && (
+                                    <button onClick={() => onRemoveTrainingUser(person.trainingUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     )
 }
@@ -2222,6 +2341,19 @@ function CompanyAdminContent() {
         await handleSendCompanyInvite('', email); await loadCompanyUsers(userInfo.companyId)
     }
 
+    const handleAddPerson = async (email: string, fullName: string, role: string, approvalRole: string, grantTraining: boolean, trainingType: string) => {
+        if (!userInfo?.companyId) return; const supabase = createClient()
+        const { error: sysError } = await supabase.from('company_users').insert({ company_id: userInfo.companyId, email, full_name: fullName, role, approval_role: approvalRole, status: 'invited', invited_by: userInfo.userId, invited_at: new Date().toISOString() })
+        if (sysError) { if (sysError.code === '23505') throw new Error('User already exists'); throw new Error(sysError.message) }
+        await handleSendCompanyInvite('', email)
+        if (grantTraining) {
+            const { error: trainError } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: trainingType, status: 'active', approved_by_email: userInfo.email, approved_at: new Date().toISOString() })
+            if (trainError && trainError.code !== '23505') throw new Error(trainError.message)
+            await handleSendTrainingInvite('', email)
+        }
+        await Promise.all([loadCompanyUsers(userInfo.companyId), loadTrainingUsers(userInfo.companyId)])
+    }
+
     const handleRemoveCompanyUser = async (id: string) => { if (!userInfo?.companyId) return; const supabase = createClient(); await supabase.from('company_users').update({ status: 'removed' }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
 
     const handleUpdateApprovalRole = async (id: string, approvalRole: string) => {
@@ -2286,13 +2418,12 @@ function CompanyAdminContent() {
     if (loading) return <CompanyAdminLoading />
     if (!isAdmin) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="text-center"><h2 className="text-xl font-semibold text-slate-800 mb-2">Access Denied</h2><button onClick={() => router.push('/auth/contracts-dashboard')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Go to Dashboard</button></div></div>
 
-    const pendingCount = { training: trainingUsers.filter(u => u.status === 'pending').length, users: companyUsers.filter(u => u.status === 'invited').length }
+    const peoplePendingCount = companyUsers.filter(u => u.status === 'invited').length + trainingUsers.filter(u => u.status === 'pending').length
 
     const navTabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
         { id: 'insights', label: 'Insights', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: 'training', label: 'Training Access', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>, badge: pendingCount.training > 0 ? pendingCount.training : undefined },
-        { id: 'users', label: 'Users', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>, badge: pendingCount.users > 0 ? pendingCount.users : undefined },
+        { id: 'people', label: 'People', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
         { id: 'audit', label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
         { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> }
     ]
@@ -2362,8 +2493,7 @@ function CompanyAdminContent() {
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                                 {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
-                                {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
-                                {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
+                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} onAddPerson={handleAddPerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
                                 {activeTab === 'audit' && <AuditLogTab />}
                             </div>
                         )}
