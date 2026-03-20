@@ -274,6 +274,11 @@ function CreatePlaybookContent() {
                     created_by_user_id: userInfo.userId,
                 }),
             })
+            if (!pbRes.ok) {
+                const errText = await pbRes.text().catch(() => 'Unknown error')
+                update({ uploadStatus: 'error', uploadError: `Failed to create playbook (${pbRes.status}): ${errText}` })
+                return
+            }
             const pbData = await pbRes.json()
             if (!pbData.success) {
                 update({ uploadStatus: 'error', uploadError: pbData.error || 'Failed to create playbook' })
@@ -282,8 +287,8 @@ function CreatePlaybookContent() {
             const playbookId = pbData.playbook.playbook_id
             update({ createdPlaybookId: playbookId, uploadStatus: 'parsing' })
 
-            // Send to N8N
-            await fetch(`${N8N_API_BASE}/parse-playbook`, {
+            // Send to N8N for parsing
+            const n8nRes = await fetch(`${N8N_API_BASE}/parse-playbook`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -291,6 +296,11 @@ function CreatePlaybookContent() {
                     extracted_text: extractedText,
                 }),
             })
+            if (!n8nRes.ok) {
+                console.error('N8N parse-playbook error:', n8nRes.status, await n8nRes.text().catch(() => ''))
+                update({ uploadStatus: 'error', uploadError: 'Failed to start playbook analysis. Please try again.' })
+                return
+            }
 
             // Poll for completion
             const supabase = createClient()
