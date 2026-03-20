@@ -34,13 +34,32 @@ export async function POST(request: NextRequest) {
         }
 
         const supabase = createServiceRoleClient()
+        const typeKey = contract_type_key || null
+
+        // Deactivate any existing active playbook for the same company + contract type
+        // to avoid violating the uix_company_playbooks_active_type unique constraint
+        if (typeKey) {
+            await supabase
+                .from('company_playbooks')
+                .update({ is_active: false, status: 'inactive' })
+                .eq('company_id', company_id)
+                .eq('contract_type_key', typeKey)
+                .eq('is_active', true)
+        } else {
+            await supabase
+                .from('company_playbooks')
+                .update({ is_active: false, status: 'inactive' })
+                .eq('company_id', company_id)
+                .is('contract_type_key', null)
+                .eq('is_active', true)
+        }
 
         const { data, error } = await supabase
             .from('company_playbooks')
             .insert({
                 company_id,
                 playbook_name,
-                contract_type_key: contract_type_key || null,
+                contract_type_key: typeKey,
                 playbook_perspective: playbook_perspective || 'customer',
                 status: status || 'active',
                 is_active: true,
