@@ -542,6 +542,7 @@ function PlaybookReviewContent() {
                 .eq('is_active', true)
                 .order('category')
                 .order('display_order', { ascending: true })
+                .order('clause_code', { ascending: true })
 
             const loadedRules = (rulesData || []) as PlaybookRule[]
             setRules(loadedRules)
