@@ -182,21 +182,20 @@ if (rules.length === 0) {
   );
 }
 
-// Pass through the upstream context fields needed by downstream nodes
-const upstreamContext = $input.first().json?._upstreamContext || {};
+// The Claude HTTP node only returns the API response body — context fields
+// (playbookId, companyId, playbookName) were set in Prepare Claude Prompt.
+const prepareData = $('Prepare Claude Prompt').first().json;
 
 return {
-  ...upstreamContext,
-  playbookId: upstreamContext.playbookId || parsed.playbook_id || null,
-  companyId: upstreamContext.companyId || null,
-  playbookName: upstreamContext.playbookName || parsed.playbook_name || null,
-  perspective: parsed.playbook_perspective || upstreamContext.perspective || "customer",
+  playbookId: prepareData.playbookId || null,
+  companyId: prepareData.companyId || null,
+  playbookName: prepareData.playbookName || null,
+  perspective: parsed.playbook_perspective || prepareData.perspective || "customer",
   playbook_summary: parsed.playbook_summary || null,
   extraction_confidence: parsed.extraction_confidence || null,
   total_rules_extracted: rules.length,
   rules,
-  // Pass the processed text through for Pass 2
-  extractedText: upstreamContext.extractedText || "",
+  extractedText: prepareData.extractedText || "",
   // Diagnostic fields
   wasTruncated,
   truncationRecovered: parsed._truncation_recovered || false,
