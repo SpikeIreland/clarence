@@ -49,37 +49,45 @@ try {
   // STEP 3: Truncation recovery
   //
   // Claude truncates mid-string inside clause_inventory. We try to salvage
-  // every rule object that completed before the cut-off by:
-  //   a) finding the last complete '}' that closes a rule entry
-  //   b) closing the array and top-level object around it
-  //   c) parsing the reconstructed string
+  // every rule object that completed before the cut-off.
+  //
+  // Strategy A — depth tracking (fast, accurate):
+  //   Walk forward tracking brace depth; record every position where a
+  //   top-level rule object closes (depth returns to 0). Use the last such
+  //   position as the safe cut-off point.
+  //
+  // Strategy B — backward scan (resilient fallback):
+  //   If Strategy A finds nothing (truncation hit the very first rule, or a
+  //   string-skipping edge case threw the depth counter off), walk backward
+  //   through every '}' in the rules section and attempt JSON.parse on each
+  //   candidate reconstruction until one succeeds.
   // ============================================================================
 
   wasTruncated = true;
   let recovered = false;
 
-  // Find the position of "clause_inventory" array opening
   const arrayStart = jsonStr.indexOf('"clause_inventory"');
   if (arrayStart !== -1) {
     const bracketOpen = jsonStr.indexOf("[", arrayStart);
     if (bracketOpen !== -1) {
-      // Work backwards from the end of the (truncated) string to find the last
-      // complete rule object — i.e. the last '}' that is at depth 1 inside the array
-      const fragment = jsonStr.slice(0, jsonStr.length);
+      const headerStr = jsonStr.slice(0, bracketOpen + 1); // up to and including '['
+
+      // ---- Strategy A: forward depth-tracking scan -------------------------
       let depth = 0;
       let lastCompleteRuleEnd = -1;
 
-      for (let i = bracketOpen + 1; i < fragment.length; i++) {
-        const ch = fragment[i];
-        // Skip over string values (they may contain braces)
+      for (let i = bracketOpen + 1; i < jsonStr.length; i++) {
+        const ch = jsonStr[i];
+        // Skip over string literals — they may contain braces that would
+        // corrupt the depth counter
         if (ch === '"') {
-          i++; // move past opening quote
-          while (i < fragment.length) {
-            if (fragment[i] === "\\") {
-              i += 2; // skip escaped char
+          i++;
+          while (i < jsonStr.length) {
+            if (jsonStr[i] === "\\") {
+              i += 2; // skip escaped character (handles \" correctly)
               continue;
             }
-            if (fragment[i] === '"') break;
+            if (jsonStr[i] === '"') break;
             i++;
           }
           continue;
@@ -88,35 +96,55 @@ try {
         if (ch === "}") {
           depth--;
           if (depth === 0) {
-            // This closing brace ends a top-level rule object within the array
             lastCompleteRuleEnd = i;
           }
         }
       }
 
       if (lastCompleteRuleEnd !== -1) {
-        // Reconstruct: everything up to and including the last complete rule,
-        // then close the array and the outer object
-        const safeFragment = jsonStr.slice(0, lastCompleteRuleEnd + 1);
-
-        // Extract the header fields before clause_inventory
-        const headerStr = jsonStr.slice(0, bracketOpen + 1);
         const rulesStr = jsonStr.slice(bracketOpen + 1, lastCompleteRuleEnd + 1);
-
         const reconstructed = headerStr + rulesStr + "]}";
-
         try {
           parsed = JSON.parse(reconstructed);
           recovered = true;
-
-          // Patch up the fields that may have been cut off
-          if (!parsed.playbook_summary) parsed.playbook_summary = null;
-          if (!parsed.extraction_confidence) parsed.extraction_confidence = null;
+          parsed.playbook_summary = parsed.playbook_summary || null;
+          parsed.extraction_confidence = parsed.extraction_confidence || null;
           parsed.total_rules_extracted = (parsed.clause_inventory || []).length;
           parsed._truncation_recovered = true;
+          parsed._recovery_strategy = "depth-tracking";
           parsed._original_error = firstError.message;
-        } catch (recoveryError) {
-          // Recovery also failed — fall through to hard error below
+        } catch (_strategyAParseError) {
+          // Boundary looked right but reconstruction is still malformed —
+          // fall through to Strategy B
+        }
+      }
+
+      // ---- Strategy B: backward scan through all '}' positions -------------
+      if (!recovered) {
+        // Collect every '}' position inside the rules section
+        const closingBraces = [];
+        for (let i = bracketOpen + 1; i < jsonStr.length; i++) {
+          if (jsonStr[i] === "}") closingBraces.push(i);
+        }
+
+        // Try from the rightmost '}' leftward — we typically succeed within
+        // the first few iterations (the truncation is near the end)
+        for (let idx = closingBraces.length - 1; idx >= 0 && !recovered; idx--) {
+          const cutoff = closingBraces[idx];
+          const rulesStr = jsonStr.slice(bracketOpen + 1, cutoff + 1);
+          const reconstructed = headerStr + rulesStr + "]}";
+          try {
+            parsed = JSON.parse(reconstructed);
+            recovered = true;
+            parsed.playbook_summary = parsed.playbook_summary || null;
+            parsed.extraction_confidence = parsed.extraction_confidence || null;
+            parsed.total_rules_extracted = (parsed.clause_inventory || []).length;
+            parsed._truncation_recovered = true;
+            parsed._recovery_strategy = "backward-scan";
+            parsed._original_error = firstError.message;
+          } catch (_strategyBParseError) {
+            // Keep scanning leftward
+          }
         }
       }
     }
@@ -127,6 +155,7 @@ try {
       `Failed to parse Claude response and truncation recovery failed.\n` +
       `Original error: ${firstError.message}\n` +
       `Response length: ${rawContent.length} chars\n` +
+      `clause_inventory found: ${jsonStr.includes('"clause_inventory"')}\n` +
       `Tip: increase max_tokens on the Claude node, or reduce document size.`
     );
   }
@@ -163,5 +192,6 @@ return {
   // Diagnostic fields
   wasTruncated,
   truncationRecovered: parsed._truncation_recovered || false,
+  recoveryStrategy: parsed._recovery_strategy || null,
   originalParseError: parsed._original_error || null,
 };
