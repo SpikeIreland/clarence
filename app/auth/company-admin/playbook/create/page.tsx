@@ -40,6 +40,8 @@ interface WizardState {
     selectedCategories: string[]
     rules: DraftRule[]
     creating: boolean
+    nameError: string | null
+    checkingName: boolean
 }
 
 const initialState: WizardState = {
@@ -55,6 +57,8 @@ const initialState: WizardState = {
     selectedCategories: [...DEFAULT_SELECTED],
     rules: [],
     creating: false,
+    nameError: null,
+    checkingName: false,
 }
 
 // ============================================================================
@@ -196,6 +200,24 @@ function CreatePlaybookContent() {
     const update = useCallback((changes: Partial<WizardState>) => {
         setState(prev => ({ ...prev, ...changes }))
     }, [])
+
+    const advanceFromSetup = async () => {
+        if (!userInfo || !state.playbookName.trim()) return
+        update({ checkingName: true, nameError: null })
+        const supabase = createClient()
+        const { data } = await supabase
+            .from('company_playbooks')
+            .select('playbook_id')
+            .eq('company_id', userInfo.companyId)
+            .ilike('playbook_name', state.playbookName.trim())
+            .limit(1)
+            .single()
+        if (data) {
+            update({ checkingName: false, nameError: 'A playbook with this name already exists. Please choose a unique name.' })
+            return
+        }
+        update({ checkingName: false, step: state.sourcePath === 'upload' ? 'upload' : 'categories' })
+    }
 
     // Step config based on path
     const getSteps = () => {
@@ -539,10 +561,13 @@ function CreatePlaybookContent() {
                             <input
                                 type="text"
                                 value={state.playbookName}
-                                onChange={e => update({ playbookName: e.target.value })}
+                                onChange={e => update({ playbookName: e.target.value, nameError: null })}
                                 placeholder="e.g. IT Services Negotiation Playbook"
-                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none ${state.nameError ? 'border-red-400 bg-red-50' : 'border-slate-200'}`}
                             />
+                            {state.nameError && (
+                                <p className="mt-1.5 text-xs text-red-600">{state.nameError}</p>
+                            )}
                         </div>
 
                         {/* Perspective */}
@@ -592,11 +617,11 @@ function CreatePlaybookContent() {
                                 Back
                             </button>
                             <button
-                                onClick={() => update({ step: state.sourcePath === 'upload' ? 'upload' : 'categories' })}
-                                disabled={!state.playbookName.trim()}
+                                onClick={advanceFromSetup}
+                                disabled={!state.playbookName.trim() || state.checkingName}
                                 className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                Next
+                                {state.checkingName ? 'Checking…' : 'Next'}
                             </button>
                         </div>
                     </>

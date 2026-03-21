@@ -2094,15 +2094,6 @@ function CompanyAdminContent() {
 
     const handlePlaybookActivate = async (playbookId: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
-        // Only deactivate other playbooks of the same contract type
-        const targetPlaybook = playbooks.find(p => p.playbookId === playbookId)
-        if (!targetPlaybook) return
-        const typeKey = targetPlaybook.contractTypeKey
-        if (typeKey) {
-            await supabase.from('company_playbooks').update({ is_active: false, status: 'inactive' }).eq('company_id', userInfo.companyId).eq('contract_type_key', typeKey).eq('is_active', true)
-        } else {
-            await supabase.from('company_playbooks').update({ is_active: false, status: 'inactive' }).eq('company_id', userInfo.companyId).is('contract_type_key', null).eq('is_active', true)
-        }
         await supabase.from('company_playbooks').update({ is_active: true, activated_at: new Date().toISOString(), status: 'active' }).eq('playbook_id', playbookId)
         await loadPlaybooks(userInfo.companyId)
     }
@@ -2117,7 +2108,7 @@ function CompanyAdminContent() {
         if (!userInfo?.companyId) return; const supabase = createClient()
         const { error } = await supabase.from('company_playbooks').update({ contract_type_key: contractTypeKey || null, updated_at: new Date().toISOString() }).eq('playbook_id', playbookId)
         if (error) {
-            if (error.code === '23505') { alert('There is already an active playbook for this contract type. Deactivate it first or choose a different type.'); return }
+            if (error.code === '23505') { alert('A playbook with this name already exists. Please rename it before changing the type.'); return }
             console.error('Failed to update playbook type:', error); return
         }
         await loadPlaybooks(userInfo.companyId)

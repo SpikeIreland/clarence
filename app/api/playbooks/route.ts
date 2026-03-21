@@ -36,24 +36,6 @@ export async function POST(request: NextRequest) {
         const supabase = createServiceRoleClient()
         const typeKey = contract_type_key || null
 
-        // Deactivate any existing active playbook for the same company + contract type
-        // to avoid violating the uix_company_playbooks_active_type unique constraint
-        if (typeKey) {
-            await supabase
-                .from('company_playbooks')
-                .update({ is_active: false, status: 'inactive' })
-                .eq('company_id', company_id)
-                .eq('contract_type_key', typeKey)
-                .eq('is_active', true)
-        } else {
-            await supabase
-                .from('company_playbooks')
-                .update({ is_active: false, status: 'inactive' })
-                .eq('company_id', company_id)
-                .is('contract_type_key', null)
-                .eq('is_active', true)
-        }
-
         const { data, error } = await supabase
             .from('company_playbooks')
             .insert({
@@ -71,6 +53,12 @@ export async function POST(request: NextRequest) {
             .single()
 
         if (error) {
+            if (error.code === '23505') {
+                return NextResponse.json(
+                    { error: 'A playbook with this name already exists. Please choose a unique name.' },
+                    { status: 409 }
+                )
+            }
             console.error('Playbook creation error:', error)
             return NextResponse.json(
                 { error: 'Failed to create playbook', details: error.message },
