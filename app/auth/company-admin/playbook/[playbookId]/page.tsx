@@ -129,8 +129,15 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 {rangeCtx?.source === 'inferred' && (
                     <span className="text-[9px] text-slate-400 italic">typical range</span>
                 )}
+                {/* Importance pill */}
+                <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 border border-amber-100 rounded text-[9px] font-medium text-amber-700">
+                    <svg className="w-2.5 h-2.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {rule.importance_level}/10
+                </span>
                 {/* Info tooltip */}
-                <div className="relative group/info ml-auto">
+                <div className="relative group/info">
                     <div className="w-4 h-4 rounded-full bg-slate-200 hover:bg-indigo-100 flex items-center justify-center cursor-help transition-colors">
                         <span className="text-[9px] font-bold text-slate-500 group-hover/info:text-indigo-600">i</span>
                     </div>
@@ -183,28 +190,54 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 </div>
             )}
 
-            {/* Editable position chips */}
-            <div className="flex flex-wrap gap-1.5 mt-2">
-                {[
-                    { key: 'importance_level', label: 'Importance', value: rule.importance_level, bg: 'bg-amber-50 text-amber-700' },
-                    { key: 'minimum_position', label: 'Min', value: rule.minimum_position, bg: 'bg-red-50 text-red-600' },
-                    { key: 'maximum_position', label: 'Max', value: rule.maximum_position, bg: 'bg-emerald-50 text-emerald-600' },
-                    { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-purple-100 text-purple-700' },
-                    { key: 'fallback_position', label: 'Fallback', value: rule.fallback_position, bg: 'bg-slate-100 text-slate-600' },
-                ].map(p => (
-                    <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
-                        <span>{p.label}:</span>
-                        <select
-                            value={p.value}
-                            onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
-                            className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
-                        >
-                            {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                                <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
-                            ))}
-                        </select>
+            {/* Position chips — Market vs Company */}
+            <div className="flex gap-2 mt-2">
+                {/* Market values */}
+                <div className="flex-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Market</p>
+                    <div className="flex gap-1.5">
+                        {[
+                            { key: 'minimum_position', label: 'Min', value: rule.minimum_position, bg: 'bg-red-50 text-red-600' },
+                            { key: 'maximum_position', label: 'Max', value: rule.maximum_position, bg: 'bg-emerald-50 text-emerald-600' },
+                        ].map(p => (
+                            <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
+                                <span>{p.label}:</span>
+                                <select
+                                    value={p.value}
+                                    onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
+                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
+                                >
+                                    {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                        <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        ))}
                     </div>
-                ))}
+                </div>
+                {/* Company values */}
+                <div className="flex-1 rounded-md border border-purple-100 bg-purple-50 px-2 py-1.5">
+                    <p className="text-[9px] font-semibold text-purple-400 uppercase tracking-wide mb-1.5">Company</p>
+                    <div className="flex gap-1.5">
+                        {[
+                            { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-purple-100 text-purple-700' },
+                            { key: 'fallback_position', label: 'Fallback', value: rule.fallback_position, bg: 'bg-slate-100 text-slate-600' },
+                        ].map(p => (
+                            <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
+                                <span>{p.label}:</span>
+                                <select
+                                    value={p.value}
+                                    onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
+                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
+                                >
+                                    {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                        <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     )
