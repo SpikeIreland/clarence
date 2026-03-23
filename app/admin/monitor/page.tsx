@@ -731,12 +731,42 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
     useEffect(() => { stopAnimation() }, [journeyType])
 
     const currentHop = currentHops[currentHopIndex]
-    const dotLng = currentHop ? interpolate(currentHop.from_longitude, currentHop.to_longitude, hopProgress) : null
-    const dotLat = currentHop ? interpolate(currentHop.from_latitude, currentHop.to_latitude, hopProgress) : null
 
     // Deduplicated unique nodes that appear in the selected journey
     const journeyNodeIds = new Set(currentHops.flatMap(h => [h.from_service_id, h.to_service_id]))
     const visibleNodes = nodes.filter(n => journeyNodeIds.has(n.service_id))
+
+    // Spread overlapping nodes into a small cluster so labels don't pile up
+    const nodeDisplayPos = React.useMemo(() => {
+        const pos = new Map<string, [number, number]>()
+        if (visibleNodes.length === 0) return pos
+        const raw = visibleNodes.map(n => ({ id: n.service_id, xy: proj(n.longitude, n.latitude) }))
+        const used = new Set<string>()
+        for (const item of raw) {
+            if (used.has(item.id)) continue
+            const cluster = raw.filter(o => {
+                const dx = o.xy[0] - item.xy[0], dy = o.xy[1] - item.xy[1]
+                return Math.sqrt(dx * dx + dy * dy) < 12
+            })
+            cluster.forEach(c => used.add(c.id))
+            if (cluster.length === 1) {
+                pos.set(cluster[0].id, cluster[0].xy)
+            } else {
+                // Spread in a circle of radius 22px around the geographic centre
+                cluster.forEach((c, i) => {
+                    const angle = (2 * Math.PI * i) / cluster.length - Math.PI / 2
+                    pos.set(c.id, [item.xy[0] + 22 * Math.cos(angle), item.xy[1] + 22 * Math.sin(angle)])
+                })
+            }
+        }
+        return pos
+    }, [visibleNodes, proj])
+
+    // Animated dot follows display positions (not raw geo) so it hits the offset circles
+    const fromPos = currentHop ? (nodeDisplayPos.get(currentHop.from_service_id) ?? proj(currentHop.from_longitude, currentHop.from_latitude)) : null
+    const toPos   = currentHop ? (nodeDisplayPos.get(currentHop.to_service_id)   ?? proj(currentHop.to_longitude,   currentHop.to_latitude))   : null
+    const dotX = fromPos && toPos ? interpolate(fromPos[0], toPos[0], hopProgress) : null
+    const dotY = fromPos && toPos ? interpolate(fromPos[1], toPos[1], hopProgress) : null
 
     return (
         <div className="space-y-4">
@@ -851,8 +881,8 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
 
                         {/* Hop lines */}
                         {currentHops.map((hop, i) => {
-                            const [x1, y1] = proj(hop.from_longitude, hop.from_latitude)
-                            const [x2, y2] = proj(hop.to_longitude, hop.to_latitude)
+                            const [x1, y1] = nodeDisplayPos.get(hop.from_service_id) ?? proj(hop.from_longitude, hop.from_latitude)
+                            const [x2, y2] = nodeDisplayPos.get(hop.to_service_id)   ?? proj(hop.to_longitude,   hop.to_latitude)
                             const isActive = animating && currentHopIndex === i
                             return (
                                 <line
@@ -869,7 +899,7 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
 
                         {/* Service node markers */}
                         {visibleNodes.map(node => {
-                            const [x, y] = proj(node.longitude, node.latitude)
+                            const [x, y] = nodeDisplayPos.get(node.service_id) ?? proj(node.longitude, node.latitude)
                             return (
                                 <g key={node.service_id}>
                                     <circle
@@ -902,15 +932,12 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
                         })}
 
                         {/* Animated dot */}
-                        {animating && dotLng !== null && dotLat !== null && (() => {
-                            const [dx, dy] = proj(dotLng, dotLat)
-                            return (
-                                <g>
-                                    <circle cx={dx} cy={dy} r={5} fill="#a5b4fc" filter="url(#dotglow)" />
-                                    <circle cx={dx} cy={dy} r={9} fill="none" stroke="#a5b4fc" strokeWidth={1} opacity={0.4} />
-                                </g>
-                            )
-                        })()}
+                        {animating && dotX !== null && dotY !== null && (
+                            <g>
+                                <circle cx={dotX} cy={dotY} r={5} fill="#a5b4fc" filter="url(#dotglow)" />
+                                <circle cx={dotX} cy={dotY} r={9} fill="none" stroke="#a5b4fc" strokeWidth={1} opacity={0.4} />
+                            </g>
+                        )}
 
                     </svg>
                 )}
