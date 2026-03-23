@@ -721,10 +721,6 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
     const journeyNodeIds = new Set(currentHops.flatMap(h => [h.from_service_id, h.to_service_id]))
     const visibleNodes = nodes.filter(n => journeyNodeIds.has(n.service_id))
 
-    // Debug: first hop coordinates to verify projection
-    const debugHop = currentHops[0] ?? null
-    const debugProj = debugHop ? proj(debugHop.from_longitude, debugHop.from_latitude) : null
-
     return (
         <div className="space-y-4">
             {/* Controls */}
@@ -797,17 +793,6 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
             </div>
 
             {/* Map */}
-            {/* Temporary debug panel — remove once map is working */}
-            <div className="bg-slate-800 rounded-lg px-3 py-2 text-[10px] font-mono text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
-                <span>hops: {currentHops.length}</span>
-                <span>nodes: {nodes.length}</span>
-                <span>visibleNodes: {visibleNodes.length}</span>
-                <span>worldPaths: {worldPaths.length}</span>
-                <span>hop[0] coords: {debugHop ? `lng=${debugHop.from_longitude} lat=${debugHop.from_latitude}` : 'null'}</span>
-                <span>projected: {debugProj ? `x=${debugProj[0].toFixed(1)} y=${debugProj[1].toFixed(1)}` : 'null'}</span>
-                <span className="w-full break-all">hop[0] keys: {debugHop ? Object.keys(debugHop).join(', ') : 'none'}</span>
-            </div>
-
             <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
                 {currentHops.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-80 text-slate-500 text-sm gap-2 px-6 text-center">
@@ -1152,7 +1137,33 @@ export default function MonitorDashboard() {
         if (escalationsRes.data) setEscalations(escalationsRes.data as EscalationItem[])
         if (trendsRes.data) setTrendData(trendsRes.data as ThemeTrend[])
         if (nodesRes.data) setServiceNodes(nodesRes.data as ServiceNode[])
-        if (hopsRes.data) setJourneyHops(hopsRes.data as JourneyHop[])
+        if (hopsRes.data) {
+            // v_data_journey_map uses shortened column aliases — map to JourneyHop interface
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mapped: JourneyHop[] = hopsRes.data.map((h: any) => ({
+                journey_type:      h.journey_type,
+                hop_sequence:      h.hop_sequence,
+                hop_label:         h.hop_label,
+                data_description:  h.data_description,
+                data_sensitivity:  h.data_sensitivity,
+                typical_latency_ms: h.typical_latency_ms,
+                from_service_id:   h.from_id,
+                from_service_name: h.from_name,
+                from_latitude:     h.from_lat,
+                from_longitude:    h.from_lng,
+                from_region_label: h.from_region,
+                from_icon_name:    h.from_icon,
+                from_data_at_rest: h.from_stores_data,
+                to_service_id:     h.to_id,
+                to_service_name:   h.to_name,
+                to_latitude:       h.to_lat,
+                to_longitude:      h.to_lng,
+                to_region_label:   h.to_region,
+                to_icon_name:      h.to_icon,
+                to_data_at_rest:   h.to_stores_data,
+            }))
+            setJourneyHops(mapped)
+        }
         if (nodesRes.error || hopsRes.error) {
             setJourneyError([nodesRes.error?.message, hopsRes.error?.message].filter(Boolean).join(' | '))
         } else {
