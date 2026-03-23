@@ -7,6 +7,7 @@ import { normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compli
 import jsPDF from 'jspdf'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import InsightsTab from './components/InsightsTab'
+import { DataJourneyMapContainer } from '@/app/components/DataJourneyMap'
 
 
 // ============================================================================
@@ -86,7 +87,7 @@ interface CompanyTemplate {
     sourceFileName?: string
 }
 
-type AdminTab = 'insights' | 'playbooks' | 'templates' | 'people' | 'audit'
+type AdminTab = 'insights' | 'templates' | 'playbooks' | 'people' | 'datamap' | 'audit'
 
 // ============================================================================
 // SECTION 2: API CONFIGURATION
@@ -2414,11 +2415,12 @@ function CompanyAdminContent() {
     const peoplePendingCount = companyUsers.filter(u => u.status === 'invited').length + trainingUsers.filter(u => u.status === 'pending').length
 
     const navTabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-        { id: 'insights', label: 'Insights', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+        { id: 'insights',  label: 'Insights',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: 'people', label: 'People', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
-        { id: 'audit', label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
-        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> }
+        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> },
+        { id: 'people',    label: 'People',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
+        { id: 'datamap',   label: 'Data Map',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+        { id: 'audit',     label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
     ]
 
     return (
@@ -2431,7 +2433,7 @@ function CompanyAdminContent() {
                     </button>
                     <div className="h-6 w-px bg-indigo-400"></div>
                     <div>
-                        <h1 className="text-lg font-bold text-white">Company Admin</h1>
+                        <h1 className="text-lg font-bold text-white">Control Room</h1>
                         <p className="text-sm text-indigo-200">{companyName}</p>
                     </div>
                 </div>
@@ -2453,7 +2455,7 @@ function CompanyAdminContent() {
                 {/* LEFT PANEL: Navigation */}
                 <div className="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
                     <div className="p-4 border-b border-slate-200 bg-gradient-to-b from-indigo-50 to-white">
-                        <h2 className="text-sm font-semibold text-indigo-800 uppercase tracking-wider">Administration</h2>
+                        <h2 className="text-sm font-semibold text-indigo-800 uppercase tracking-wider">Control Room</h2>
                         <p className="text-xs text-slate-500 mt-1">Manage your company settings</p>
                     </div>
                     <nav className="flex-1 py-2">
@@ -2482,6 +2484,8 @@ function CompanyAdminContent() {
                     <div className="max-w-5xl mx-auto py-6 px-6">
                         {activeTab === 'insights' ? (
                             <InsightsTab playbooks={playbooks} templates={companyTemplates} trainingUsers={trainingUsers} companyUsers={companyUsers} companyId={userInfo?.companyId || ''} />
+                        ) : activeTab === 'datamap' ? (
+                            <DataJourneyMapContainer />
                         ) : (
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
