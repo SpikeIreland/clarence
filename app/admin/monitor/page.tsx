@@ -805,6 +805,7 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
                 <span>worldPaths: {worldPaths.length}</span>
                 <span>hop[0] coords: {debugHop ? `lng=${debugHop.from_longitude} lat=${debugHop.from_latitude}` : 'null'}</span>
                 <span>projected: {debugProj ? `x=${debugProj[0].toFixed(1)} y=${debugProj[1].toFixed(1)}` : 'null'}</span>
+                <span className="w-full break-all">hop[0] keys: {debugHop ? Object.keys(debugHop).join(', ') : 'none'}</span>
             </div>
 
             <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
