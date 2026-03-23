@@ -626,7 +626,7 @@ const MAP_H = 440
 const ANIMATION_TOTAL_MS = 10000
 const FRAME_MS = 50
 
-function DataJourneyMap({ nodes, hops }: { nodes: ServiceNode[]; hops: JourneyHop[] }) {
+function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: JourneyHop[]; error?: string | null }) {
     const [worldPaths, setWorldPaths] = useState<string[]>([])
     const [journeyType, setJourneyType] = useState('contract_analysis')
     const [animating, setAnimating] = useState(false)
@@ -795,8 +795,19 @@ function DataJourneyMap({ nodes, hops }: { nodes: ServiceNode[]; hops: JourneyHo
             {/* Map */}
             <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
                 {currentHops.length === 0 ? (
-                    <div className="flex items-center justify-center h-80 text-slate-500 text-sm">
-                        No journey data available. Check that service_topology and data_journey_hops tables are seeded.
+                    <div className="flex flex-col items-center justify-center h-80 text-slate-500 text-sm gap-2 px-6 text-center">
+                        {error ? (
+                            <>
+                                <span className="text-red-400 font-medium">Database error</span>
+                                <span className="text-slate-400 text-xs font-mono break-all">{error}</span>
+                                <span className="text-slate-500 text-xs mt-1">Run the seed SQL for service_topology and data_journey_hops, then create the v_data_journey_map view.</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>No journey data available</span>
+                                <span className="text-slate-400 text-xs">Tables found but empty — seed service_topology and data_journey_hops, then create the v_data_journey_map view.</span>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <svg
@@ -1096,6 +1107,7 @@ export default function MonitorDashboard() {
     const [loading, setLoading] = useState(true)
     const [lastRefresh, setLastRefresh] = useState(new Date())
     const [autoRefresh, setAutoRefresh] = useState(true)
+    const [journeyError, setJourneyError] = useState<string | null>(null)
 
     // ── Auth ──────────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -1125,6 +1137,11 @@ export default function MonitorDashboard() {
         if (trendsRes.data) setTrendData(trendsRes.data as ThemeTrend[])
         if (nodesRes.data) setServiceNodes(nodesRes.data as ServiceNode[])
         if (hopsRes.data) setJourneyHops(hopsRes.data as JourneyHop[])
+        if (nodesRes.error || hopsRes.error) {
+            setJourneyError([nodesRes.error?.message, hopsRes.error?.message].filter(Boolean).join(' | '))
+        } else {
+            setJourneyError(null)
+        }
         setLastRefresh(new Date())
         setLoading(false)
     }, [])
@@ -1259,7 +1276,7 @@ export default function MonitorDashboard() {
                     <FeedbackTrends data={trendData} />
                 )}
                 {activeTab === 'journey' && (
-                    <DataJourneyMap nodes={serviceNodes} hops={journeyHops} />
+                    <DataJourneyMap nodes={serviceNodes} hops={journeyHops} error={journeyError} />
                 )}
                 {activeTab === 'health' && (
                     <SystemHealth />
