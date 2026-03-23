@@ -814,6 +814,18 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
                         viewBox={`0 0 ${MAP_W} ${MAP_H}`}
                         style={{ width: '100%', height: 'auto', display: 'block' }}
                     >
+                        {/* Filters must come first — Safari requires defs before referencing elements */}
+                        <defs>
+                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                            </filter>
+                            <filter id="dotglow" x="-100%" y="-100%" width="300%" height="300%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                            </filter>
+                        </defs>
+
                         {/* World background */}
                         <rect width={MAP_W} height={MAP_H} fill="#0f172a" />
                         {worldPaths.map((d, i) => (
@@ -876,17 +888,6 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
                             )
                         })()}
 
-                        {/* SVG filters */}
-                        <defs>
-                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                                <feGaussianBlur stdDeviation="2" result="blur" />
-                                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                            </filter>
-                            <filter id="dotglow" x="-100%" y="-100%" width="300%" height="300%">
-                                <feGaussianBlur stdDeviation="3" result="blur" />
-                                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                            </filter>
-                        </defs>
                     </svg>
                 )}
             </div>
