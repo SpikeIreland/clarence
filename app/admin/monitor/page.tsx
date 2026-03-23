@@ -21,9 +21,8 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid,
     Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import {
-    ComposableMap, Geographies, Geography, Marker, Line,
-} from 'react-simple-maps'
+import { geoNaturalEarth1, geoPath } from 'd3-geo'
+import { feature } from 'topojson-client'
 
 // ============================================================================
 // SECTION 1: TYPES
@@ -160,8 +159,6 @@ interface SystemStats {
 // ============================================================================
 // SECTION 2: CONSTANTS
 // ============================================================================
-
-const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 
 const JOURNEY_LABELS: Record<string, string> = {
     contract_analysis: 'Contract Analysis',
@@ -623,10 +620,14 @@ function FeedbackTrends({ data }: { data: ThemeTrend[] }) {
 // SECTION 7: DATA JOURNEY MAP
 // ============================================================================
 
-const ANIMATION_TOTAL_MS = 10000 // 10 seconds per full journey
+const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+const MAP_W = 900
+const MAP_H = 440
+const ANIMATION_TOTAL_MS = 10000
 const FRAME_MS = 50
 
 function DataJourneyMap({ nodes, hops }: { nodes: ServiceNode[]; hops: JourneyHop[] }) {
+    const [worldPaths, setWorldPaths] = useState<string[]>([])
     const [journeyType, setJourneyType] = useState('contract_analysis')
     const [animating, setAnimating] = useState(false)
     const [currentHopIndex, setCurrentHopIndex] = useState(0)
@@ -635,6 +636,32 @@ function DataJourneyMap({ nodes, hops }: { nodes: ServiceNode[]; hops: JourneyHo
     const [activeHopInfo, setActiveHopInfo] = useState<JourneyHop | null>(null)
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const progressRef = useRef({ hop: 0, progress: 0 })
+
+    // d3-geo projection (Natural Earth — visually balanced for Singapore + US)
+    const projection = React.useMemo(() =>
+        geoNaturalEarth1().scale(148).translate([MAP_W / 2, MAP_H / 2])
+    , [])
+
+    const pathGen = React.useMemo(() => geoPath().projection(projection), [projection])
+
+    // Project [lng, lat] → [svgX, svgY]
+    const proj = React.useCallback((lng: number, lat: number): [number, number] =>
+        projection([lng, lat]) ?? [0, 0]
+    , [projection])
+
+    // Load world boundaries once
+    useEffect(() => {
+        fetch(GEO_URL)
+            .then(r => r.json())
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .then((topo: any) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const countries = feature(topo, topo.objects.countries) as any
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                setWorldPaths(countries.features.map((f: any) => pathGen(f) ?? ''))
+            })
+            .catch(() => {/* non-fatal — map still usable without background */})
+    }, [pathGen])
 
     const currentHops = hops.filter(h => h.journey_type === journeyType)
         .sort((a, b) => a.hop_sequence - b.hop_sequence)
@@ -772,72 +799,84 @@ function DataJourneyMap({ nodes, hops }: { nodes: ServiceNode[]; hops: JourneyHo
                         No journey data available. Check that service_topology and data_journey_hops tables are seeded.
                     </div>
                 ) : (
-                    <ComposableMap
-                        projection="geoMercator"
-                        projectionConfig={{ scale: 130, center: [20, 15] }}
-                        style={{ width: '100%', height: '420px' }}
+                    <svg
+                        viewBox={`0 0 ${MAP_W} ${MAP_H}`}
+                        style={{ width: '100%', height: 'auto', display: 'block' }}
                     >
-                        <Geographies geography={GEO_URL}>
-                            {({ geographies }: { geographies: import('react-simple-maps').GeoFeature[] }) =>
-                                geographies.map((geo: import('react-simple-maps').GeoFeature) => (
-                                    <Geography
-                                        key={geo.rsmKey}
-                                        geography={geo}
-                                        fill="#1e293b"
-                                        stroke="#334155"
-                                        strokeWidth={0.3}
-                                    />
-                                ))
-                            }
-                        </Geographies>
-
-                        {/* Journey hop lines */}
-                        {currentHops.map((hop, i) => (
-                            <Line
-                                key={i}
-                                from={[hop.from_longitude, hop.from_latitude]}
-                                to={[hop.to_longitude, hop.to_latitude]}
-                                stroke={SENSITIVITY_LINE_COLORS[hop.data_sensitivity] || '#64748b'}
-                                strokeWidth={animating && currentHopIndex === i ? 2 : 0.8}
-                                strokeLinecap="round"
-                                strokeDasharray={hop.data_sensitivity === 'internal' ? '4 2' : undefined}
-                                style={{ opacity: animating && currentHopIndex === i ? 1 : 0.3 }}
-                            />
+                        {/* World background */}
+                        <rect width={MAP_W} height={MAP_H} fill="#0f172a" />
+                        {worldPaths.map((d, i) => (
+                            <path key={i} d={d} fill="#1e293b" stroke="#334155" strokeWidth={0.3} />
                         ))}
+
+                        {/* Hop lines */}
+                        {currentHops.map((hop, i) => {
+                            const [x1, y1] = proj(hop.from_longitude, hop.from_latitude)
+                            const [x2, y2] = proj(hop.to_longitude, hop.to_latitude)
+                            const isActive = animating && currentHopIndex === i
+                            return (
+                                <line
+                                    key={i}
+                                    x1={x1} y1={y1} x2={x2} y2={y2}
+                                    stroke={SENSITIVITY_LINE_COLORS[hop.data_sensitivity] || '#64748b'}
+                                    strokeWidth={isActive ? 2 : 0.8}
+                                    strokeLinecap="round"
+                                    strokeDasharray={hop.data_sensitivity === 'internal' ? '4 2' : undefined}
+                                    opacity={isActive ? 1 : 0.3}
+                                />
+                            )
+                        })}
 
                         {/* Service node markers */}
-                        {visibleNodes.map(node => (
-                            <Marker key={node.service_id} coordinates={[node.longitude, node.latitude]}>
-                                <circle
-                                    r={node.data_at_rest ? 7 : 5}
-                                    fill={NODE_COLORS[node.service_type] || '#64748b'}
-                                    stroke={node.data_at_rest ? '#f8fafc' : 'transparent'}
-                                    strokeWidth={node.data_at_rest ? 1.5 : 0}
-                                    style={{ filter: 'drop-shadow(0 0 4px rgba(99,102,241,0.4))' }}
-                                />
-                                <text
-                                    textAnchor="middle"
-                                    y={-10}
-                                    style={{ fontSize: 8, fill: '#cbd5e1', fontFamily: 'system-ui', pointerEvents: 'none' }}
-                                >
-                                    {node.service_name}
-                                </text>
-                                {node.data_at_rest && (
-                                    <text textAnchor="middle" y={16} style={{ fontSize: 7, fill: '#94a3b8', fontFamily: 'system-ui' }}>
-                                        stored
+                        {visibleNodes.map(node => {
+                            const [x, y] = proj(node.longitude, node.latitude)
+                            return (
+                                <g key={node.service_id}>
+                                    <circle
+                                        cx={x} cy={y}
+                                        r={node.data_at_rest ? 7 : 5}
+                                        fill={NODE_COLORS[node.service_type] || '#64748b'}
+                                        stroke={node.data_at_rest ? '#f8fafc' : 'none'}
+                                        strokeWidth={node.data_at_rest ? 1.5 : 0}
+                                        filter="url(#glow)"
+                                    />
+                                    <text x={x} y={y - 11} textAnchor="middle"
+                                        style={{ fontSize: 8, fill: '#cbd5e1', fontFamily: 'system-ui', pointerEvents: 'none' }}>
+                                        {node.service_name}
                                     </text>
-                                )}
-                            </Marker>
-                        ))}
+                                    {node.data_at_rest && (
+                                        <text x={x} y={y + 17} textAnchor="middle"
+                                            style={{ fontSize: 7, fill: '#94a3b8', fontFamily: 'system-ui' }}>
+                                            stored
+                                        </text>
+                                    )}
+                                </g>
+                            )
+                        })}
 
                         {/* Animated dot */}
-                        {animating && dotLng !== null && dotLat !== null && (
-                            <Marker coordinates={[dotLng, dotLat]}>
-                                <circle r={5} fill="#a5b4fc" style={{ filter: 'drop-shadow(0 0 6px #818cf8)' }} />
-                                <circle r={9} fill="transparent" stroke="#a5b4fc" strokeWidth={1} style={{ opacity: 0.4 }} />
-                            </Marker>
-                        )}
-                    </ComposableMap>
+                        {animating && dotLng !== null && dotLat !== null && (() => {
+                            const [dx, dy] = proj(dotLng, dotLat)
+                            return (
+                                <g>
+                                    <circle cx={dx} cy={dy} r={5} fill="#a5b4fc" filter="url(#dotglow)" />
+                                    <circle cx={dx} cy={dy} r={9} fill="none" stroke="#a5b4fc" strokeWidth={1} opacity={0.4} />
+                                </g>
+                            )
+                        })()}
+
+                        {/* SVG filters */}
+                        <defs>
+                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                            </filter>
+                            <filter id="dotglow" x="-100%" y="-100%" width="300%" height="300%">
+                                <feGaussianBlur stdDeviation="3" result="blur" />
+                                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                            </filter>
+                        </defs>
+                    </svg>
                 )}
             </div>
 
