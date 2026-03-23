@@ -721,6 +721,10 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
     const journeyNodeIds = new Set(currentHops.flatMap(h => [h.from_service_id, h.to_service_id]))
     const visibleNodes = nodes.filter(n => journeyNodeIds.has(n.service_id))
 
+    // Debug: first hop coordinates to verify projection
+    const debugHop = currentHops[0] ?? null
+    const debugProj = debugHop ? proj(debugHop.from_longitude, debugHop.from_latitude) : null
+
     return (
         <div className="space-y-4">
             {/* Controls */}
@@ -793,6 +797,16 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
             </div>
 
             {/* Map */}
+            {/* Temporary debug panel — remove once map is working */}
+            <div className="bg-slate-800 rounded-lg px-3 py-2 text-[10px] font-mono text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
+                <span>hops: {currentHops.length}</span>
+                <span>nodes: {nodes.length}</span>
+                <span>visibleNodes: {visibleNodes.length}</span>
+                <span>worldPaths: {worldPaths.length}</span>
+                <span>hop[0] coords: {debugHop ? `lng=${debugHop.from_longitude} lat=${debugHop.from_latitude}` : 'null'}</span>
+                <span>projected: {debugProj ? `x=${debugProj[0].toFixed(1)} y=${debugProj[1].toFixed(1)}` : 'null'}</span>
+            </div>
+
             <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
                 {currentHops.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-80 text-slate-500 text-sm gap-2 px-6 text-center">
