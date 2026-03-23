@@ -951,10 +951,17 @@ function QuickContractStudioContent() {
                     ? contractData.contract_name.substring(0, 47) + '...'
                     : contractData.contract_name
 
+                const nonHeaderClauses = mappedClauses.filter(c => !c.isHeader)
+                const certifiedCount = nonHeaderClauses.filter(c => c.clarenceCertified).length
+                const totalCount = nonHeaderClauses.length
+                const isCertifying = contractData.status === 'certifying' || certifiedCount < totalCount
+
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
+                    content: isCertifying
+                        ? `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI'm currently reviewing "${displayName}" — certification is in progress (${certifiedCount} of ${totalCount} clauses done so far).\n\nYou can start exploring certified clauses now, or wait until I've finished reviewing the full contract.`
+                        : `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${certifiedCount} of ${totalCount} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
                     timestamp: new Date()
                 }])
 
@@ -3886,6 +3893,19 @@ INSTRUCTIONS:
                 if (!stillProcessing) {
                     setIsPolling(false)
                     clearInterval(pollInterval)
+
+                    // Update welcome message now that all clauses are certified
+                    const nonHeaderUpdated = updatedClauses.filter(c => !c.is_header)
+                    const certifiedUpdated = nonHeaderUpdated.filter(c => c.clarence_certified).length
+                    const totalUpdated = nonHeaderUpdated.length
+                    setChatMessages(prev => prev.map(msg =>
+                        msg.id === 'welcome'
+                            ? {
+                                ...msg,
+                                content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed the contract and certified ${certifiedUpdated} of ${totalUpdated} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`
+                            }
+                            : msg
+                    ))
                 }
 
             } catch (err) {
