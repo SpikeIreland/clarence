@@ -255,6 +255,23 @@ function interpolate(a: number, b: number, t: number): number {
     return a + (b - a) * t
 }
 
+function wrapLabel(text: string, maxChars = 13): string[] {
+    const words = text.split(' ')
+    const lines: string[] = []
+    let current = ''
+    for (const word of words) {
+        const candidate = current ? `${current} ${word}` : word
+        if (candidate.length > maxChars && current) {
+            lines.push(current)
+            current = word
+        } else {
+            current = candidate
+        }
+    }
+    if (current) lines.push(current)
+    return lines
+}
+
 // ============================================================================
 // SECTION 4: KPI CARDS
 // ============================================================================
@@ -863,10 +880,17 @@ function DataJourneyMap({ nodes, hops, error }: { nodes: ServiceNode[]; hops: Jo
                                         strokeWidth={node.data_at_rest ? 1.5 : 0}
                                         filter="url(#glow)"
                                     />
-                                    <text x={x} y={y - 11} textAnchor="middle"
-                                        style={{ fontSize: 8, fill: '#cbd5e1', fontFamily: 'system-ui', pointerEvents: 'none' }}>
-                                        {node.service_name}
-                                    </text>
+                                    {(() => {
+                                        const lines = wrapLabel(node.service_name)
+                                        const lineH = 9
+                                        const startY = y - 12 - (lines.length - 1) * lineH
+                                        return lines.map((line, li) => (
+                                            <text key={li} x={x} y={startY + li * lineH} textAnchor="middle"
+                                                style={{ fontSize: 8, fill: '#cbd5e1', fontFamily: 'system-ui', pointerEvents: 'none' }}>
+                                                {line}
+                                            </text>
+                                        ))
+                                    })()}
                                     {node.data_at_rest && (
                                         <text x={x} y={y + 17} textAnchor="middle"
                                             style={{ fontSize: 7, fill: '#94a3b8', fontFamily: 'system-ui' }}>
