@@ -634,31 +634,31 @@ function HomePageInner() {
 
     const fetchContractCreateSessions = useCallback(async (userId: string, companyId: string, email: string): Promise<UnifiedContract[]> => {
         try {
+            // Only select columns that actually exist in the sessions table.
+            // customer_contact_name, provider_contact_name, alignment_percentage,
+            // phase, and provider_id live in related tables (customer_requirements,
+            // provider_bids, leverage_calculations) — not in sessions itself.
             const sessionFields = `
                     session_id,
                     session_number,
                     customer_company,
                     provider_company,
-                    customer_contact_name,
-                    provider_contact_name,
                     contract_type_key,
                     initiator_party_role,
-                    phase,
                     status,
-                    alignment_percentage,
                     is_training,
                     mediation_type,
                     created_at,
                     updated_at,
-                    customer_id,
-                    provider_id
+                    customer_id
                 `
 
-            // Query 1: Fetch sessions where user is customer or provider (by UUID)
+            // Query 1: Fetch sessions where this user is the customer (initiator)
+            // provider_id is not a sessions column — provider-side access is caught by Query 3
             const { data: sessionsByUuid, error: sessionsError } = await supabase
                 .from('sessions')
                 .select(sessionFields)
-                .or(`customer_id.eq.${userId},provider_id.eq.${userId}`)
+                .eq('customer_id', userId)
                 .order('updated_at', { ascending: false })
 
             if (sessionsError) {
@@ -727,36 +727,54 @@ function HomePageInner() {
 
             if (sessions.length === 0) return []
 
+            // Batch-fetch counterparty info from related tables
+            const allSessionIds = sessions.map(s => s.session_id)
+            const [{ data: providerBidsData }, { data: customerReqData }] = await Promise.all([
+                supabase
+                    .from('provider_bids')
+                    .select('session_id, provider_company, provider_contact_name')
+                    .in('session_id', allSessionIds),
+                supabase
+                    .from('customer_requirements')
+                    .select('session_id, contact_name, company_name')
+                    .in('session_id', allSessionIds),
+            ])
+
+            const providerBySession: Record<string, { provider_company?: string; provider_contact_name?: string }> = {}
+            providerBidsData?.forEach(pb => { providerBySession[pb.session_id] = pb })
+
+            const customerBySession: Record<string, { contact_name?: string; company_name?: string }> = {}
+            customerReqData?.forEach(cr => { customerBySession[cr.session_id] = cr })
+
             return sessions.map(session => {
                 const isTraining = session.is_training === true
                 const isInitiator = session.customer_id === userId
 
+                const providerInfo = providerBySession[session.session_id]
+                const customerInfo = customerBySession[session.session_id]
+
                 // Determine counterparty
                 const counterpartyName = isInitiator
-                    ? session.provider_contact_name || ''
-                    : session.customer_contact_name || ''
+                    ? providerInfo?.provider_contact_name || ''
+                    : customerInfo?.contact_name || ''
                 const counterpartyCompany = isInitiator
-                    ? session.provider_company || ''
-                    : session.customer_company || ''
+                    ? providerInfo?.provider_company || session.provider_company || ''
+                    : customerInfo?.company_name || session.customer_company || ''
 
                 // Determine status
                 let statusLabel = 'Draft'
                 let progressSummary = 'Setting up contract'
-                const phase = session.phase || 1
 
                 if (session.status === 'completed' || session.status === 'agreed') {
                     statusLabel = 'Completed'
                     progressSummary = 'Contract agreed'
-                } else if (session.status === 'active' || phase >= 3) {
+                } else if (session.status === 'active') {
                     statusLabel = 'Active'
-                    const alignment = session.alignment_percentage
-                    progressSummary = alignment
-                        ? `Phase ${phase} · ${alignment}% aligned`
-                        : `Phase ${phase} · Negotiation in progress`
+                    progressSummary = 'Negotiation in progress'
                 } else if (session.status === 'providers_invited' || session.status === 'provider_invited') {
                     statusLabel = 'Awaiting Response'
                     progressSummary = 'Waiting for provider to complete onboarding'
-                } else if (phase <= 2) {
+                } else if (session.status === 'initiated') {
                     statusLabel = 'Setup'
                     progressSummary = 'Completing contract preparation'
                 }

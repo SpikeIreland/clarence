@@ -379,7 +379,7 @@ export function generateDefaultRules(
                 fallback_position: perspective === 'customer' ? tmpl.customer_fallback : tmpl.provider_fallback,
                 is_deal_breaker: tmpl.is_deal_breaker,
                 is_non_negotiable: false,
-                requires_approval_below: null,
+                requires_approval_below: perspective === 'customer' ? tmpl.customer_fallback : tmpl.provider_fallback,
                 importance_level: tmpl.importance_level,
                 rationale: tmpl.rationale,
                 negotiation_tips: tmpl.negotiation_tips,
