@@ -32,6 +32,15 @@ const ROLE_LABELS: Record<string, { protected: string; providing: string }> = {
     franchise_agreement: { protected: 'Franchisee', providing: 'Franchisor' },
     insurance_policy: { protected: 'Policyholder', providing: 'Insurer' },
     maintenance_agreement: { protected: 'Customer', providing: 'Service Provider' },
+    // Short-form aliases (used by company-admin template uploads)
+    nda:         { protected: 'Disclosing Party',  providing: 'Receiving Party' },
+    bpo:         { protected: 'Customer',          providing: 'Provider' },
+    saas:        { protected: 'Subscriber',        providing: 'Provider' },
+    msa:         { protected: 'Customer',          providing: 'Provider' },
+    it_services: { protected: 'Customer',          providing: 'Provider' },
+    employment:  { protected: 'Employee',          providing: 'Employer' },
+    consulting:  { protected: 'Client',            providing: 'Consultant' },
+    custom:      { protected: 'Customer',          providing: 'Provider' },
 }
 
 // ============================================================================

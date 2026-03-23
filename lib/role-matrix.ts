@@ -261,6 +261,92 @@ export const CONTRACT_TYPE_DEFINITIONS: ContractTypeDefinition[] = [
         displayOrder: 20,
         category: 'employment_construction',
     },
+
+    // -------------------------------------------------------------------------
+    // Short-form aliases — used by company-admin when uploading templates.
+    // These map to the canonical definitions above so the role resolver always
+    // finds a match instead of falling back to "Party A" / "Party B".
+    // -------------------------------------------------------------------------
+    {
+        contractTypeKey: 'nda',
+        contractTypeName: 'NDA',
+        protectedPartyLabel: 'Disclosing Party',
+        providingPartyLabel: 'Receiving Party',
+        protectedPartyDescription: 'The party sharing confidential information',
+        providingPartyDescription: 'The party receiving confidential information',
+        displayOrder: 99,
+        category: 'confidentiality',
+    },
+    {
+        contractTypeKey: 'bpo',
+        contractTypeName: 'BPO / Outsourcing',
+        protectedPartyLabel: 'Customer',
+        providingPartyLabel: 'Provider',
+        protectedPartyDescription: 'The party outsourcing business processes',
+        providingPartyDescription: 'The party delivering business process services',
+        displayOrder: 99,
+        category: 'services',
+    },
+    {
+        contractTypeKey: 'saas',
+        contractTypeName: 'SaaS Agreement',
+        protectedPartyLabel: 'Subscriber',
+        providingPartyLabel: 'Provider',
+        protectedPartyDescription: 'The party subscribing to the software service',
+        providingPartyDescription: 'The party providing the software service',
+        displayOrder: 99,
+        category: 'services',
+    },
+    {
+        contractTypeKey: 'msa',
+        contractTypeName: 'Master Service Agreement',
+        protectedPartyLabel: 'Customer',
+        providingPartyLabel: 'Provider',
+        protectedPartyDescription: 'The party receiving services',
+        providingPartyDescription: 'The party delivering services',
+        displayOrder: 99,
+        category: 'services',
+    },
+    {
+        contractTypeKey: 'it_services',
+        contractTypeName: 'IT Services',
+        protectedPartyLabel: 'Customer',
+        providingPartyLabel: 'Provider',
+        protectedPartyDescription: 'The party receiving IT services',
+        providingPartyDescription: 'The party delivering IT services',
+        displayOrder: 99,
+        category: 'services',
+    },
+    {
+        contractTypeKey: 'employment',
+        contractTypeName: 'Employment Contract',
+        protectedPartyLabel: 'Employee',
+        providingPartyLabel: 'Employer',
+        protectedPartyDescription: 'The party being employed',
+        providingPartyDescription: 'The party providing employment',
+        displayOrder: 99,
+        category: 'employment_construction',
+    },
+    {
+        contractTypeKey: 'consulting',
+        contractTypeName: 'Consulting Agreement',
+        protectedPartyLabel: 'Client',
+        providingPartyLabel: 'Consultant',
+        protectedPartyDescription: 'The party receiving consultancy services',
+        providingPartyDescription: 'The party providing expert advice',
+        displayOrder: 99,
+        category: 'services',
+    },
+    {
+        contractTypeKey: 'custom',
+        contractTypeName: 'Custom Agreement',
+        protectedPartyLabel: 'Customer',
+        providingPartyLabel: 'Provider',
+        protectedPartyDescription: 'The party receiving services or goods',
+        providingPartyDescription: 'The party delivering services or goods',
+        displayOrder: 99,
+        category: 'services',
+    },
 ]
 
 
