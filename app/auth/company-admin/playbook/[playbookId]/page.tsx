@@ -144,9 +144,9 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     <div className="absolute right-0 top-5 w-72 p-3 bg-white rounded-lg shadow-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed z-50 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150">
                         <p className="font-semibold text-slate-800 mb-1.5">Click the bar to set positions</p>
                         <div className="space-y-1.5">
-                            <p><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle mr-1"></span><b>Green</b> — Ideal (your sweet spot)</p>
+                            <p><span className="inline-flex items-center px-1 py-px text-[8px] font-bold bg-emerald-500 text-white rounded mr-1 align-middle">Ideal</span> Company sweet spot — your target outcome</p>
+                            <p><span className="inline-flex items-center px-1 py-px text-[8px] font-bold bg-red-500 text-white rounded mr-1 align-middle">Fallback</span> Company backstop — minimum acceptable</p>
                             <p><span className="inline-block w-5 h-1.5 rounded bg-blue-100 border border-blue-200 align-middle mr-1"></span><b>Blue band</b> — Typical market range</p>
-                            <p><span className="inline-block w-1.5 h-2.5 rounded-full bg-red-500 align-middle mr-1"></span><b>Red</b> — Fallback (company backstop)</p>
                             <p><span className="inline-block border-l-2 border-dashed border-red-400 h-3 w-0 align-middle mr-2 ml-0.5"></span><b>Dashed red</b> — Escalation threshold</p>
                         </div>
                         {rangeCtx && (
@@ -159,34 +159,48 @@ function EditablePositionBar({ rule, onPositionChange }: {
             </div>
 
             {/* Position bar */}
-            <div className="relative h-7 w-full cursor-pointer" onClick={(e) => handleBarClick(e, 'ideal_position')}>
-                <div className="absolute top-3 left-0 right-0 h-1.5 bg-slate-100 rounded-full" />
-                <div className="absolute top-2.5 h-2.5 bg-blue-100 rounded-full border border-blue-200"
+            <div className="relative h-12 w-full cursor-pointer" onClick={(e) => handleBarClick(e, 'ideal_position')}>
+                {/* Track */}
+                <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
+                {/* Market band */}
+                <div className="absolute top-[19px] h-2.5 bg-blue-100 rounded-full border border-blue-200"
                     style={{
                         left: `${toPercent(rule.minimum_position)}%`,
                         width: `${toPercent(rule.maximum_position) - toPercent(rule.minimum_position)}%`
                     }} />
+                {/* Escalation threshold */}
                 {rule.requires_approval_below != null && (
-                    <div className="absolute top-1.5 w-px h-4 border-l-2 border-dashed border-red-400"
-                        style={{ left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
+                    <div className="absolute top-[14px] border-l-2 border-dashed border-red-400" style={{ height: '16px', left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
                 )}
-                <div className="absolute top-2.5 w-1 h-2.5 bg-red-500 rounded-full"
-                    style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }} />
-                <div className="absolute top-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-sm flex items-center justify-center"
-                    style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
-                    <span className="text-[8px] font-bold text-white">{rule.ideal_position}</span>
+                {/* Ideal badge — above track */}
+                <div className="absolute top-0" style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
+                    <div className="flex flex-col items-center">
+                        <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
+                            Ideal · {rule.ideal_position}
+                        </span>
+                        <div className="w-px flex-1 bg-emerald-400" style={{ height: '8px' }} />
+                    </div>
+                </div>
+                {/* Fallback badge — below track */}
+                <div className="absolute top-[24px]" style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }}>
+                    <div className="flex flex-col items-center">
+                        <div className="w-px bg-red-400" style={{ height: '6px' }} />
+                        <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
+                            Fallback · {rule.fallback_position}
+                        </span>
+                    </div>
                 </div>
             </div>
 
             {/* Scale labels */}
             {rangeCtx?.scale_points?.length ? (
-                <div className="flex justify-between text-[9px] px-0.5 -mt-0.5">
+                <div className="flex justify-between text-[9px] px-0.5 mt-0">
                     <span className="text-indigo-500 font-medium">{label(1) || '1'}</span>
                     <span className="text-indigo-500 font-medium">{label(5) || '5'}</span>
                     <span className="text-indigo-500 font-medium">{label(10) || '10'}</span>
                 </div>
             ) : (
-                <div className="flex justify-between text-[9px] text-slate-300 px-0.5 -mt-0.5">
+                <div className="flex justify-between text-[9px] text-slate-300 px-0.5 mt-0">
                     <span>1</span><span>5</span><span>10</span>
                 </div>
             )}
@@ -275,81 +289,73 @@ function PlaybookGlossaryModal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 <div className="px-6 py-5 space-y-6">
-                    {/* NON-NEGOTIABLE */}
+                    {/* POSITION BAR */}
                     <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-100 text-orange-700 rounded uppercase">Non-Negotiable</span>
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded uppercase">Deal Breaker</span>
-                        </div>
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                            These badges appear when the AI — or you — has flagged a rule as a hard requirement. They look similar but operate at <span className="font-medium">different thresholds</span> and carry different consequences:
+                        <h3 className="text-sm font-bold text-slate-800 mb-3">Position Bar</h3>
+                        <p className="text-sm text-slate-700 leading-relaxed mb-4">
+                            Each rule has a position bar running from <span className="font-medium">1 (provider-favourable)</span> to <span className="font-medium">10 (customer-favourable)</span>. Click anywhere on the bar to set the Ideal position, or use the dropdowns below.
                         </p>
-                        <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden text-xs">
-                            <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">
-                                <span></span>
-                                <span>Deal Breaker</span>
-                                <span>Non-Negotiable</span>
-                            </div>
-                            <div className="divide-y divide-slate-100">
-                                <div className="grid grid-cols-3 px-3 py-2 text-slate-600">
-                                    <span className="text-slate-400">Triggers when</span>
-                                    <span>Below <span className="font-medium">minimum</span> position</span>
-                                    <span>Below <span className="font-medium">ideal</span> position</span>
-                                </div>
-                                <div className="grid grid-cols-3 px-3 py-2 text-slate-600">
-                                    <span className="text-slate-400">Compliance score</span>
-                                    <span className="text-red-600 font-medium">0% — Breach</span>
-                                    <span className="text-orange-600 font-medium">30% — Fail</span>
-                                </div>
-                                <div className="grid grid-cols-3 px-3 py-2 text-slate-600">
-                                    <span className="text-slate-400">Meaning</span>
-                                    <span>Contract is unacceptable — do not sign</span>
-                                    <span>Firm preference; misses target but not a total blocker</span>
+                        <div className="space-y-3">
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded mt-0.5">Ideal</span>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-700">Ideal — Company sweet spot</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">The outcome your company targets in every negotiation. Appears as a green badge above the bar. This is your opening position.</p>
                                 </div>
                             </div>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2">Both are classified as <span className="font-medium">red lines</span> in the compliance report. You can toggle either flag manually using the checkboxes at the bottom of each rule card.</p>
-                    </div>
-
-                    <hr className="border-slate-100" />
-
-                    {/* FLAGS */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded">⚠ 1 flag</span>
-                        </div>
-                        <p className="text-sm text-slate-700 leading-relaxed mb-3">
-                            After a playbook is parsed, the system runs automated quality checks on every rule. A flag means one or more checks found a potential inconsistency worth reviewing before relying on the rule for compliance scoring.
-                        </p>
-                        <div className="space-y-2">
-                            {Object.entries(FLAG_DESCRIPTIONS).map(([key, desc]) => (
-                                <div key={key} className="flex gap-2.5">
-                                    <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                                    <div>
-                                        <span className="text-[11px] font-semibold text-slate-700 font-mono">{key}</span>
-                                        <p className="text-xs text-slate-500">{desc}</p>
-                                    </div>
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded mt-0.5">Fallback</span>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-700">Fallback — Company backstop</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">The minimum position your company will accept. Appears as a red badge below the bar. Going below this should trigger escalation.</p>
                                 </div>
-                            ))}
+                            </div>
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 inline-block w-8 h-2.5 bg-blue-100 border border-blue-200 rounded mt-1"></span>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-700">Blue band — Typical market range</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">The range of outcomes seen across comparable contracts in the market (Min to Max). Used as context, not a hard constraint.</p>
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 inline-block border-l-2 border-dashed border-red-400 h-5 mt-0.5 ml-2"></span>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-700">Dashed red line — Escalation threshold</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">When a clause position falls below this value during a live negotiation, an approval workflow is triggered. Set via "Escalate below" on each rule card.</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <hr className="border-slate-100" />
 
-                    {/* SOURCE QUOTE */}
+                    {/* NEEDS REVIEW */}
                     <div>
                         <div className="flex items-center gap-2 mb-2">
-                            <span className="px-3 py-1.5 bg-amber-50 border-l-2 border-amber-300 rounded-r text-[11px] text-amber-700">No source quote — rule inferred by AI</span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200">Needs Review</span>
                         </div>
                         <p className="text-sm text-slate-700 leading-relaxed">
-                            During parsing the AI is asked to extract a <span className="font-medium">verbatim quote</span> from the playbook document that directly supports each rule. When no such text exists — because the rule was implied rather than stated — this warning appears.
+                            This badge appears when a rule's Ideal, Fallback, Min and Max positions are all set to the same value. This almost always means the AI could not determine distinct positions for the clause during parsing.
                         </p>
-                        <p className="text-xs text-slate-500 mt-2">It does not mean the rule is wrong, but it is worth verifying that it reflects your actual policy. You can add or edit the source quote directly on the rule card.</p>
+                        <p className="text-xs text-slate-500 mt-2">Open the rule, review the description, and manually set the positions to reflect your actual policy before activating the playbook.</p>
+                    </div>
+
+                    <hr className="border-slate-100" />
+
+                    {/* SOURCE EXTRACT */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="px-3 py-1.5 bg-amber-50 border-l-2 border-amber-300 rounded-r text-[11px] text-amber-700">No source extract — rule inferred by AI</span>
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                            The AI extracts a verbatim passage from the uploaded document that supports each rule. When no such passage exists — because the rule was implied rather than stated — this notice appears under the rule's "Source extract" accordion.
+                        </p>
+                        <p className="text-xs text-slate-500 mt-2">It does not mean the rule is wrong, but it is worth verifying the description reflects your actual policy before the playbook goes live.</p>
                     </div>
                 </div>
 
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 rounded-b-2xl">
-                    <p className="text-xs text-slate-400">These labels are set automatically during playbook parsing and can be adjusted manually at any time.</p>
+                    <p className="text-xs text-slate-400">All rule fields can be edited directly on the card. Click any title, description, or position badge to make changes.</p>
                 </div>
             </div>
         </div>
