@@ -748,7 +748,13 @@ function PlaybookReviewContent() {
                 .order('display_order', { ascending: true })
                 .order('clause_code', { ascending: true })
 
-            const loadedRules = (rulesData || []) as PlaybookRule[]
+            // Defensively parse range_context if Supabase returned it as a string
+            const loadedRules = ((rulesData || []) as PlaybookRule[]).map(r => ({
+                ...r,
+                range_context: typeof r.range_context === 'string'
+                    ? (() => { try { return JSON.parse(r.range_context as unknown as string) } catch { return null } })()
+                    : r.range_context,
+            }))
             setRules(loadedRules)
 
             // Start collapsed — user can expand as needed
