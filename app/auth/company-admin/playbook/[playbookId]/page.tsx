@@ -559,11 +559,12 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                 {/* Escalation row */}
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] font-medium text-slate-500">Escalate below:</label>
+                        <span className="inline-block border-l-2 border-dashed border-red-400 h-3.5 w-0 flex-shrink-0" />
+                        <label className="text-[10px] font-medium text-red-500">Escalate below:</label>
                         <select
                             value={rule.requires_approval_below ?? ''}
                             onChange={(e) => onFieldChange('requires_approval_below', e.target.value ? parseInt(e.target.value) : null)}
-                            className="px-1.5 py-0.5 text-[11px] border border-slate-200 rounded bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                            className="px-1.5 py-0.5 text-[11px] border border-red-300 rounded bg-white focus:ring-1 focus:ring-red-400 focus:outline-none text-red-700"
                         >
                             <option value="">None</option>
                             {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
