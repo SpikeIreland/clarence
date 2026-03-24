@@ -70,7 +70,7 @@ import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
 import { getPositionDescription } from '@/lib/role-matrix'
 
 // Playbook compliance engine + indicator component
-import { calculatePlaybookCompliance, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
+import { calculatePlaybookCompliance, normaliseCategory, getEffectiveRangeContext, translateRulePosition, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
 // Schedule detection types
 import { getExpectedSchedules, getRequiredSchedules, getScheduleTypeLabel, buildScheduleExpectations } from '@/lib/schedule-types'
 import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
@@ -361,7 +361,7 @@ function QuickContractStudioContent() {
 
     // Fetch playbook rules for compliance checking (initiator only, once)
     useEffect(() => {
-        if (!userInfo?.companyId || !contract || isTemplateMode) return
+        if (!userInfo?.companyId || !contract) return
         if (contract.uploadedByUserId !== userInfo.userId) return
 
         async function loadPlaybookRules() {
@@ -429,7 +429,7 @@ function QuickContractStudioContent() {
     // UI state
     const [selectedClauseIndex, setSelectedClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
-    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'tradeoffs' | 'draft'>('overview')
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'tradeoffs' | 'draft' | 'playbook'>('overview')
     const [showClauseText, setShowClauseText] = useState(false)
 
     // Draft editing state
@@ -864,8 +864,8 @@ function QuickContractStudioContent() {
 
                 // PERSISTENCE: Restore active tab from LocalStorage
                 const savedTab = localStorage.getItem(`qc_studio_${actualContractId}_activeTab`)
-                if (savedTab && ['overview', 'history', 'tradeoffs', 'draft'].includes(savedTab)) {
-                    setActiveTab(savedTab as 'overview' | 'history' | 'tradeoffs' | 'draft')
+                if (savedTab && ['overview', 'history', 'tradeoffs', 'draft', 'playbook'].includes(savedTab)) {
+                    setActiveTab(savedTab as 'overview' | 'history' | 'tradeoffs' | 'draft' | 'playbook')
                 }
 
                 // PERSISTENCE: Restore expanded sections from LocalStorage
@@ -5395,6 +5395,30 @@ INSTRUCTIONS:
                                                 )}
                                             </button>
                                         ))}
+                                        {/* Playbook tab — shown when playbook rules are loaded */}
+                                        {(playbookRules.length > 0 || isTemplateMode) && (
+                                            <button
+                                                onClick={() => setActiveTab('playbook')}
+                                                className={`relative px-3 py-1.5 text-sm rounded-md transition flex items-center gap-1.5 ${activeTab === 'playbook'
+                                                    ? 'bg-white text-indigo-700 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700'
+                                                    }`}
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                </svg>
+                                                Playbook
+                                                {(() => {
+                                                    const clauseCat = normaliseCategory(selectedClause.category)
+                                                    const matched = playbookRules.find(r => normaliseCategory(r.category) === clauseCat)
+                                                    if (!matched || selectedClause.clarencePosition == null) return null
+                                                    const breach = selectedClause.clarencePosition < matched.minimum_position
+                                                    return (
+                                                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${breach ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                                                    )
+                                                })()}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -6392,6 +6416,169 @@ INSTRUCTIONS:
                                         </div>
                                     </div>
                                 )}
+
+                                {/* ==================== PLAYBOOK TAB ==================== */}
+                                {activeTab === 'playbook' && (() => {
+                                    const clauseCat = normaliseCategory(selectedClause.category)
+                                    const matchedRule = playbookRules.find(r => normaliseCategory(r.category) === clauseCat)
+                                    const clausePos = selectedClause.clarencePosition
+
+                                    if (playbookRules.length === 0) {
+                                        return (
+                                            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                                                <svg className="w-10 h-10 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                </svg>
+                                                <p className="text-sm text-slate-500 font-medium">No active playbook</p>
+                                                <p className="text-xs text-slate-400 mt-1">Activate a playbook for this contract type in the Control Room to see alignment guidance here.</p>
+                                            </div>
+                                        )
+                                    }
+
+                                    if (!matchedRule) {
+                                        return (
+                                            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                                                <p className="text-sm text-slate-500 font-medium">No rule for this clause category</p>
+                                                <p className="text-xs text-slate-400 mt-1">The active playbook has no rule covering <span className="font-medium">{selectedClause.category}</span>.</p>
+                                            </div>
+                                        )
+                                    }
+
+                                    const toPercent = (v: number) => ((v - 1) / 9) * 100
+                                    const rangeCtx = getEffectiveRangeContext(matchedRule)
+                                    const idealPct    = toPercent(matchedRule.ideal_position)
+                                    const minPct      = toPercent(matchedRule.minimum_position)
+                                    const maxPct      = toPercent(matchedRule.maximum_position)
+                                    const fallbackPct = toPercent(matchedRule.fallback_position)
+                                    const templatePct = clausePos != null ? toPercent(clausePos) : null
+
+                                    let statusLabel = 'No certified position yet'
+                                    let statusColor = 'bg-slate-100 text-slate-500 border-slate-200'
+                                    if (clausePos != null) {
+                                        if (clausePos < matchedRule.minimum_position) {
+                                            statusLabel = 'Breach — below minimum'
+                                            statusColor = 'bg-red-50 text-red-600 border-red-200'
+                                        } else if (clausePos === matchedRule.ideal_position) {
+                                            statusLabel = 'Exact match'
+                                            statusColor = 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        } else {
+                                            statusLabel = clausePos > matchedRule.ideal_position ? 'Above ideal' : 'Below ideal'
+                                            statusColor = 'bg-amber-50 text-amber-700 border-amber-200'
+                                        }
+                                    }
+
+                                    return (
+                                        <div className="space-y-4">
+                                            {/* Rule card */}
+                                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                                <div className="flex items-start justify-between gap-3 mb-3">
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5">Playbook Rule — {playbookName}</p>
+                                                        <h3 className="text-sm font-semibold text-slate-800">{matchedRule.clause_name}</h3>
+                                                        {matchedRule.rationale && (
+                                                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{matchedRule.rationale}</p>
+                                                        )}
+                                                    </div>
+                                                    <span className={`flex-shrink-0 px-2 py-1 text-[10px] font-semibold rounded border ${statusColor}`}>
+                                                        {statusLabel}
+                                                    </span>
+                                                </div>
+
+                                                {/* Position bar */}
+                                                <div className="relative h-12 mt-4">
+                                                    {/* Track */}
+                                                    <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
+                                                    {/* Amber market band */}
+                                                    <div className="absolute top-[19px] h-2.5 bg-amber-100 rounded-full border border-amber-300"
+                                                        style={{ left: `${minPct}%`, width: `${Math.max(0, maxPct - minPct)}%` }} />
+                                                    {/* Ideal badge — above track */}
+                                                    <div className="absolute top-0" style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }}>
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
+                                                                Ideal · {matchedRule.ideal_position}
+                                                            </span>
+                                                            <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
+                                                        </div>
+                                                    </div>
+                                                    {/* Fallback badge — below track */}
+                                                    <div className="absolute top-[12px]" style={{ left: `${fallbackPct}%`, transform: 'translateX(-50%)' }}>
+                                                        <div className="flex flex-col items-center">
+                                                            <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
+                                                            <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
+                                                                Fallback · {matchedRule.fallback_position}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {/* Clause certified position — indigo diamond */}
+                                                    {templatePct != null && (
+                                                        <div className="absolute z-20"
+                                                            style={{ left: `${templatePct}%`, top: '16px', transform: 'translateX(-50%) rotate(45deg)' }}>
+                                                            <div className={`w-4 h-4 rounded-sm border-2 border-white shadow-md ${
+                                                                clausePos! >= matchedRule.minimum_position ? 'bg-indigo-500' : 'bg-red-500'
+                                                            }`} />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Scale labels */}
+                                                {rangeCtx && rangeCtx.scale_points.length > 0 && (
+                                                    <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
+                                                        {rangeCtx.scale_points
+                                                            .filter((_, i, arr) => i === 0 || i === arr.length - 1)
+                                                            .map((sp, idx) => (
+                                                                <span key={sp.position} className="absolute"
+                                                                    style={{ left: `${toPercent(sp.position)}%`, transform: idx === 0 ? 'none' : 'translateX(-100%)' }}>
+                                                                    {sp.label}
+                                                                </span>
+                                                            ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Position summary */}
+                                                <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-2 flex-wrap">
+                                                    <span>Playbook: min {matchedRule.minimum_position} · ideal {matchedRule.ideal_position} · max {matchedRule.maximum_position}</span>
+                                                    {clausePos != null && (
+                                                        <>
+                                                            <span className="text-slate-300">|</span>
+                                                            <span className={clausePos >= matchedRule.minimum_position ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                                                                Clause: {clausePos}{(() => { const l = translateRulePosition(matchedRule, clausePos); return l && l !== String(clausePos) ? ` · ${l}` : '' })()}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </div>
+
+                                                {/* Escalation */}
+                                                {clausePos != null && clausePos < matchedRule.minimum_position && matchedRule.escalation_contact && (
+                                                    <div className="mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                                                        Escalate to: {matchedRule.escalation_contact}
+                                                        {matchedRule.escalation_contact_email && ` (${matchedRule.escalation_contact_email})`}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Legend */}
+                                            <div className="flex items-center gap-4 text-[9px] text-slate-400 px-1 flex-wrap">
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded">Ideal</span>
+                                                    Company sweet spot
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded">Fallback</span>
+                                                    Backstop — escalate below
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="inline-block w-3 h-2 rounded bg-amber-100 border border-amber-300" />
+                                                    Market range
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="inline-block w-3 h-3 rounded-sm bg-indigo-500 rotate-45" />
+                                                    This clause
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
+
                             </div>
 
                             {/* Navigation Footer */}
