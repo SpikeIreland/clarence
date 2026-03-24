@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
-import { normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compliance'
+import { normaliseCategory, getCategoryDisplayName, PlaybookRule, getEffectiveRangeContext, translateRulePosition } from '@/lib/playbook-compliance'
 import jsPDF from 'jspdf'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import InsightsTab from './components/InsightsTab'
@@ -770,6 +770,132 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 
 
 
+// ============================================================================
+// PLAYBOOK ALIGNMENT TAB — shown inside template clause cards
+// ============================================================================
+
+function PlaybookAlignmentTab({ rule, clausePosition }: {
+    rule: PlaybookRule
+    clausePosition: number | null
+}) {
+    const toPercent = (val: number) => ((val - 1) / 9) * 100
+    const rangeCtx = getEffectiveRangeContext(rule)
+
+    const idealPct    = toPercent(rule.ideal_position)
+    const minPct      = toPercent(rule.minimum_position)
+    const maxPct      = toPercent(rule.maximum_position)
+    const fallbackPct = toPercent(rule.fallback_position)
+
+    let statusLabel = 'No position'
+    let statusColor = 'bg-slate-100 text-slate-500 border-slate-200'
+    if (clausePosition != null) {
+        if (clausePosition < rule.minimum_position) {
+            statusLabel = 'Breach'
+            statusColor = 'bg-red-50 text-red-600 border-red-200'
+        } else if (clausePosition === rule.ideal_position) {
+            statusLabel = 'Exact match'
+            statusColor = 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        } else if (clausePosition >= rule.minimum_position && clausePosition <= rule.maximum_position) {
+            statusLabel = clausePosition > rule.ideal_position ? 'Above ideal' : 'Below ideal'
+            statusColor = 'bg-amber-50 text-amber-700 border-amber-200'
+        } else {
+            statusLabel = 'Outside range'
+            statusColor = 'bg-amber-50 text-amber-600 border-amber-200'
+        }
+    }
+
+    const templatePct = clausePosition != null ? toPercent(clausePosition) : null
+    const posLabel = clausePosition != null ? translateRulePosition(rule, clausePosition) : null
+
+    return (
+        <div className="pt-2">
+            {/* Rule name + status */}
+            <div className="flex items-start justify-between mb-2 gap-2">
+                <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-slate-700">{rule.clause_name}</div>
+                    {rule.rationale && (
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{rule.rationale}</p>
+                    )}
+                </div>
+                <span className={`flex-shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded border ${statusColor}`}>
+                    {statusLabel}
+                </span>
+            </div>
+
+            {/* Position bar */}
+            <div className="relative h-12 mt-3">
+                {/* Track */}
+                <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
+                {/* Amber market band */}
+                <div className="absolute top-[19px] h-2.5 bg-amber-100 rounded-full border border-amber-300"
+                    style={{ left: `${minPct}%`, width: `${Math.max(0, maxPct - minPct)}%` }} />
+                {/* Ideal badge — above track, line crosses bar */}
+                <div className="absolute top-0" style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }}>
+                    <div className="flex flex-col items-center">
+                        <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
+                            Ideal · {rule.ideal_position}
+                        </span>
+                        <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
+                    </div>
+                </div>
+                {/* Fallback badge — below track, line crosses bar */}
+                <div className="absolute top-[12px]" style={{ left: `${fallbackPct}%`, transform: 'translateX(-50%)' }}>
+                    <div className="flex flex-col items-center">
+                        <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
+                        <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
+                            Fallback · {rule.fallback_position}
+                        </span>
+                    </div>
+                </div>
+                {/* Template clause position — indigo diamond */}
+                {templatePct != null && (
+                    <div className="absolute z-20"
+                        style={{ left: `${templatePct}%`, top: '16px', transform: 'translateX(-50%) rotate(45deg)' }}>
+                        <div className={`w-4 h-4 rounded-sm border-2 border-white shadow-md ${
+                            clausePosition! >= rule.minimum_position ? 'bg-indigo-500' : 'bg-red-500'
+                        }`} />
+                    </div>
+                )}
+            </div>
+
+            {/* Scale labels */}
+            {rangeCtx && rangeCtx.scale_points.length > 0 && (
+                <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
+                    {rangeCtx.scale_points
+                        .filter((_, i, arr) => i === 0 || i === arr.length - 1)
+                        .map((sp, idx) => (
+                            <span key={sp.position} className="absolute"
+                                style={{ left: `${toPercent(sp.position)}%`, transform: idx === 0 ? 'none' : 'translateX(-100%)' }}>
+                                {sp.label}
+                            </span>
+                        ))}
+                </div>
+            )}
+
+            {/* Positions row */}
+            <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1.5 flex-wrap">
+                <span>Playbook: min {rule.minimum_position} · ideal {rule.ideal_position} · max {rule.maximum_position}</span>
+                {clausePosition != null && (
+                    <>
+                        <span className="text-slate-300">|</span>
+                        <span className={clausePosition >= rule.minimum_position ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                            Template: {clausePosition}{posLabel && posLabel !== String(clausePosition) ? ` · ${posLabel}` : ''}
+                        </span>
+                    </>
+                )}
+            </div>
+
+            {/* Escalation callout */}
+            {clausePosition != null && clausePosition < rule.minimum_position && rule.escalation_contact && (
+                <div className="mt-2 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-700">
+                    Escalate to: {rule.escalation_contact}
+                    {rule.escalation_contact_email && ` (${rule.escalation_contact_email})`}
+                </div>
+            )}
+        </div>
+    )
+}
+
 interface TemplatesTabProps {
     templates: CompanyTemplate[]
     isLoading: boolean
@@ -924,6 +1050,8 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
     const [viewingTemplate, setViewingTemplate] = useState<CompanyTemplate | null>(null)
     const [templateClauses, setTemplateClauses] = useState<Record<string, any[]>>({})
     const [clausesLoading, setClausesLoading] = useState<string | null>(null)
+    const [playbookRulesCache, setPlaybookRulesCache] = useState<Record<string, PlaybookRule[]>>({})
+    const [clauseActiveTab, setClauseActiveTab] = useState<Record<string, 'content' | 'playbook'>>({})
 
     const fetchTemplateClauses = async (templateId: string): Promise<any[]> => {
         if (templateClauses[templateId]) return templateClauses[templateId]
@@ -949,8 +1077,42 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
         }
     }
 
+    const fetchPlaybookRulesForType = async (contractType: string): Promise<PlaybookRule[]> => {
+        if (playbookRulesCache[contractType]) return playbookRulesCache[contractType]
+        if (!userInfo?.companyId) return []
+        try {
+            const supabase = createClient()
+            const { data: pb } = await supabase
+                .from('company_playbooks')
+                .select('playbook_id')
+                .eq('company_id', userInfo.companyId)
+                .eq('is_active', true)
+                .eq('contract_type_key', contractType)
+                .limit(1)
+                .maybeSingle()
+            if (!pb?.playbook_id) return []
+            const { data: rules } = await supabase
+                .from('playbook_rules')
+                .select('*')
+                .eq('playbook_id', pb.playbook_id)
+                .eq('is_active', true)
+                .order('display_order', { ascending: true })
+            const loadedRules = ((rules || []) as PlaybookRule[]).map(r => ({
+                ...r,
+                range_context: typeof r.range_context === 'string'
+                    ? (() => { try { return JSON.parse(r.range_context as unknown as string) } catch { return null } })()
+                    : r.range_context,
+            }))
+            setPlaybookRulesCache(prev => ({ ...prev, [contractType]: loadedRules }))
+            return loadedRules
+        } catch { return [] }
+    }
+
     const handleViewTemplate = async (template: CompanyTemplate) => {
-        await fetchTemplateClauses(template.templateId)
+        await Promise.all([
+            fetchTemplateClauses(template.templateId),
+            fetchPlaybookRulesForType(template.contractType),
+        ])
         setViewingTemplate(template)
     }
 
@@ -1478,12 +1640,23 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
                             <div>
                                 <h3 className="text-lg font-semibold text-slate-800">{viewingTemplate.templateName}</h3>
-                                <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                                <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 flex-wrap">
                                     <span>{CONTRACT_TYPE_OPTIONS.find(o => o.value === viewingTemplate.contractType)?.label || viewingTemplate.contractType}</span>
                                     <span>&middot;</span>
                                     <span>{viewingTemplate.clauseCount} clauses</span>
                                     <span>&middot;</span>
                                     <span>{new Date(viewingTemplate.createdAt).toLocaleDateString()}</span>
+                                    {(playbookRulesCache[viewingTemplate.contractType]?.length ?? 0) > 0 && (
+                                        <>
+                                            <span>&middot;</span>
+                                            <span className="flex items-center gap-1 text-indigo-600 font-medium text-xs">
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                </svg>
+                                                Playbook active · {playbookRulesCache[viewingTemplate.contractType].length} rules
+                                            </span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                             <button
@@ -1498,23 +1671,81 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
 
                         {/* Body - clauses in document order */}
                         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                            {templateClauses[viewingTemplate.templateId].map((clause: any, idx: number) => (
-                                <div key={clause.template_clause_id || idx} className="rounded-lg border border-slate-200 p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-sm font-semibold text-slate-800">
-                                            {clause.clause_number || clause.display_number || ''}{(clause.clause_number || clause.display_number) ? '. ' : ''}{clause.clause_name || 'Untitled'}
-                                        </span>
-                                        {clause.clarence_position != null && (
-                                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
-                                                Position {clause.clarence_position}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                                        {clause.default_text || clause.clause_content || 'No content available'}
-                                    </p>
-                                </div>
-                            ))}
+                            {(() => {
+                                const rules = playbookRulesCache[viewingTemplate.contractType] || []
+                                return templateClauses[viewingTemplate.templateId].map((clause: any, idx: number) => {
+                                    const clauseId = clause.template_clause_id || String(idx)
+                                    const activeTab = clauseActiveTab[clauseId] || 'content'
+                                    const clauseCat = normaliseCategory(clause.category_name || clause.category || '')
+                                    const matchedRule = rules.find(r => normaliseCategory(r.category) === clauseCat)
+                                    const hasPlaybook = !!matchedRule
+
+                                    return (
+                                        <div key={clauseId} className="rounded-lg border border-slate-200 overflow-hidden">
+                                            {/* Clause header */}
+                                            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-sm font-semibold text-slate-800">
+                                                        {clause.clause_number || clause.display_number || ''}{(clause.clause_number || clause.display_number) ? '. ' : ''}{clause.clause_name || 'Untitled'}
+                                                    </span>
+                                                    {clause.clarence_position != null && (
+                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-indigo-100 text-indigo-700 rounded">
+                                                            Position {clause.clarence_position}
+                                                        </span>
+                                                    )}
+                                                    {clause.category_name && (
+                                                        <span className="px-1.5 py-0.5 text-[10px] text-slate-400 bg-slate-50 rounded border border-slate-200">
+                                                            {getCategoryDisplayName(clauseCat)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {/* Tab switcher — only show if there's a matching rule */}
+                                                {hasPlaybook && (
+                                                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0 ml-2">
+                                                        <button
+                                                            onClick={() => setClauseActiveTab(prev => ({ ...prev, [clauseId]: 'content' }))}
+                                                            className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                                                                activeTab === 'content'
+                                                                    ? 'bg-white text-slate-800 shadow-sm'
+                                                                    : 'text-slate-500 hover:text-slate-700'
+                                                            }`}
+                                                        >
+                                                            Content
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setClauseActiveTab(prev => ({ ...prev, [clauseId]: 'playbook' }))}
+                                                            className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors flex items-center gap-1 ${
+                                                                activeTab === 'playbook'
+                                                                    ? 'bg-white text-indigo-700 shadow-sm'
+                                                                    : 'text-slate-500 hover:text-slate-700'
+                                                            }`}
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                            </svg>
+                                                            Playbook
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Tab content */}
+                                            <div className="px-4 pb-4">
+                                                {activeTab === 'content' ? (
+                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                                        {clause.default_text || clause.clause_content || 'No content available'}
+                                                    </p>
+                                                ) : matchedRule ? (
+                                                    <PlaybookAlignmentTab
+                                                        rule={matchedRule}
+                                                        clausePosition={clause.clarence_position ?? null}
+                                                    />
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    )
+                                })
+                            })()}
                         </div>
 
                         {/* Footer */}
