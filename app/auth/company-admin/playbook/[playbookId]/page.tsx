@@ -172,19 +172,19 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 {rule.requires_approval_below != null && (
                     <div className="absolute top-[14px] border-l-2 border-dashed border-red-400" style={{ height: '16px', left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
                 )}
-                {/* Ideal badge — above track */}
+                {/* Ideal badge — above track, line crosses through bar */}
                 <div className="absolute top-0" style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
                     <div className="flex flex-col items-center">
                         <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
                             Ideal · {rule.ideal_position}
                         </span>
-                        <div className="w-px flex-1 bg-emerald-400" style={{ height: '8px' }} />
+                        <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
                     </div>
                 </div>
-                {/* Fallback badge — below track */}
-                <div className="absolute top-[24px]" style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }}>
+                {/* Fallback badge — below track, line crosses through bar */}
+                <div className="absolute top-[12px]" style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }}>
                     <div className="flex flex-col items-center">
-                        <div className="w-px bg-red-400" style={{ height: '6px' }} />
+                        <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
                         <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
                             Fallback · {rule.fallback_position}
                         </span>
@@ -222,7 +222,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
                                     className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
                                 >
-                                    {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                         <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
                                     ))}
                                 </select>
@@ -245,7 +245,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
                                     className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
                                 >
-                                    {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                         <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
                                     ))}
                                 </select>
@@ -567,7 +567,7 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                             className="px-1.5 py-0.5 text-[11px] border border-red-300 rounded bg-white focus:ring-1 focus:ring-red-400 focus:outline-none text-red-700"
                         >
                             <option value="">None</option>
-                            {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n}</option>)}
                         </select>
                     </div>
                     {rule.requires_approval_below != null && (
@@ -619,7 +619,7 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                 <div className="flex items-center gap-2">
                     <label className="text-[10px] font-medium text-slate-500">Importance:</label>
                     <div className="flex gap-0.5">
-                        {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                             <button
                                 key={n}
                                 onClick={() => onFieldChange('importance_level', n)}
@@ -1138,8 +1138,8 @@ function PlaybookReviewContent() {
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <p className="text-sm font-semibold text-amber-800">Please review your AI-extracted rules</p>
-                            <p className="text-xs text-amber-700 mt-0.5">These rules were extracted automatically by AI. AI can make mistakes — positions, fallback values, and descriptions should all be verified against your actual policy before this playbook goes live. Click any rule title or field to edit it.</p>
+                            <p className="text-sm font-semibold text-amber-800">Please review your Clarence-extracted rules</p>
+                            <p className="text-xs text-amber-700 mt-0.5">These rules were extracted automatically by Clarence. Mistakes are possible — positions, fallback values, and descriptions should all be verified against your actual policy before this playbook goes live. Click any rule title or field to edit it.</p>
                         </div>
                         <button
                             onClick={() => {
