@@ -1026,9 +1026,9 @@ function QuickContractStudioContent() {
         loadApprovalStatus()
     }, [contractId])
 
-    // Load company's designated approver for the modal
+    // Load company's designated approver for the modal (initiator only — recipients have no company_users record)
     useEffect(() => {
-        if (doaApproverName || !userInfo?.companyId) return
+        if (doaApproverName || !userInfo?.companyId || !isInitiator) return
         async function loadApprover() {
             try {
                 const { data } = await supabase
