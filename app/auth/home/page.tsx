@@ -1266,7 +1266,23 @@ function HomePageInner() {
                 )}
 
                 {/* ======================================================== */}
-                {/* SECTION 8D: STATS BAR (Responds to active filter)         */}
+                {/* SECTION 8D: PAGE HEADER + CREATE BUTTON                   */}
+                {/* ======================================================== */}
+                <div className="flex items-center justify-between mb-6">
+                    <h1 className="text-xl font-semibold text-slate-800">Your Contracts</h1>
+                    <Link
+                        href="/auth/create"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Create
+                    </Link>
+                </div>
+
+                {/* ======================================================== */}
+                {/* SECTION 8E: STATS BAR (Responds to active filter)         */}
                 {/* ======================================================== */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                     {/* Active Negotiations */}
@@ -1300,7 +1316,7 @@ function HomePageInner() {
                 </div>
 
                 {/* ======================================================== */}
-                {/* SECTION 8F: PATHWAY FILTER TABS (with counts)             */}
+                {/* SECTION 8F: PATHWAY FILTER TABS (with counts)            */}
                 {/* ======================================================== */}
                 <div className="flex items-center gap-2 mb-6 overflow-x-auto">
                     <span className="text-sm font-medium text-slate-500 mr-2 flex-shrink-0">Filter:</span>
