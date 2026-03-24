@@ -60,9 +60,13 @@ export default function Home() {
 
             {/* Subtitle */}
             <p className="text-xl text-slate-600 mb-4 max-w-2xl mx-auto leading-relaxed">
-              The professional excellence platform for contract negotiation.
-              Principled mediation, structured development, and a methodology
-              that changes how agreements get made.
+              Neutral mediation, collaborative and transparent negotiation
+              studios, three pathways to suit the negotiation context.
+            </p>
+
+            {/* Join line */}
+            <p className="text-base text-slate-500 mb-8 max-w-xl mx-auto">
+              Join Clarence in changing the way agreements are reached
             </p>
 
             {/* Brand echo — Create/Negotiate/Agree */}
@@ -76,22 +80,6 @@ export default function Home() {
 
             {/* CTA Buttons */}
             <HeroCTA />
-
-            {/* Trust Indicators */}
-            <div className="mt-16 flex items-center justify-center gap-8 text-sm text-slate-500 flex-wrap">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span>Neutral by design</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span>Transparent leverage</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span>Fairness is not naivete</span>
-              </div>
-            </div>
           </div>
         </div>
       </section>
