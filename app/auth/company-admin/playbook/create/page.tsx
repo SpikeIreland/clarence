@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { ContractTypeSelector } from '@/app/components/create-phase/YourRoleStep'
+import { ContractTypeSelector, getContractType } from '@/app/components/create-phase/YourRoleStep'
 import {
     normaliseCategory,
     getCategoryDisplayName,
@@ -553,7 +553,55 @@ function CreatePlaybookContent() {
                 {/* ── STEP 2: SETUP ── */}
                 {state.step === 'setup' && (
                     <>
-                        <ClarenceGuide text="Great. Let's set the foundations. What should we call this playbook, and which side of the table are you on?" />
+                        <ClarenceGuide text="Great. Let's set the foundations. First, select the contract type, then tell me which side of the table you're on, and finally give your playbook a name." />
+
+                        {/* Contract Type */}
+                        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
+                            <label className="block text-sm font-semibold text-slate-700 mb-2">Contract Type</label>
+                            <p className="text-xs text-slate-500 mb-3">What type of contract is this playbook for? Leave blank for a general playbook.</p>
+                            <ContractTypeSelector
+                                selectedKey={state.contractTypeKey}
+                                onSelect={(key) => update({ contractTypeKey: key })}
+                            />
+                        </div>
+
+                        {/* Perspective */}
+                        {(() => {
+                            const selectedType = getContractType(state.contractTypeKey)
+                            const protectedLabel = selectedType?.protectedPartyLabel || 'Customer / Buyer'
+                            const providingLabel = selectedType?.providingPartyLabel || 'Provider / Supplier'
+                            return (
+                                <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
+                                    <label className="block text-sm font-semibold text-slate-700 mb-3">Your Perspective</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => update({ perspective: 'customer' })}
+                                            className={`p-4 rounded-lg border-2 text-left transition-all ${
+                                                state.perspective === 'customer'
+                                                    ? 'border-emerald-400 bg-emerald-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <div className="text-lg mb-1">🛡️</div>
+                                            <div className="text-sm font-semibold text-slate-800">{protectedLabel}</div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5">Higher positions = more {protectedLabel.toLowerCase()} protection</div>
+                                        </button>
+                                        <button
+                                            onClick={() => update({ perspective: 'provider' })}
+                                            className={`p-4 rounded-lg border-2 text-left transition-all ${
+                                                state.perspective === 'provider'
+                                                    ? 'border-blue-400 bg-blue-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <div className="text-lg mb-1">🏢</div>
+                                            <div className="text-sm font-semibold text-slate-800">{providingLabel}</div>
+                                            <div className="text-[11px] text-slate-500 mt-0.5">Higher positions = more {providingLabel.toLowerCase()} protection</div>
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        })()}
 
                         {/* Playbook Name */}
                         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
@@ -568,47 +616,6 @@ function CreatePlaybookContent() {
                             {state.nameError && (
                                 <p className="mt-1.5 text-xs text-red-600">{state.nameError}</p>
                             )}
-                        </div>
-
-                        {/* Perspective */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
-                            <label className="block text-sm font-semibold text-slate-700 mb-3">Perspective</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => update({ perspective: 'customer' })}
-                                    className={`p-4 rounded-lg border-2 text-left transition-all ${
-                                        state.perspective === 'customer'
-                                            ? 'border-emerald-400 bg-emerald-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                    }`}
-                                >
-                                    <div className="text-lg mb-1">🛡️</div>
-                                    <div className="text-sm font-semibold text-slate-800">Customer</div>
-                                    <div className="text-[11px] text-slate-500 mt-0.5">You are buying or receiving a service</div>
-                                </button>
-                                <button
-                                    onClick={() => update({ perspective: 'provider' })}
-                                    className={`p-4 rounded-lg border-2 text-left transition-all ${
-                                        state.perspective === 'provider'
-                                            ? 'border-blue-400 bg-blue-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                    }`}
-                                >
-                                    <div className="text-lg mb-1">🏢</div>
-                                    <div className="text-sm font-semibold text-slate-800">Provider</div>
-                                    <div className="text-[11px] text-slate-500 mt-0.5">You are supplying or delivering a service</div>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Contract Type */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">Contract Type</label>
-                            <p className="text-xs text-slate-500 mb-3">What type of contract is this playbook for? Leave blank for a general playbook.</p>
-                            <ContractTypeSelector
-                                selectedKey={state.contractTypeKey}
-                                onSelect={(key) => update({ contractTypeKey: key })}
-                            />
                         </div>
 
                         {/* Navigation */}

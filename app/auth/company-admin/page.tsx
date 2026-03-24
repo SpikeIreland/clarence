@@ -253,16 +253,20 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         })
     }, [playbooks])
 
-    // Elapsed time ticker — updates every 10s for actively parsing playbooks
+    const [parseSimProgress, setParseSimProgress] = useState<Record<string, number>>({})
+
+    // Elapsed time ticker — updates every 2s for actively parsing playbooks
     useEffect(() => {
         const parsingPlaybooks = playbooks.filter(p => p.status === 'parsing' || parsingIds.has(p.playbookId))
         if (parsingPlaybooks.length === 0) {
             if (Object.keys(elapsedDisplay).length > 0) setElapsedDisplay({})
+            if (Object.keys(parseSimProgress).length > 0) setParseSimProgress({})
             return
         }
         const tick = () => {
             const now = Date.now()
             const display: Record<string, string> = {}
+            const simProgress: Record<string, number> = {}
             for (const p of parsingPlaybooks) {
                 const start = parseStartTimes[p.playbookId] || now
                 const elapsed = Math.floor((now - start) / 1000)
@@ -272,11 +276,14 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                     const mins = Math.floor(elapsed / 60)
                     display[p.playbookId] = `${mins} min${mins !== 1 ? 's' : ''} elapsed`
                 }
+                // Asymptotic progress: approaches ~92% over ~90s, never reaches 100%
+                simProgress[p.playbookId] = Math.round(92 * (1 - Math.exp(-elapsed / 90)))
             }
             setElapsedDisplay(display)
+            setParseSimProgress(simProgress)
         }
         tick()
-        const interval = setInterval(tick, 10000)
+        const interval = setInterval(tick, 2000)
         return () => clearInterval(interval)
     }, [playbooks, parsingIds, parseStartTimes])
 
@@ -636,14 +643,17 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                 </div>
                                             </div>
                                             <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden">
-                                                <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${parseSimProgress[p.playbookId] ?? 3}%`, transition: 'width 2s ease-out' }}></div>
                                             </div>
                                         </div>
                                     )}
                                     {p.parsingError && <p className="text-sm text-red-600 mb-3">Error: {p.parsingError}</p>}
                                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                                         {p.sourceFileName && <span>{p.sourceFileName}</span>}
-                                        <span>{p.rulesExtracted} rules</span>
+                                        {(p.status === 'parsing' || parsingIds.has(p.playbookId))
+                                            ? <span className="animate-pulse text-blue-500">Extracting rules...</span>
+                                            : <span>{p.rulesExtracted} rules</span>
+                                        }
                                         {['parsed', 'active', 'inactive', 'review_required'].includes(p.status) && p.rulesExtracted > 0 && (
                                             <a
                                                 href={`/auth/company-admin/playbook/${p.playbookId}`}
