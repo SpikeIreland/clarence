@@ -3398,7 +3398,7 @@ INSTRUCTIONS:
             const rule = playbookRules.find(r => normaliseCategory(r.category) === normaliseCategory(clause.category))
             if (!rule) continue
             const pos = clause.clarencePosition
-            if (pos < rule.minimum_position) {
+            if (pos < rule.fallback_position) {
                 map.set(clause.clauseId, 'breach')
             } else if (pos < rule.ideal_position) {
                 map.set(clause.clauseId, 'warning')
@@ -5467,7 +5467,7 @@ INSTRUCTIONS:
                                                     const clauseCat = normaliseCategory(selectedClause.category)
                                                     const matched = playbookRules.find(r => normaliseCategory(r.category) === clauseCat)
                                                     if (!matched || selectedClause.clarencePosition == null) return null
-                                                    const breach = selectedClause.clarencePosition < matched.minimum_position
+                                                    const breach = selectedClause.clarencePosition < matched.fallback_position
                                                     return (
                                                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${breach ? 'bg-red-500' : 'bg-emerald-500'}`} />
                                                     )
@@ -6510,8 +6510,8 @@ INSTRUCTIONS:
                                     let statusLabel = 'No certified position yet'
                                     let statusColor = 'bg-slate-100 text-slate-500 border-slate-200'
                                     if (clausePos != null) {
-                                        if (clausePos < matchedRule.minimum_position) {
-                                            statusLabel = 'Breach — below minimum'
+                                        if (clausePos < matchedRule.fallback_position) {
+                                            statusLabel = 'Breach — below fallback'
                                             statusColor = 'bg-red-50 text-red-600 border-red-200'
                                         } else if (clausePos === matchedRule.ideal_position) {
                                             statusLabel = 'Exact match'
@@ -6569,7 +6569,7 @@ INSTRUCTIONS:
                                                         <div className="absolute z-20"
                                                             style={{ left: `${templatePct}%`, top: '16px', transform: 'translateX(-50%) rotate(45deg)' }}>
                                                             <div className={`w-4 h-4 rounded-sm border-2 border-white shadow-md ${
-                                                                clausePos! >= matchedRule.minimum_position ? 'bg-indigo-500' : 'bg-red-500'
+                                                                clausePos! >= matchedRule.fallback_position ? 'bg-indigo-500' : 'bg-red-500'
                                                             }`} />
                                                         </div>
                                                     )}
@@ -6595,7 +6595,7 @@ INSTRUCTIONS:
                                                     {clausePos != null && (
                                                         <>
                                                             <span className="text-slate-300">|</span>
-                                                            <span className={clausePos >= matchedRule.minimum_position ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                                                            <span className={clausePos >= matchedRule.fallback_position ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
                                                                 Clause: {clausePos}{(() => { const l = translateRulePosition(matchedRule, clausePos); return l && l !== String(clausePos) ? ` · ${l}` : '' })()}
                                                             </span>
                                                         </>
@@ -6603,7 +6603,7 @@ INSTRUCTIONS:
                                                 </div>
 
                                                 {/* Escalation */}
-                                                {clausePos != null && clausePos < matchedRule.minimum_position && matchedRule.escalation_contact && (
+                                                {clausePos != null && clausePos < matchedRule.fallback_position && matchedRule.escalation_contact && (
                                                     <div className="mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
                                                         Escalate to: {matchedRule.escalation_contact}
                                                         {matchedRule.escalation_contact_email && ` (${matchedRule.escalation_contact_email})`}
