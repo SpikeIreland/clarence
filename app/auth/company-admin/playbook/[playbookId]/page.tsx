@@ -141,12 +141,13 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     <div className="w-4 h-4 rounded-full bg-slate-200 hover:bg-indigo-100 flex items-center justify-center cursor-help transition-colors">
                         <span className="text-[9px] font-bold text-slate-500 group-hover/info:text-indigo-600">i</span>
                     </div>
-                    <div className="absolute right-0 top-5 w-64 p-3 bg-white rounded-lg shadow-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed z-50 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150">
-                        <p className="font-semibold text-slate-800 mb-1">Click the bar to set positions</p>
-                        <div className="space-y-1">
-                            <p><span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-600 align-middle mr-1"></span><b>Purple</b> — Ideal position</p>
-                            <p><span className="inline-block w-5 h-1.5 rounded bg-blue-100 border border-blue-200 align-middle mr-1"></span><b>Blue band</b> — Acceptable range</p>
-                            <p><span className="inline-block w-1.5 h-2 rounded-full bg-slate-400 align-middle mr-1"></span><b>Grey</b> — Fallback</p>
+                    <div className="absolute right-0 top-5 w-72 p-3 bg-white rounded-lg shadow-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed z-50 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150">
+                        <p className="font-semibold text-slate-800 mb-1.5">Click the bar to set positions</p>
+                        <div className="space-y-1.5">
+                            <p><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 align-middle mr-1"></span><b>Green</b> — Ideal (your sweet spot)</p>
+                            <p><span className="inline-block w-5 h-1.5 rounded bg-blue-100 border border-blue-200 align-middle mr-1"></span><b>Blue band</b> — Typical market range</p>
+                            <p><span className="inline-block w-1.5 h-2.5 rounded-full bg-red-500 align-middle mr-1"></span><b>Red</b> — Fallback (company backstop)</p>
+                            <p><span className="inline-block border-l-2 border-dashed border-red-400 h-3 w-0 align-middle mr-2 ml-0.5"></span><b>Dashed red</b> — Escalation threshold</p>
                         </div>
                         {rangeCtx && (
                             <p className="mt-1.5 pt-1.5 border-t border-slate-100 text-slate-500">
@@ -169,9 +170,9 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     <div className="absolute top-1.5 w-px h-4 border-l-2 border-dashed border-red-400"
                         style={{ left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
                 )}
-                <div className="absolute top-2.5 w-1 h-2.5 bg-slate-400 rounded-full"
+                <div className="absolute top-2.5 w-1 h-2.5 bg-red-500 rounded-full"
                     style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }} />
-                <div className="absolute top-1 w-5 h-5 rounded-full bg-purple-600 border-2 border-white shadow-sm flex items-center justify-center"
+                <div className="absolute top-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-sm flex items-center justify-center"
                     style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
                     <span className="text-[8px] font-bold text-white">{rule.ideal_position}</span>
                 </div>
@@ -193,12 +194,12 @@ function EditablePositionBar({ rule, onPositionChange }: {
             {/* Position chips — Market vs Company */}
             <div className="flex gap-2 mt-2">
                 {/* Market values */}
-                <div className="flex-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Market Range</p>
+                <div className="flex-1 rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5">
+                    <p className="text-[9px] font-semibold text-amber-500 uppercase tracking-wide mb-1.5">Market Range</p>
                     <div className="flex gap-1.5">
                         {[
-                            { key: 'minimum_position', label: 'Min', value: rule.minimum_position, bg: 'bg-red-50 text-red-600' },
-                            { key: 'maximum_position', label: 'Max', value: rule.maximum_position, bg: 'bg-emerald-50 text-emerald-600' },
+                            { key: 'minimum_position', label: 'Min', value: rule.minimum_position, bg: 'bg-amber-100 text-amber-700' },
+                            { key: 'maximum_position', label: 'Max', value: rule.maximum_position, bg: 'bg-amber-100 text-amber-700' },
                         ].map(p => (
                             <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
                                 <span>{p.label}:</span>
@@ -216,12 +217,12 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     </div>
                 </div>
                 {/* Company values */}
-                <div className="flex-1 rounded-md border border-purple-100 bg-purple-50 px-2 py-1.5">
-                    <p className="text-[9px] font-semibold text-purple-400 uppercase tracking-wide mb-1.5">Company Playbook</p>
+                <div className="flex-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                    <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Company Positions</p>
                     <div className="flex gap-1.5">
                         {[
-                            { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-purple-100 text-purple-700' },
-                            { key: 'fallback_position', label: 'Fallback', value: rule.fallback_position, bg: 'bg-slate-100 text-slate-600' },
+                            { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-emerald-50 text-emerald-700' },
+                            { key: 'fallback_position', label: 'Fallback', value: rule.fallback_position, bg: 'bg-red-50 text-red-600' },
                         ].map(p => (
                             <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
                                 <span>{p.label}:</span>
@@ -470,6 +471,7 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
     saving: boolean
 }) {
     const [editingField, setEditingField] = useState<string | null>(null)
+    const [showSource, setShowSource] = useState(false)
     const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
     useEffect(() => {
@@ -484,78 +486,70 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
         <div id={`rule-${rule.rule_id}`} className={`rounded-lg border p-4 transition-all ${isDirty ? 'border-amber-300 bg-amber-50/30 shadow-sm' : 'border-slate-200 bg-white'}`}>
             {/* Header row */}
             <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                     {rule.clause_code && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium bg-slate-100 text-slate-500 rounded">{rule.clause_code}</span>
+                        <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium bg-slate-100 text-slate-500 rounded flex-shrink-0">{rule.clause_code}</span>
                     )}
-                    <h4 className="text-sm font-semibold text-slate-800">{rule.clause_name}</h4>
-                    {rule.is_deal_breaker && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded uppercase">Deal Breaker</span>
-                    )}
-                    {rule.is_non_negotiable && !rule.is_deal_breaker && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-orange-100 text-orange-700 rounded uppercase">Non-Negotiable</span>
+                    {editingField === 'clause_name' ? (
+                        <input
+                            ref={inputRef as React.RefObject<HTMLInputElement>}
+                            value={rule.clause_name}
+                            onChange={(e) => onFieldChange('clause_name', e.target.value)}
+                            onBlur={() => setEditingField(null)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingField(null) }}
+                            className="flex-1 text-sm font-semibold text-slate-800 border border-indigo-300 rounded px-2 py-0.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                        />
+                    ) : (
+                        <h4
+                            onClick={() => setEditingField('clause_name')}
+                            className="text-sm font-semibold text-slate-800 cursor-pointer hover:text-indigo-700 transition-colors"
+                            title="Click to edit rule name"
+                        >
+                            {rule.clause_name}
+                        </h4>
                     )}
                     {allSamePosition && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200">Needs Review</span>
-                    )}
-                    {rule.quality_flags && rule.quality_flags.length > 0 && (
-                        <span
-                            className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded cursor-help"
-                            title={rule.quality_flags.map(f => FLAG_DESCRIPTIONS[f] ?? f).join('\n')}
-                        >
-                            ⚠ {rule.quality_flags.length} flag{rule.quality_flags.length > 1 ? 's' : ''}
-                        </span>
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200 flex-shrink-0">Needs Review</span>
                     )}
                 </div>
                 {isDirty && (
                     <button
                         onClick={onSave}
                         disabled={saving}
-                        className="px-2.5 py-1 text-[11px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-50 transition-colors"
+                        className="ml-3 px-2.5 py-1 text-[11px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-50 transition-colors flex-shrink-0"
                     >
                         {saving ? 'Saving...' : 'Save'}
                     </button>
                 )}
             </div>
 
-            {/* Source quote */}
-            {rule.source_quote ? (
-                <div className="mb-3 px-3 py-2 bg-slate-50 border-l-2 border-indigo-200 rounded-r text-[11px] text-slate-600 italic leading-relaxed">
-                    &ldquo;{rule.source_quote}&rdquo;
-                </div>
-            ) : (
-                <div className="mb-3 px-3 py-1.5 bg-amber-50 border-l-2 border-amber-300 rounded-r text-[11px] text-amber-700">
-                    No source quote — rule inferred by AI
-                </div>
-            )}
+            {/* Description (market-perspective summary) */}
+            <div className="mb-3">
+                {editingField === 'rationale' ? (
+                    <textarea
+                        ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                        value={rule.rationale || ''}
+                        onChange={(e) => onFieldChange('rationale', e.target.value)}
+                        onBlur={() => setEditingField(null)}
+                        rows={2}
+                        placeholder="Add a brief market-perspective description of this clause..."
+                        className="w-full px-2 py-1.5 text-xs text-slate-600 border border-indigo-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none"
+                    />
+                ) : (
+                    <p
+                        onClick={() => setEditingField('rationale')}
+                        className="text-xs text-slate-600 cursor-pointer hover:bg-indigo-50 rounded px-2 py-1.5 transition-colors min-h-[28px] leading-relaxed"
+                    >
+                        {rule.rationale || <span className="text-slate-400 italic">Click to add a description of this clause from a market perspective...</span>}
+                    </p>
+                )}
+            </div>
 
             {/* Position bar */}
             <EditablePositionBar rule={rule} onPositionChange={onPositionChange} />
 
             {/* Editable fields */}
             <div className="mt-3 space-y-2">
-                {/* Rationale */}
-                <div>
-                    <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Rationale</label>
-                    {editingField === 'rationale' ? (
-                        <textarea
-                            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-                            value={rule.rationale || ''}
-                            onChange={(e) => onFieldChange('rationale', e.target.value)}
-                            onBlur={() => setEditingField(null)}
-                            rows={2}
-                            className="w-full mt-0.5 px-2 py-1 text-xs border border-indigo-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none"
-                        />
-                    ) : (
-                        <p
-                            onClick={() => setEditingField('rationale')}
-                            className="mt-0.5 text-xs text-slate-600 cursor-pointer hover:bg-indigo-50 rounded px-2 py-1 transition-colors min-h-[24px]"
-                        >
-                            {rule.rationale || <span className="text-slate-400 italic">Click to add rationale...</span>}
-                        </p>
-                    )}
-                </div>
-
                 {/* Escalation row */}
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-1.5">
@@ -645,26 +639,30 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                     </div>
                 </div>
 
-                {/* Deal breaker / Non-negotiable toggles */}
-                <div className="flex gap-3">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={rule.is_deal_breaker}
-                            onChange={(e) => onFieldChange('is_deal_breaker', e.target.checked)}
-                            className="w-3 h-3 rounded border-slate-300 text-red-600 focus:ring-red-500"
-                        />
-                        <span className="text-[10px] text-slate-600">Deal Breaker</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={rule.is_non_negotiable}
-                            onChange={(e) => onFieldChange('is_non_negotiable', e.target.checked)}
-                            className="w-3 h-3 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-                        />
-                        <span className="text-[10px] text-slate-600">Non-Negotiable</span>
-                    </label>
+                {/* Source quote — collapsed by default */}
+                <div>
+                    <button
+                        onClick={() => setShowSource(s => !s)}
+                        className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                        <svg className={`w-3 h-3 transition-transform ${showSource ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Source extract
+                    </button>
+                    {showSource && (
+                        <div className="mt-1.5">
+                            {rule.source_quote ? (
+                                <div className="px-3 py-2 bg-slate-50 border-l-2 border-indigo-200 rounded-r text-[11px] text-slate-600 italic leading-relaxed">
+                                    &ldquo;{rule.source_quote}&rdquo;
+                                </div>
+                            ) : (
+                                <div className="px-3 py-1.5 bg-amber-50 border-l-2 border-amber-300 rounded-r text-[11px] text-amber-700">
+                                    No source extract — rule inferred by AI
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -693,6 +691,7 @@ function PlaybookReviewContent() {
     const [showGlossary, setShowGlossary] = useState(false)
     const [showAddRuleModal, setShowAddRuleModal] = useState(false)
     const [addingRule, setAddingRule] = useState(false)
+    const [showAIBanner, setShowAIBanner] = useState(false)
 
     // Auth + data loading
     useEffect(() => {
@@ -725,6 +724,12 @@ function PlaybookReviewContent() {
                 .single()
             if (!pb) { router.push('/auth/company-admin?tab=playbooks'); return }
             setPlaybook(pb as PlaybookMeta)
+
+            // Show AI review banner for AI-parsed playbooks (dismiss stored in localStorage)
+            const dismissed = typeof window !== 'undefined' && localStorage.getItem(`playbook-ai-banner-${playbookId}`)
+            if (!dismissed && pb.rules_extracted && pb.rules_extracted > 0) {
+                setShowAIBanner(true)
+            }
 
             // Load rules
             const { data: rulesData } = await supabase
@@ -1115,6 +1120,35 @@ function PlaybookReviewContent() {
                     )}
                 </div>
             </div>
+
+            {/* AI review banner */}
+            {showAIBanner && (
+                <div className="max-w-6xl mx-auto px-4 pt-4">
+                    <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                        <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                            </svg>
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-amber-800">Please review your AI-extracted rules</p>
+                            <p className="text-xs text-amber-700 mt-0.5">These rules were extracted automatically by AI. AI can make mistakes — positions, fallback values, and descriptions should all be verified against your actual policy before this playbook goes live. Click any rule title or field to edit it.</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setShowAIBanner(false)
+                                localStorage.setItem(`playbook-ai-banner-${playbookId}`, '1')
+                            }}
+                            className="text-amber-500 hover:text-amber-700 transition-colors flex-shrink-0 mt-0.5"
+                            title="Dismiss"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Rules list */}
             <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
