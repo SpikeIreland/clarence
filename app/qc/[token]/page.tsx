@@ -150,19 +150,10 @@ export default function PublicRecipientPage() {
                 return
             }
 
-            // Load contract from quick_contracts
+            // Load contract from quick_contracts (no joins — sender info comes from recipientData)
             const { data: contractData, error: contractError } = await supabase
                 .from('quick_contracts')
-                .select(`
-          *,
-          users!quick_contracts_created_by_user_id_fkey (
-            contact_person,
-            email
-          ),
-          companies!quick_contracts_company_id_fkey (
-            company_name
-          )
-        `)
+                .select('*')
                 .eq('quick_contract_id', recipientData.quick_contract_id)
                 .single()
 
@@ -252,9 +243,9 @@ export default function PublicRecipientPage() {
                 expiresAt: contractData.expires_at,
                 allowRecipientComments: contractData.allow_recipient_comments ?? true,
                 requireFullScroll: contractData.require_full_scroll ?? false,
-                senderName: contractData.users?.contact_person,
-                senderEmail: contractData.users?.email,
-                senderCompany: contractData.companies?.company_name,
+                senderName: recipientData.initiator_name ?? null,
+                senderEmail: recipientData.initiator_email ?? null,
+                senderCompany: recipientData.initiator_company ?? null,
                 sourceContractId: sourceContractId,
                 clauseCount: clauseCount
             }
