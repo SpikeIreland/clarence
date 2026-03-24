@@ -6575,23 +6575,35 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale labels */}
+                                                {/* Scale labels — show first, midpoint, last from rule's own range_context */}
                                                 {rangeCtx && rangeCtx.scale_points.length > 0 && (
                                                     <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
                                                         {rangeCtx.scale_points
-                                                            .filter((_, i, arr) => i === 0 || i === arr.length - 1)
-                                                            .map((sp, idx) => (
-                                                                <span key={sp.position} className="absolute"
-                                                                    style={{ left: `${toPercent(sp.position)}%`, transform: idx === 0 ? 'none' : 'translateX(-100%)' }}>
-                                                                    {sp.label}
-                                                                </span>
-                                                            ))}
+                                                            .filter((_, i, arr) => i === 0 || i === Math.floor(arr.length / 2) || i === arr.length - 1)
+                                                            .map((sp, idx, arr) => {
+                                                                const isFirst = idx === 0
+                                                                const isLast = idx === arr.length - 1
+                                                                return (
+                                                                    <span key={sp.position} className="absolute"
+                                                                        style={{ left: `${toPercent(sp.position)}%`, transform: isFirst ? 'none' : isLast ? 'translateX(-100%)' : 'translateX(-50%)' }}>
+                                                                        {sp.label}
+                                                                    </span>
+                                                                )
+                                                            })}
                                                     </div>
                                                 )}
 
-                                                {/* Position summary */}
+                                                {/* Position summary — show translated labels from rule's range_context where available */}
                                                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-2 flex-wrap">
-                                                    <span>Playbook: min {matchedRule.minimum_position} · ideal {matchedRule.ideal_position} · max {matchedRule.maximum_position}</span>
+                                                    <span>
+                                                        {(() => {
+                                                            const fLabel = translateRulePosition(matchedRule, matchedRule.fallback_position)
+                                                            const iLabel = translateRulePosition(matchedRule, matchedRule.ideal_position)
+                                                            const fallStr = fLabel && fLabel !== String(matchedRule.fallback_position) ? `fallback ${fLabel}` : `fallback ${matchedRule.fallback_position}`
+                                                            const idealStr = iLabel && iLabel !== String(matchedRule.ideal_position) ? `ideal ${iLabel}` : `ideal ${matchedRule.ideal_position}`
+                                                            return `Playbook: ${fallStr} · ${idealStr}`
+                                                        })()}
+                                                    </span>
                                                     {clausePos != null && (
                                                         <>
                                                             <span className="text-slate-300">|</span>
