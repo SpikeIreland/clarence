@@ -110,22 +110,46 @@ export function useRoleContext({
             try {
                 let contractTypeKey: string | null = null
                 let initiatorPartyRole: PartyRole | null = null
-                let isInitiator = true // Default assumption
+                let isInitiator = false // Default to respondent — only set true when we can confirm via uploaded_by_user_id
 
                 // ============================================================
                 // PATH A: QC Studio — fetch from uploaded_contracts
                 // ============================================================
                 if (contractId) {
-                    const { data, error } = await supabase
+                    let resolvedContractId = contractId
+
+                    // Try direct lookup in uploaded_contracts first
+                    let { data, error } = await supabase
                         .from('uploaded_contracts')
                         .select('contract_type_key, initiator_party_role, uploaded_by_user_id, linked_session_id')
                         .eq('contract_id', contractId)
                         .single()
 
+                    // If not found, contractId may be a quick_contract_id — resolve via QC table
+                    if (error || !data) {
+                        const { data: qcLookup } = await supabase
+                            .from('quick_contracts')
+                            .select('source_contract_id')
+                            .eq('quick_contract_id', contractId)
+                            .single()
+
+                        if (qcLookup?.source_contract_id) {
+                            resolvedContractId = qcLookup.source_contract_id
+                            const result = await supabase
+                                .from('uploaded_contracts')
+                                .select('contract_type_key, initiator_party_role, uploaded_by_user_id, linked_session_id')
+                                .eq('contract_id', resolvedContractId)
+                                .single()
+                            data = result.data
+                            error = result.error
+                        }
+                    }
+
                     if (!error && data) {
                         contractTypeKey = data.contract_type_key
                         initiatorPartyRole = data.initiator_party_role as PartyRole | null
-                        isInitiator = data.uploaded_by_user_id === userId
+                        // Only mark as initiator if userId explicitly matches the uploader
+                        isInitiator = !!userId && data.uploaded_by_user_id === userId
 
                         // Fallback: if uploaded_contracts has no role data,
                         // check the linked session (which stores it from assessment)
@@ -139,9 +163,12 @@ export function useRoleContext({
                             if (sessionData) {
                                 contractTypeKey = sessionData.contract_type_key
                                 initiatorPartyRole = sessionData.initiator_party_role as PartyRole | null
-                                isInitiator = sessionData.customer_id === userId
+                                isInitiator = !!userId && sessionData.customer_id === userId
                             }
                         }
+                    } else {
+                        // Contract not found in either table — treat as respondent, not initiator
+                        isInitiator = false
                     }
                 }
 
@@ -158,7 +185,7 @@ export function useRoleContext({
                     if (!error && data) {
                         contractTypeKey = data.contract_type_key
                         initiatorPartyRole = data.initiator_party_role as PartyRole | null
-                        isInitiator = data.customer_id === userId
+                        isInitiator = !!userId && data.customer_id === userId
                     }
                 }
 
