@@ -85,6 +85,7 @@ interface CompanyTemplate {
     createdAt: string
     createdBy?: string
     sourceFileName?: string
+    linkedPlaybookId: string | null
 }
 
 type AdminTab = 'insights' | 'templates' | 'playbooks' | 'people' | 'datamap' | 'audit'
@@ -900,13 +901,14 @@ interface TemplatesTabProps {
     templates: CompanyTemplate[]
     isLoading: boolean
     userInfo: UserInfo | null
+    playbooks: Playbook[]
     onUpload: (file: File, templateName: string, contractType: string) => Promise<string>
     onDelete: (templateId: string) => Promise<void>
     onToggleActive: (templateId: string, isActive: boolean) => Promise<void>
     onRefresh: () => void
 }
 
-function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onToggleActive, onRefresh }: TemplatesTabProps) {
+function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onDelete, onToggleActive, onRefresh }: TemplatesTabProps) {
     const router = useRouter()
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
@@ -917,6 +919,8 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [templateName, setTemplateName] = useState('')
     const [contractType, setContractType] = useState('custom')
+    const [uploadLinkedPlaybookId, setUploadLinkedPlaybookId] = useState<string>('')
+    const [linkingTemplateId, setLinkingTemplateId] = useState<string | null>(null)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1393,7 +1397,10 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             }
 
             setUploadProgress('Redirecting to certification studio...')
-            router.push(`/auth/quick-contract/studio/${contractId}?mode=template&company=true`)
+            const studioUrl = uploadLinkedPlaybookId
+                ? `/auth/quick-contract/studio/${contractId}?mode=template&company=true&linked_playbook_id=${uploadLinkedPlaybookId}`
+                : `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
+            router.push(studioUrl)
 
         } catch (e) {
             console.error('Upload error:', e)
@@ -1487,6 +1494,25 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                                     ))}
                                 </select>
                             </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Link to Playbook
+                                    <span className="ml-1.5 text-xs font-normal text-slate-400">(optional — sets compliance benchmark)</span>
+                                </label>
+                                <select
+                                    value={uploadLinkedPlaybookId}
+                                    onChange={(e) => setUploadLinkedPlaybookId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                >
+                                    <option value="">— No playbook —</option>
+                                    {playbooks.filter(p => p.isActive && p.rulesExtracted > 0).map(p => (
+                                        <option key={p.playbookId} value={p.playbookId}>
+                                            {p.playbookName}{p.contractTypeKey ? ` (${CONTRACT_TYPE_OPTIONS.find(o => o.value === p.contractTypeKey)?.label || p.contractTypeKey})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         {uploadProgress && (
@@ -1519,6 +1545,7 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                                     setTemplateName('')
                                     setUploadError(null)
                                     setUploadProgress('')
+                                    setUploadLinkedPlaybookId('')
                                 }}
                                 disabled={isUploading}
                                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50"
@@ -1562,6 +1589,44 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                                             {getStatusBadge(template)}
                                             <span className="text-xs text-slate-500">{template.clauseCount} clauses</span>
                                             {template.timesUsed > 0 && <span className="text-xs text-slate-500">Used {template.timesUsed}x</span>}
+                                            {/* Playbook link indicator / editor */}
+                                            {linkingTemplateId === template.templateId ? (
+                                                <div className="flex items-center gap-1">
+                                                    <select
+                                                        className="text-xs border border-indigo-300 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-indigo-400 focus:outline-none"
+                                                        defaultValue={template.linkedPlaybookId || ''}
+                                                        autoFocus
+                                                        onChange={async (e) => {
+                                                            const val = e.target.value || null
+                                                            const supabase = createClient()
+                                                            await supabase.from('contract_templates').update({ linked_playbook_id: val }).eq('template_id', template.templateId)
+                                                            setLinkingTemplateId(null)
+                                                            onRefresh()
+                                                        }}
+                                                        onBlur={() => setLinkingTemplateId(null)}
+                                                    >
+                                                        <option value="">— No playbook —</option>
+                                                        {playbooks.filter(p => p.isActive && p.rulesExtracted > 0).map(p => (
+                                                            <option key={p.playbookId} value={p.playbookId}>
+                                                                {p.playbookName}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setLinkingTemplateId(template.templateId)}
+                                                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
+                                                    title="Link this template to a playbook for compliance checking"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                    </svg>
+                                                    {template.linkedPlaybookId
+                                                        ? (playbooks.find(p => p.playbookId === template.linkedPlaybookId)?.playbookName || 'Linked playbook')
+                                                        : 'Link playbook'}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -2116,7 +2181,8 @@ function CompanyAdminContent() {
                 isActive: t.is_active,
                 status: t.clause_count > 0 ? 'ready' : 'processing',
                 createdAt: t.created_at,
-                sourceFileName: t.source_file_name
+                sourceFileName: t.source_file_name,
+                linkedPlaybookId: t.linked_playbook_id || null,
             })))
         } catch (e) { console.error('Load templates error:', e); setCompanyTemplates([]) } finally { setTemplatesLoading(false) }
     }, [])
@@ -2733,7 +2799,7 @@ function CompanyAdminContent() {
                         ) : (
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
-                                {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
+                                {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} playbooks={playbooks} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                                 {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} onAddPerson={handleAddPerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
                                 {activeTab === 'audit' && <AuditLogTab />}
                             </div>

@@ -56,14 +56,23 @@ export async function findActivePlaybook(
 
     if (general) return general as PlaybookMatch
 
-    // Tier 3: Any active playbook (backward compat)
-    const { data: fallback } = await supabase
+    // Tier 3 removed — returning null prevents wrong-playbook matching
+    // (previously returned any active playbook regardless of contract type)
+    return null
+}
+
+/**
+ * Load a playbook directly by its ID.
+ * Used when a template has an explicit linked_playbook_id.
+ */
+export async function findPlaybookById(
+    playbookId: string
+): Promise<PlaybookMatch | null> {
+    const supabase = createClient()
+    const { data } = await supabase
         .from('company_playbooks')
         .select(PLAYBOOK_FIELDS)
-        .eq('company_id', companyId)
-        .eq('is_active', true)
-        .limit(1)
+        .eq('playbook_id', playbookId)
         .maybeSingle()
-
-    return (fallback as PlaybookMatch) || null
+    return (data as PlaybookMatch) || null
 }

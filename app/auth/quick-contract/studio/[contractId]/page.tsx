@@ -324,6 +324,7 @@ function QuickContractStudioContent() {
     const isTemplateMode = searchParams.get('mode') === 'template'
     const isCompanyTemplate = searchParams.get('company') === 'true'
     const editTemplateId = searchParams.get('edit_template_id')
+    const linkedPlaybookIdParam = searchParams.get('linked_playbook_id')
     const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
     const [templateName, setTemplateName] = useState('')
     const [savingTemplate, setSavingTemplate] = useState(false)
@@ -338,17 +339,19 @@ function QuickContractStudioContent() {
     const [playbookLoading, setPlaybookLoading] = useState(false)
     const [showComplianceModal, setShowComplianceModal] = useState(false)
 
-    // Pre-fill template name when editing an existing template
+    // Pre-fill template name (and linked playbook id) when editing an existing template
+    const [linkedPlaybookId, setLinkedPlaybookId] = useState<string | null>(linkedPlaybookIdParam)
     useEffect(() => {
         if (!editTemplateId) return
         const supabase = createClient()
         supabase
             .from('contract_templates')
-            .select('template_name')
+            .select('template_name, linked_playbook_id')
             .eq('template_id', editTemplateId)
             .single()
             .then(({ data }) => {
                 if (data?.template_name) setTemplateName(data.template_name)
+                if (data?.linked_playbook_id) setLinkedPlaybookId(data.linked_playbook_id)
             })
     }, [editTemplateId])
 
@@ -368,9 +371,17 @@ function QuickContractStudioContent() {
             setPlaybookLoading(true)
             try {
                 const supabase = createClient()
-                const { findActivePlaybook } = await import('@/lib/playbook-loader')
 
-                const playbookData = await findActivePlaybook(userInfo!.companyId!, contract?.contractTypeKey || null)
+                // Priority: explicit linked_playbook_id > type-based lookup
+                let playbookData = null
+                if (linkedPlaybookId) {
+                    const { findPlaybookById } = await import('@/lib/playbook-loader')
+                    playbookData = await findPlaybookById(linkedPlaybookId)
+                } else {
+                    const { findActivePlaybook } = await import('@/lib/playbook-loader')
+                    playbookData = await findActivePlaybook(userInfo!.companyId!, contract?.contractTypeKey || null)
+                }
+
                 if (!playbookData) return
 
                 const { data: rulesData, error: rulesError } = await supabase
@@ -398,7 +409,7 @@ function QuickContractStudioContent() {
         }
 
         loadPlaybookRules()
-    }, [userInfo?.companyId, userInfo?.userId, contract?.uploadedByUserId, contract?.contractTypeKey, isTemplateMode])
+    }, [userInfo?.companyId, userInfo?.userId, contract?.uploadedByUserId, contract?.contractTypeKey, linkedPlaybookId])
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
@@ -2003,6 +2014,7 @@ function QuickContractStudioContent() {
                         template_name: templateName.trim(),
                         clause_count: certifiedClauses.length,
                         contract_type: contract?.contractType || 'custom',
+                        linked_playbook_id: linkedPlaybookId || null,
                         updated_at: new Date().toISOString()
                     })
                     .eq('template_id', editTemplateId)
@@ -2035,6 +2047,7 @@ function QuickContractStudioContent() {
                         company_id: userInfo.companyId,
                         created_by_user_id: userInfo.userId,
                         clause_count: certifiedClauses.length,
+                        linked_playbook_id: linkedPlaybookId || null,
                         version: 1,
                         times_used: 0,
                         created_at: new Date().toISOString(),
@@ -3374,6 +3387,26 @@ INSTRUCTIONS:
     const playbookCompliance = useMemo<ComplianceResult | null>(() => {
         if (playbookRules.length === 0 || clauses.length === 0) return null
         return calculatePlaybookCompliance(playbookRules, toComplianceClauses(clauses))
+    }, [playbookRules, clauses])
+
+    // Per-clause playbook compliance status for sidebar dots
+    const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach'>>(() => {
+        const map = new Map<string, 'compliant' | 'warning' | 'breach'>()
+        if (playbookRules.length === 0) return map
+        for (const clause of clauses) {
+            if (!clause.clarenceCertified || clause.clarencePosition == null) continue
+            const rule = playbookRules.find(r => normaliseCategory(r.category) === normaliseCategory(clause.category))
+            if (!rule) continue
+            const pos = clause.clarencePosition
+            if (pos < rule.minimum_position) {
+                map.set(clause.clauseId, 'breach')
+            } else if (pos < rule.ideal_position) {
+                map.set(clause.clauseId, 'warning')
+            } else {
+                map.set(clause.clauseId, 'compliant')
+            }
+        }
+        return map
     }, [playbookRules, clauses])
 
     // Auto-save dirty positions every 30 seconds
@@ -5088,6 +5121,17 @@ INSTRUCTIONS:
                                                                         {child.clarencePosition.toFixed(1)}
                                                                     </span>
                                                                 )}
+                                                                {/* Playbook compliance dot */}
+                                                                {(() => {
+                                                                    const s = clausePlaybookStatus.get(child.clauseId)
+                                                                    if (!s) return null
+                                                                    return (
+                                                                        <span
+                                                                            className={`w-2 h-2 rounded-full flex-shrink-0 ${s === 'breach' ? 'bg-red-500' : s === 'warning' ? 'bg-amber-400' : 'bg-emerald-500'}`}
+                                                                            title={s === 'breach' ? 'Playbook breach' : s === 'warning' ? 'Below playbook ideal' : 'Playbook compliant'}
+                                                                        />
+                                                                    )
+                                                                })()}
                                                                 {/* Agreement/Query status indicator - Dual party tracking */}
                                                                 {(() => {
                                                                     const status = getAgreementStatus(child.clauseId)
@@ -5241,6 +5285,17 @@ INSTRUCTIONS:
                                                             {parent.clarencePosition.toFixed(1)}
                                                         </span>
                                                     )}
+                                                    {/* Playbook compliance dot */}
+                                                    {(() => {
+                                                        const s = clausePlaybookStatus.get(parent.clauseId)
+                                                        if (!s) return null
+                                                        return (
+                                                            <span
+                                                                className={`w-2 h-2 rounded-full flex-shrink-0 ${s === 'breach' ? 'bg-red-500' : s === 'warning' ? 'bg-amber-400' : 'bg-emerald-500'}`}
+                                                                title={s === 'breach' ? 'Playbook breach' : s === 'warning' ? 'Below playbook ideal' : 'Playbook compliant'}
+                                                            />
+                                                        )
+                                                    })()}
                                                     {/* Agreement/Query status indicator - Dual party tracking */}
                                                     {(() => {
                                                         const status = getAgreementStatus(parent.clauseId)
