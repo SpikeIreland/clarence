@@ -33,7 +33,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
 
 // ============================================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -95,7 +94,6 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 
 export default function PublicRecipientPage() {
     const params = useParams()
-    const supabase = createClient()
     const token = params.token as string
     const contentRef = useRef<HTMLDivElement>(null)
 
@@ -137,87 +135,24 @@ export default function PublicRecipientPage() {
         }
 
         try {
-            // Find recipient by access token
-            const { data: recipientData, error: recipientError } = await supabase
-                .from('qc_recipients')
-                .select('*')
-                .eq('access_token', token)
-                .single()
+            const res = await fetch(`/api/qc/${token}`)
 
-            if (recipientError || !recipientData) {
-                console.error('Recipient not found:', recipientError)
+            if (res.status === 404) { setPageState('invalid'); return }
+            if (res.status === 410) { setPageState('expired'); return }
+            if (!res.ok) {
+                console.error('Failed to load contract data:', res.status)
                 setPageState('invalid')
                 return
             }
 
-            // Load contract from quick_contracts (no joins — sender info comes from recipientData)
-            const { data: contractData, error: contractError } = await supabase
-                .from('quick_contracts')
-                .select('*')
-                .eq('quick_contract_id', recipientData.quick_contract_id)
-                .single()
-
-            if (contractError || !contractData) {
-                console.error('Contract not found:', contractError)
-                setPageState('invalid')
-                return
-            }
+            const { recipient: recipientData, contract: contractData, clauseCount } = await res.json()
 
             // Check contract status
-            if (contractData.status === 'cancelled') {
-                setPageState('cancelled')
-                return
-            }
-
-            // Check if expired
+            if (contractData.status === 'cancelled') { setPageState('cancelled'); return }
             if (contractData.expires_at && new Date(contractData.expires_at) < new Date()) {
-                setPageState('expired')
-                return
+                setPageState('expired'); return
             }
 
-            // ================================================================
-            // CONTENT FALLBACK: If quick_contracts has no document_content,
-            // load from uploaded_contracts via source_contract_id.
-            // This is the normal case for QC pathway contracts where the
-            // document lives in uploaded_contracts.extracted_text
-            // ================================================================
-            let documentContent = contractData.document_content
-            let clauseCount = 0
-            const sourceContractId = contractData.source_contract_id || null
-
-            if (sourceContractId) {
-                // Try to load content from the source uploaded contract
-                if (!documentContent) {
-                    try {
-                        const { data: sourceContract } = await supabase
-                            .from('uploaded_contracts')
-                            .select('extracted_text, contract_name, description')
-                            .eq('contract_id', sourceContractId)
-                            .single()
-
-                        if (sourceContract?.extracted_text) {
-                            documentContent = sourceContract.extracted_text
-                        }
-                    } catch (err) {
-                        console.log('Could not load source contract content:', err)
-                    }
-                }
-
-                // Load clause count for display
-                try {
-                    const { count } = await supabase
-                        .from('uploaded_contract_clauses')
-                        .select('clause_id', { count: 'exact', head: true })
-                        .eq('contract_id', sourceContractId)
-                        .eq('is_header', false)
-
-                    clauseCount = count || 0
-                } catch (err) {
-                    console.log('Could not load clause count:', err)
-                }
-            }
-
-            // Build recipient info object
             const recipientInfo: RecipientData = {
                 recipientId: recipientData.recipient_id,
                 recipientName: recipientData.recipient_name,
@@ -231,14 +166,13 @@ export default function PublicRecipientPage() {
                 personalMessage: recipientData.personal_message
             }
 
-            // Build contract info object
             const contractInfo: ContractData = {
                 quickContractId: contractData.quick_contract_id,
                 contractName: contractData.contract_name,
                 contractType: contractData.contract_type,
                 description: contractData.description,
                 referenceNumber: contractData.reference_number,
-                documentContent: documentContent,
+                documentContent: contractData.document_content,
                 status: contractData.status,
                 expiresAt: contractData.expires_at,
                 allowRecipientComments: contractData.allow_recipient_comments ?? true,
@@ -246,11 +180,10 @@ export default function PublicRecipientPage() {
                 senderName: recipientData.initiator_name ?? null,
                 senderEmail: recipientData.initiator_email ?? null,
                 senderCompany: recipientData.initiator_company ?? null,
-                sourceContractId: sourceContractId,
-                clauseCount: clauseCount
+                sourceContractId: contractData.source_contract_id || null,
+                clauseCount,
             }
 
-            // Check if already responded
             if (['accepted', 'declined'].includes(recipientData.status)) {
                 setRecipient(recipientInfo)
                 setContract(contractInfo)
@@ -258,67 +191,18 @@ export default function PublicRecipientPage() {
                 return
             }
 
-            // Set data for normal view
             setRecipient(recipientInfo)
             setContract(contractInfo)
-
-            // Record view
-            await recordView(recipientData.recipient_id, recipientData.view_count || 0)
-
             setPageState('valid')
+
+            // Record view fire-and-forget (non-blocking)
+            fetch(`/api/qc/${token}`, { method: 'POST' }).catch(() => {})
 
         } catch (err) {
             console.error('Error loading contract:', err)
             setPageState('invalid')
         }
-    }, [token, supabase])
-
-    async function recordView(recipientId: string, currentViewCount: number) {
-        try {
-            const now = new Date().toISOString()
-            const updateData: Record<string, unknown> = {
-                view_count: currentViewCount + 1,
-                last_viewed_at: now,
-                updated_at: now
-            }
-
-            // Set first_viewed_at only if this is first view
-            if (currentViewCount === 0) {
-                updateData.first_viewed_at = now
-                updateData.status = 'viewed'
-            }
-
-            await supabase
-                .from('qc_recipients')
-                .update(updateData)
-                .eq('recipient_id', recipientId)
-
-            // Also update contract status if first view
-            if (currentViewCount === 0 && contract) {
-                await supabase
-                    .from('quick_contracts')
-                    .update({
-                        status: 'viewed',
-                        updated_at: now
-                    })
-                    .eq('quick_contract_id', contract.quickContractId)
-            }
-
-            // Log audit event
-            await supabase
-                .from('qc_audit_log')
-                .insert({
-                    quick_contract_id: contract?.quickContractId,
-                    recipient_id: recipientId,
-                    event_type: 'viewed',
-                    event_description: 'Recipient viewed the contract',
-                    event_data: { viewCount: currentViewCount + 1 }
-                })
-
-        } catch (err) {
-            console.error('Error recording view:', err)
-        }
-    }
+    }, [token])
 
     // ==========================================================================
     // SECTION 7: EFFECTS
@@ -368,50 +252,13 @@ export default function PublicRecipientPage() {
         setError(null)
 
         try {
-            const now = new Date().toISOString()
+            const res = await fetch(`/api/qc/${token}/respond`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ responseType, responseMessage, declineReason }),
+            })
 
-            // Update recipient
-            const { error: updateError } = await supabase
-                .from('qc_recipients')
-                .update({
-                    status: responseType,
-                    response_type: responseType,
-                    response_message: responseMessage || null,
-                    decline_reason: responseType === 'declined' ? declineReason || null : null,
-                    responded_at: now,
-                    updated_at: now
-                })
-                .eq('recipient_id', recipient.recipientId)
-
-            if (updateError) {
-                throw new Error('Failed to submit response')
-            }
-
-            // Update contract status
-            await supabase
-                .from('quick_contracts')
-                .update({
-                    status: responseType,
-                    completed_at: now,
-                    updated_at: now
-                })
-                .eq('quick_contract_id', contract.quickContractId)
-
-            // Log audit event
-            await supabase
-                .from('qc_audit_log')
-                .insert({
-                    quick_contract_id: contract.quickContractId,
-                    recipient_id: recipient.recipientId,
-                    event_type: responseType,
-                    event_description: responseType === 'accepted'
-                        ? 'Recipient accepted the contract'
-                        : 'Recipient declined the contract',
-                    event_data: {
-                        responseMessage: responseMessage || null,
-                        declineReason: responseType === 'declined' ? declineReason || null : null
-                    }
-                })
+            if (!res.ok) throw new Error('Failed to submit response')
 
             // Notify sender via N8N
             try {
@@ -458,20 +305,11 @@ export default function PublicRecipientPage() {
         if (!contract) return
 
         // Auto-accept in background (entering studio = engaging)
-        try {
-            if (recipient?.recipientId) {
-                await supabase
-                    .from('qc_recipients')
-                    .update({
-                        status: 'accepted',
-                        response_type: 'accepted',
-                        responded_at: new Date().toISOString()
-                    })
-                    .eq('recipient_id', recipient.recipientId)
-            }
-        } catch (err) {
-            console.warn('Auto-accept failed (non-blocking):', err)
-        }
+        fetch(`/api/qc/${token}/respond`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ responseType: 'accepted' }),
+        }).catch(err => console.warn('Auto-accept failed (non-blocking):', err))
 
         // Store QC redirect context in sessionStorage
         // The Provider Landing Page reads this after login
@@ -484,22 +322,10 @@ export default function PublicRecipientPage() {
         }
         sessionStorage.setItem('clarence_qc_redirect', JSON.stringify(qcRedirect))
 
-        // Log audit event (fire-and-forget — navigate regardless of outcome)
-        if (recipient) {
-            try {
-                await supabase
-                    .from('qc_audit_log')
-                    .insert({
-                        quick_contract_id: contract.quickContractId,
-                        recipient_id: recipient.recipientId,
-                        event_type: 'enter_studio_clicked',
-                        event_description: 'Recipient clicked Enter Studio — routing to authentication',
-                        event_data: { source: 'qc_token_page' }
-                    })
-            } catch {
-                // Audit log failure is non-blocking
-            }
-        }
+        // Audit log fire-and-forget
+        fetch(`/api/qc/${token}`, {
+            method: 'POST',
+        }).catch(() => {})
 
         // Hard nav to provider auth page
         window.location.href = '/provider'
@@ -515,19 +341,13 @@ export default function PublicRecipientPage() {
         setSubmittingComment(true)
 
         try {
-            // Insert comment
-            const { error: insertError } = await supabase
-                .from('qc_comments')
-                .insert({
-                    quick_contract_id: contract.quickContractId,
-                    recipient_id: recipient.recipientId,
-                    comment_text: comment.trim(),
-                    commenter_type: 'recipient'
-                })
+            const res = await fetch(`/api/qc/${token}/comment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ commentText: comment.trim(), quickContractId: contract.quickContractId }),
+            })
 
-            if (insertError) {
-                throw new Error('Failed to submit comment')
-            }
+            if (!res.ok) throw new Error('Failed to submit comment')
 
             // Notify sender
             try {
