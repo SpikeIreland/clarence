@@ -146,7 +146,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                         <div className="space-y-1.5">
                             <p><span className="inline-flex items-center px-1 py-px text-[8px] font-bold bg-emerald-500 text-white rounded mr-1 align-middle">Ideal</span> Company sweet spot — your target outcome</p>
                             <p><span className="inline-flex items-center px-1 py-px text-[8px] font-bold bg-red-500 text-white rounded mr-1 align-middle">Fallback</span> Company backstop — minimum acceptable</p>
-                            <p><span className="inline-block w-5 h-1.5 rounded bg-blue-100 border border-blue-200 align-middle mr-1"></span><b>Blue band</b> — Typical market range</p>
+                            <p><span className="inline-block w-5 h-1.5 rounded bg-amber-100 border border-amber-300 align-middle mr-1"></span><b>Amber band</b> — Typical market range</p>
                             <p><span className="inline-block border-l-2 border-dashed border-red-400 h-3 w-0 align-middle mr-2 ml-0.5"></span><b>Dashed red</b> — Escalation threshold</p>
                         </div>
                         {rangeCtx && (
@@ -163,7 +163,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 {/* Track */}
                 <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
                 {/* Market band */}
-                <div className="absolute top-[19px] h-2.5 bg-blue-100 rounded-full border border-blue-200"
+                <div className="absolute top-[19px] h-2.5 bg-amber-100 rounded-full border border-amber-300"
                     style={{
                         left: `${toPercent(rule.minimum_position)}%`,
                         width: `${toPercent(rule.maximum_position) - toPercent(rule.minimum_position)}%`
@@ -311,9 +311,9 @@ function PlaybookGlossaryModal({ onClose }: { onClose: () => void }) {
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
-                                <span className="flex-shrink-0 inline-block w-8 h-2.5 bg-blue-100 border border-blue-200 rounded mt-1"></span>
+                                <span className="flex-shrink-0 inline-block w-8 h-2.5 bg-amber-100 border border-amber-300 rounded mt-1"></span>
                                 <div>
-                                    <p className="text-xs font-semibold text-slate-700">Blue band — Typical market range</p>
+                                    <p className="text-xs font-semibold text-slate-700">Amber band — Typical market range</p>
                                     <p className="text-xs text-slate-500 mt-0.5">The range of outcomes seen across comparable contracts in the market (Min to Max). Used as context, not a hard constraint.</p>
                                 </div>
                             </div>
