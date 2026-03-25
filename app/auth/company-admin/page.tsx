@@ -2133,6 +2133,126 @@ function UserProfileModal({ person, onClose }: UserProfileModalProps) {
 }
 
 // ============================================================================
+// PERSON FORM MODAL (shared by Add and Edit)
+// ============================================================================
+
+interface PersonFormModalProps {
+    editingPerson?: Person         // Provided when editing; absent when adding
+    isCurrentUserAdmin: boolean
+    onAdd: (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => Promise<void>
+    onUpdate: (systemUserId: string, fullName: string, role: string, grantTraining: boolean, trainingType: string, trainingUserId?: string) => Promise<void>
+    onClose: () => void
+}
+
+function PersonFormModal({ editingPerson, isCurrentUserAdmin, onAdd, onUpdate, onClose }: PersonFormModalProps) {
+    const isEditing = !!editingPerson
+    const [email, setEmail] = useState(editingPerson?.email ?? '')
+    const [fullName, setFullName] = useState(editingPerson?.fullName ?? '')
+    const [role, setRole] = useState<ClarenceRole>(editingPerson?.role ?? 'negotiator')
+    const [grantTraining, setGrantTraining] = useState(!!(editingPerson?.trainingType))
+    const [trainingType, setTrainingType] = useState<'training_partner' | 'training_admin' | 'ai_enabled'>(editingPerson?.trainingType ?? 'training_partner')
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [formError, setFormError] = useState<string | null>(null)
+
+    const roleDef = CLARENCE_ROLES.find(r => r.value === role)
+    const availableRoles = isCurrentUserAdmin ? CLARENCE_ROLES : CLARENCE_ROLES.filter(r => r.value !== 'admin')
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setFormError(null)
+        setIsSubmitting(true)
+        try {
+            if (isEditing && editingPerson.systemUserId) {
+                await onUpdate(editingPerson.systemUserId, fullName, role, grantTraining, trainingType, editingPerson.trainingUserId)
+            } else {
+                await onAdd(email, fullName, role, grantTraining, trainingType)
+            }
+            onClose()
+        } catch (e) {
+            setFormError(e instanceof Error ? e.message : 'Failed')
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                    <h3 className="text-base font-semibold text-slate-800">{isEditing ? `Edit ${editingPerson.fullName}` : 'New Person'}</h3>
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                            {isEditing ? (
+                                <p className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">{email}</p>
+                            ) : (
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" />
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Jane Smith" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                        <select value={role} onChange={e => setRole(e.target.value as ClarenceRole)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            {availableRoles.map(r => (
+                                <option key={r.value} value={r.value}>{r.label}</option>
+                            ))}
+                        </select>
+                        {roleDef && (
+                            <div className={`mt-2 p-3 rounded-lg ${roleDef.bgColor}`}>
+                                <p className="text-xs font-medium text-slate-700">{roleDef.description}</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Access: {roleDef.accessSummary}
+                                    {roleDef.canApprove && <span className="ml-1 text-indigo-600">· Can approve contracts</span>}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-4">
+                        <label className="flex items-center gap-3 cursor-pointer select-none">
+                            <input type="checkbox" checked={grantTraining} onChange={e => setGrantTraining(e.target.checked)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded" />
+                            <span className="text-sm font-medium text-slate-700">Training Studio access</span>
+                        </label>
+                        {grantTraining && (
+                            <div className="mt-3 ml-7">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Access Type</label>
+                                <select value={trainingType} onChange={e => setTrainingType(e.target.value as 'training_partner' | 'training_admin' | 'ai_enabled')} className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                    <option value="training_partner">Training Partner</option>
+                                    <option value="training_admin">Training Admin</option>
+                                    <option value="ai_enabled">AI Enabled</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+
+                    {formError && <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{formError}</div>}
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Cancel</button>
+                        <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                            {isSubmitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Add & Send Invite'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
 // PEOPLE TAB
 // ============================================================================
 
@@ -2142,6 +2262,7 @@ interface PeopleTabProps {
     isLoading: boolean
     isCurrentUserAdmin: boolean
     onAddPerson: (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => Promise<void>
+    onUpdatePerson: (systemUserId: string, fullName: string, role: string, grantTraining: boolean, trainingType: string, trainingUserId?: string) => Promise<void>
     onRemoveSystemUser: (id: string) => Promise<void>
     onRemoveTrainingUser: (id: string) => Promise<void>
     onSendSystemInvite: (id: string, email: string) => Promise<void>
@@ -2150,41 +2271,19 @@ interface PeopleTabProps {
     onRefresh: () => void
 }
 
-function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin, onAddPerson, onRemoveSystemUser, onRemoveTrainingUser, onSendSystemInvite, onSendTrainingInvite, onUpdateRole, onRefresh }: PeopleTabProps) {
-    const [showAddForm, setShowAddForm] = useState(false)
-    const [newEmail, setNewEmail] = useState('')
-    const [newFullName, setNewFullName] = useState('')
-    const [newRole, setNewRole] = useState<ClarenceRole>('negotiator')
-    const [grantTraining, setGrantTraining] = useState(false)
-    const [newTrainingType, setNewTrainingType] = useState('training_partner')
-    const [isSubmitting, setIsSubmitting] = useState(false)
-    const [formError, setFormError] = useState<string | null>(null)
+function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin, onAddPerson, onUpdatePerson, onRemoveSystemUser, onRemoveTrainingUser, onSendSystemInvite, onSendTrainingInvite, onUpdateRole, onRefresh }: PeopleTabProps) {
+    const [showForm, setShowForm] = useState(false)
+    const [editingPerson, setEditingPerson] = useState<Person | undefined>(undefined)
     const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
 
     const people = mergePeople(companyUsers, trainingUsers)
     const allPeople = [DEMO_PERSON, ...people]
     const activeCount = people.filter(p => p.healthSignal === 'green').length
     const pendingCount = people.filter(p => p.healthSignal === 'amber').length
-    const selectedRoleDef = CLARENCE_ROLES.find(r => r.value === newRole)
-    const availableRoles = isCurrentUserAdmin ? CLARENCE_ROLES : CLARENCE_ROLES.filter(r => r.value !== 'admin')
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setFormError(null)
-        setIsSubmitting(true)
-        try {
-            await onAddPerson(newEmail, newFullName, newRole, grantTraining, newTrainingType)
-            setShowAddForm(false)
-            setNewEmail('')
-            setNewFullName('')
-            setNewRole('negotiator')
-            setGrantTraining(false)
-        } catch (e) {
-            setFormError(e instanceof Error ? e.message : 'Failed')
-        } finally {
-            setIsSubmitting(false)
-        }
-    }
+    const openAdd = () => { setEditingPerson(undefined); setShowForm(true) }
+    const openEdit = (person: Person) => { setEditingPerson(person); setShowForm(true) }
+    const closeForm = () => { setShowForm(false); setEditingPerson(undefined) }
 
     return (
         <div className="p-6">
@@ -2203,67 +2302,11 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                         Refresh
                     </button>
-                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-                        {showAddForm ? 'Cancel' : '+ Add Person'}
+                    <button onClick={openAdd} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                        + Add Person
                     </button>
                 </div>
             </div>
-
-            {/* Add Person Form */}
-            {showAddForm && (
-                <form onSubmit={handleSubmit} className="mb-6 p-5 bg-slate-50 rounded-xl border border-slate-200">
-                    <h4 className="text-sm font-semibold text-slate-700 mb-4">New Person</h4>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                            <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                            <input type="text" value={newFullName} onChange={e => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Jane Smith" />
-                        </div>
-                        <div className="col-span-2">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                            <select value={newRole} onChange={e => setNewRole(e.target.value as ClarenceRole)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                                {availableRoles.map(r => (
-                                    <option key={r.value} value={r.value}>{r.label}</option>
-                                ))}
-                            </select>
-                            {selectedRoleDef && (
-                                <div className={`mt-2 p-3 rounded-lg ${selectedRoleDef.bgColor}`}>
-                                    <p className="text-xs font-medium text-slate-700">{selectedRoleDef.description}</p>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        Access: {selectedRoleDef.accessSummary}
-                                        {selectedRoleDef.canApprove && <span className="ml-1 text-indigo-600">· Can approve contracts</span>}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="border-t border-slate-200 pt-4">
-                        <label className="flex items-center gap-3 cursor-pointer select-none">
-                            <input type="checkbox" checked={grantTraining} onChange={e => setGrantTraining(e.target.checked)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded" />
-                            <span className="text-sm font-medium text-slate-700">Grant Training Studio access</span>
-                        </label>
-                        {grantTraining && (
-                            <div className="mt-3 ml-7">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Training Access Type</label>
-                                <select value={newTrainingType} onChange={e => setNewTrainingType(e.target.value)} className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                                    <option value="training_partner">Training Partner</option>
-                                    <option value="training_admin">Training Admin</option>
-                                    <option value="ai_enabled">AI Enabled</option>
-                                </select>
-                            </div>
-                        )}
-                    </div>
-                    {formError && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{formError}</div>}
-                    <div className="mt-4 flex justify-end">
-                        <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                            {isSubmitting ? 'Adding...' : 'Add & Send Invite'}
-                        </button>
-                    </div>
-                </form>
-            )}
 
             {/* Roster */}
             {isLoading ? (
@@ -2276,7 +2319,7 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
                         <div className="w-36 flex-shrink-0">Role</div>
                         <div className="w-28 flex-shrink-0">Training</div>
                         <div className="w-20 flex-shrink-0 text-center">Sessions</div>
-                        <div className="w-24 flex-shrink-0 text-right">Actions</div>
+                        <div className="w-32 flex-shrink-0 text-right">Actions</div>
                     </div>
 
                     {allPeople.length === 0 ? (
@@ -2326,20 +2369,23 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
                                         : <span className="text-xs text-slate-300">—</span>
                                     }
                                 </div>
-                                <div className="w-24 flex-shrink-0 flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                <div className="w-32 flex-shrink-0 flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
                                     {!person.isDemo && (
                                         <>
+                                            {person.systemUserId && (
+                                                <button onClick={() => openEdit(person)} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Edit</button>
+                                            )}
                                             {person.systemStatus === 'invited' && person.systemUserId && (
-                                                <button onClick={() => onSendSystemInvite(person.systemUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend</button>
+                                                <button onClick={() => onSendSystemInvite(person.systemUserId!, person.email)} className="text-xs text-slate-500 hover:text-slate-700">Resend</button>
                                             )}
                                             {person.trainingUserId && !person.trainingInvitationSent && (
-                                                <button onClick={() => onSendTrainingInvite(person.trainingUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Invite</button>
+                                                <button onClick={() => onSendTrainingInvite(person.trainingUserId!, person.email)} className="text-xs text-slate-500 hover:text-slate-700">Invite</button>
                                             )}
-                                            {person.systemUserId && (
-                                                <button onClick={() => onRemoveSystemUser(person.systemUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                                            )}
-                                            {person.trainingUserId && !person.systemUserId && (
-                                                <button onClick={() => onRemoveTrainingUser(person.trainingUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                                            {(person.systemUserId || person.trainingUserId) && (
+                                                <button
+                                                    onClick={() => person.systemUserId ? onRemoveSystemUser(person.systemUserId) : onRemoveTrainingUser(person.trainingUserId!)}
+                                                    className="text-xs text-red-500 hover:text-red-700"
+                                                >Remove</button>
                                             )}
                                         </>
                                     )}
@@ -2348,6 +2394,16 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
                         )
                     })}
                 </div>
+            )}
+
+            {showForm && (
+                <PersonFormModal
+                    editingPerson={editingPerson}
+                    isCurrentUserAdmin={isCurrentUserAdmin}
+                    onAdd={onAddPerson}
+                    onUpdate={onUpdatePerson}
+                    onClose={closeForm}
+                />
             )}
 
             {selectedPerson && (
@@ -2952,6 +3008,27 @@ function CompanyAdminContent() {
         await loadCompanyUsers(userInfo.companyId)
     }
 
+    const handleUpdatePerson = async (systemUserId: string, fullName: string, role: string, grantTraining: boolean, trainingType: string, trainingUserId?: string) => {
+        if (!userInfo?.companyId) return
+        const supabase = createClient()
+        const { error } = await supabase.from('company_users').update({ full_name: fullName, role }).eq('company_user_id', systemUserId)
+        if (error) throw new Error(error.message)
+        if (grantTraining) {
+            const { data: cu } = await supabase.from('company_users').select('email').eq('company_user_id', systemUserId).single()
+            if (cu?.email) {
+                if (trainingUserId) {
+                    await supabase.from('approved_training_users').update({ approval_type: trainingType }).eq('id', trainingUserId)
+                } else {
+                    const { error: trainError } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: cu.email, user_full_name: fullName, approval_type: trainingType, status: 'active', approved_by_email: userInfo.email, approved_at: new Date().toISOString() })
+                    if (trainError && trainError.code !== '23505') throw new Error(trainError.message)
+                }
+            }
+        } else if (trainingUserId) {
+            await supabase.from('approved_training_users').delete().eq('id', trainingUserId)
+        }
+        await Promise.all([loadCompanyUsers(userInfo.companyId), loadTrainingUsers(userInfo.companyId)])
+    }
+
     const handleSendCompanyInvite = async (id: string, email: string) => {
         try { await fetch(`${API_BASE}/send-user-invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, company_name: companyName, inviter_name: `${userInfo?.firstName || ''} ${userInfo?.lastName || ''}`.trim() || userInfo?.email, inviter_email: userInfo?.email, invite_type: 'platform' }) }) } catch (e) { console.log('Invite error:', e) }
         if (id && userInfo?.companyId) { const supabase = createClient(); await supabase.from('company_users').update({ invitation_sent: true, invitation_sent_at: new Date().toISOString() }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
@@ -3085,7 +3162,7 @@ function CompanyAdminContent() {
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                                 {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} playbooks={playbooks} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
-                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={userInfo?.role === 'admin'} onAddPerson={handleAddPerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
+                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={userInfo?.role === 'admin'} onAddPerson={handleAddPerson} onUpdatePerson={handleUpdatePerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
                                 {activeTab === 'audit' && <AuditLogTab />}
                             </div>
                         )}
