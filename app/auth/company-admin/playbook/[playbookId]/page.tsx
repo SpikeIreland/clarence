@@ -62,7 +62,8 @@ function EditablePositionBar({ rule, onPositionChange }: {
     rule: PlaybookRule
     onPositionChange: (field: string, value: number) => void
 }) {
-    const toPercent = (val: number) => (((val ?? 5) - 1) / 9) * 100
+    const safePos = (val: number | null | undefined): number => (Number.isFinite(val) ? val as number : 5)
+    const toPercent = (val: number | null | undefined) => ((safePos(val) - 1) / 9) * 100
     const rangeCtx = getEffectiveRangeContext(rule)
     const label = (pos: number) => translateRulePosition(rule, pos)
 
@@ -108,15 +109,6 @@ function EditablePositionBar({ rule, onPositionChange }: {
         return nearest.label
     }
 
-    const handleBarClick = (e: React.MouseEvent<HTMLDivElement>, field: string) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const pct = x / rect.width
-        const pos = Math.round(pct * 9 + 1)
-        const clamped = Math.max(1, Math.min(10, pos))
-        onPositionChange(field, clamped)
-    }
-
     return (
         <div className="mt-2 mb-1">
             {/* Unit badge + info icon */}
@@ -159,7 +151,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
             </div>
 
             {/* Position bar */}
-            <div className="relative h-12 w-full cursor-pointer" onClick={(e) => handleBarClick(e, 'ideal_position')}>
+            <div className="relative h-12 w-full cursor-default">
                 {/* Track */}
                 <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
                 {/* Market band */}
@@ -176,7 +168,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 <div className="absolute top-0" style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
                     <div className="flex flex-col items-center">
                         <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                            Ideal · {rule.ideal_position ?? 5}
+                            Ideal · {safePos(rule.ideal_position)}
                         </span>
                         <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
                     </div>
@@ -186,7 +178,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     <div className="flex flex-col items-center">
                         <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
                         <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                            Fallback · {rule.fallback_position ?? 5}
+                            Fallback · {safePos(rule.fallback_position)}
                         </span>
                     </div>
                 </div>
@@ -218,7 +210,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                             <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
                                 <span>{p.label}:</span>
                                 <select
-                                    value={p.value}
+                                    value={safePos(p.value)}
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
                                     className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
                                 >
@@ -241,7 +233,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                             <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
                                 <span>{p.label}:</span>
                                 <select
-                                    value={p.value}
+                                    value={safePos(p.value)}
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
                                     className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
                                 >
