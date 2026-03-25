@@ -1388,7 +1388,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
             // This ensures the user arrives at a fully-loaded clause list rather than a blank page.
             setUploadProgress('Analysing contract… this usually takes 20–30 seconds')
 
-            const MAX_POLLS = 30 // 30 × 3s = 90s max
+            const MAX_POLLS = 80 // 80 × 3s = 4 minutes max
             let polls = 0
             const pollInterval = setInterval(async () => {
                 polls++
@@ -1410,7 +1410,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                         setIsUploading(false)
                     } else if (polls >= MAX_POLLS) {
                         clearInterval(pollInterval)
-                        setUploadError('Parsing timed out after 90 seconds — please try again')
+                        setUploadError('Parsing timed out after 4 minutes — please try again')
                         setIsUploading(false)
                     } else {
                         setUploadProgress(`Analysing contract… ${polls * 3}s elapsed`)
