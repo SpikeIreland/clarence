@@ -1383,74 +1383,12 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                 upload_source: 'company_admin'
             })
 
-            setIsProcessing(true)
-            setUploadProgress('Processing clauses...')
-
-            // --- Observability: Log polling started ---
-            eventLogger.started('template_upload', 'parse_polling_started', {
-                contractId,
-                upload_source: 'company_admin'
-            })
-
-            const supabase = createClient()
-            let attempts = 0
-            const maxAttempts = 30
-
-            while (attempts < maxAttempts) {
-                await new Promise(r => setTimeout(r, 2000))
-                const { data } = await supabase
-                    .from('uploaded_contract_clauses')
-                    .select('clause_id')
-                    .eq('contract_id', contractId)
-
-                const clauseCount = data?.length || 0
-                setUploadProgress(`Processing clauses... ${clauseCount} found`)
-
-                if (clauseCount >= 3) {
-                    // --- Observability: Log parse completed (success) ---
-                    eventLogger.completed('template_upload', 'parse_completed', {
-                        clauseCount,
-                        contractId,
-                        upload_source: 'company_admin'
-                    })
-                    break
-                }
-                attempts++
-            }
-
-            if (attempts >= maxAttempts) {
-                // --- Observability: Log parse completed (timeout) ---
-                eventLogger.failed('template_upload', 'parse_completed',
-                    `Polling timed out after ${maxAttempts} attempts`, 'POLLING_TIMEOUT')
-            }
-
-            // Wait for the template record to be created by the n8n workflow
-            setUploadProgress('Finalising template...')
-            let templateId: string | null = null
-            let templateAttempts = 0
-            while (!templateId && templateAttempts < 20) {
-                await new Promise(r => setTimeout(r, 2000))
-                const { data: tmpl } = await supabase
-                    .from('contract_templates')
-                    .select('template_id')
-                    .eq('source_contract_id', contractId)
-                    .maybeSingle()
-                if (tmpl?.template_id) {
-                    templateId = tmpl.template_id
-                    break
-                }
-                templateAttempts++
-            }
-
-            // Link playbook if selected
-            if (templateId && uploadLinkedPlaybookId) {
-                await supabase
-                    .from('contract_templates')
-                    .update({ linked_playbook_id: uploadLinkedPlaybookId })
-                    .eq('template_id', templateId)
-            }
-
-            router.push('/auth/company-admin?tab=templates')
+            // Redirect to studio immediately — n8n processes the template in the background
+            // and the studio shows real-time clause parsing as they arrive.
+            // Pass linked_playbook_id as URL param so the studio loads playbook rules.
+            const studioUrl = `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
+                + (uploadLinkedPlaybookId ? `&linked_playbook_id=${uploadLinkedPlaybookId}` : '')
+            router.push(studioUrl)
 
         } catch (e) {
             console.error('Upload error:', e)
