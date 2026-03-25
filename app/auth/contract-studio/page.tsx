@@ -836,8 +836,9 @@ async function callClarenceAI(
 
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}))
-            console.error('CLARENCE AI error response:', errorBody)
-            throw new Error(`CLARENCE AI request failed: ${response.status} — ${errorBody.debug || errorBody.error || 'unknown'}`)
+            const reason = errorBody._debug?.errorReason || errorBody.debug || errorBody.error || 'unknown'
+            console.error('CLARENCE AI error response:', errorBody, '| errorReason:', reason)
+            throw new Error(`CLARENCE AI request failed: ${response.status} — ${reason}`)
         }
 
         const data = await response.json()
