@@ -217,9 +217,40 @@ export default function ContractLibraryPage() {
         }
 
         const authData = JSON.parse(auth)
-        setUserInfo(authData.userInfo)
-        return authData.userInfo
-    }, [router])
+        let info: UserInfo = authData.userInfo
+
+        // If companyId is missing from localStorage (stale session), fetch it live
+        if (!info.companyId) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                    let companyId = user.user_metadata?.company_id
+                    if (!companyId) {
+                        const { data } = await supabase
+                            .from('company_users')
+                            .select('company_id')
+                            .eq('email', user.email)
+                            .eq('status', 'active')
+                            .single()
+                        companyId = data?.company_id
+                    }
+                    if (companyId) {
+                        info = { ...info, companyId }
+                        // Patch localStorage so future loads don't need this fallback
+                        localStorage.setItem('clarence_auth', JSON.stringify({
+                            ...authData,
+                            userInfo: { ...authData.userInfo, companyId }
+                        }))
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to fetch companyId from auth:', e)
+            }
+        }
+
+        setUserInfo(info)
+        return info
+    }, [router, supabase])
 
     const loadTemplates = useCallback(async (user: UserInfo) => {
         try {
