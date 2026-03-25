@@ -647,7 +647,7 @@ export async function buildSessionContext(
                 currentPhase,
                 phaseName: PHASE_NAMES[currentPhase] || 'Active Negotiation',
                 dealValue: (cr?.deal_value as number) || 0,
-                currency: (cr?.currency as string) || 'GBP',
+                currency: 'GBP',
                 industry: (cr?.industry as string) || 'Not specified',
                 status: (sessionRow.status as string) || 'active',
                 sessionNumber: (sessionRow.session_number as string) || sessionId.substring(0, 8),
