@@ -413,6 +413,8 @@ function QuickContractStudioContent() {
 
     // Playbook rule overlays for template mode: clauseName (lowercase) → rule positions
     const [playbookRuleOverlays, setPlaybookRuleOverlays] = useState<Map<string, { ideal: number; min: number; max: number }>>(new Map())
+    // Clause name → full PlaybookRule, populated from mapping table when editTemplateId is set
+    const [mappedClauseToRule, setMappedClauseToRule] = useState<Map<string, PlaybookRule>>(new Map())
     useEffect(() => {
         if (!editTemplateId || !linkedPlaybookId) return
         const supabase = createClient()
@@ -428,11 +430,12 @@ function QuickContractStudioContent() {
             const ruleIds = mappings.map(m => m.playbook_rule_id)
             const [{ data: tClauses }, { data: rules }] = await Promise.all([
                 supabase.from('template_clauses').select('template_clause_id, clause_name').in('template_clause_id', clauseIds),
-                supabase.from('playbook_rules').select('rule_id, ideal_position, minimum_position, maximum_position').in('rule_id', ruleIds),
+                supabase.from('playbook_rules').select('rule_id, ideal_position, minimum_position, maximum_position, fallback_position, clause_name, category, is_deal_breaker, is_non_negotiable, importance_level, rationale, negotiation_tips, range_context, requires_approval_below, escalation_trigger, escalation_contact, escalation_contact_email, source_quote, quality_flags, playbook_id, clause_code').in('rule_id', ruleIds),
             ])
             const ruleMap = Object.fromEntries((rules || []).map(r => [r.rule_id, r]))
             const clauseNameMap = Object.fromEntries((tClauses || []).map(c => [c.template_clause_id, c.clause_name?.toLowerCase()]))
             const overlays = new Map<string, { ideal: number; min: number; max: number }>()
+            const nameToRule = new Map<string, PlaybookRule>()
             for (const m of mappings) {
                 const name = clauseNameMap[m.template_clause_id]
                 const rule = ruleMap[m.playbook_rule_id]
@@ -442,9 +445,11 @@ function QuickContractStudioContent() {
                         min: rule.minimum_position ?? rule.ideal_position,
                         max: rule.maximum_position ?? rule.ideal_position,
                     })
+                    nameToRule.set(name, rule as PlaybookRule)
                 }
             }
             setPlaybookRuleOverlays(overlays)
+            setMappedClauseToRule(nameToRule)
         }
         loadRuleOverlays()
     }, [editTemplateId, linkedPlaybookId])
@@ -3467,13 +3472,36 @@ INSTRUCTIONS:
         return calculatePlaybookCompliance(playbookRules, toComplianceClauses(clauses))
     }, [playbookRules, clauses])
 
+    // Rule lookup: mapping table → exact name → name containment → category fallback
+    const findRuleForClause = useCallback((clauseName: string | undefined, category: string | undefined): PlaybookRule | undefined => {
+        if (playbookRules.length === 0) return undefined
+        const nameLower = clauseName?.toLowerCase()?.trim() ?? ''
+        // 1. Mapping table (most precise — confirmed by admin)
+        if (nameLower && mappedClauseToRule.has(nameLower)) return mappedClauseToRule.get(nameLower)
+        // 2. Exact clause name match
+        if (nameLower) {
+            const exact = playbookRules.find(r => r.clause_name.toLowerCase().trim() === nameLower)
+            if (exact) return exact
+        }
+        // 3. Containment match (rule name ≥ 4 chars to avoid noise)
+        if (nameLower.length >= 4) {
+            const containment = playbookRules.find(r => {
+                const rn = r.clause_name.toLowerCase().trim()
+                return rn.length >= 4 && (nameLower.includes(rn) || rn.includes(nameLower))
+            })
+            if (containment) return containment
+        }
+        // 4. Category fallback
+        return playbookRules.find(r => normaliseCategory(r.category) === normaliseCategory(category ?? ''))
+    }, [playbookRules, mappedClauseToRule])
+
     // Per-clause playbook compliance status for sidebar dots
     const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach'>>(() => {
         const map = new Map<string, 'compliant' | 'warning' | 'breach'>()
         if (playbookRules.length === 0) return map
         for (const clause of clauses) {
             if (!clause.clarenceCertified || clause.clarencePosition == null) continue
-            const rule = playbookRules.find(r => normaliseCategory(r.category) === normaliseCategory(clause.category))
+            const rule = findRuleForClause(clause.clauseName, clause.category)
             if (!rule) continue
             const pos = clause.clarencePosition
             if (pos < rule.fallback_position) {
@@ -3485,7 +3513,7 @@ INSTRUCTIONS:
             }
         }
         return map
-    }, [playbookRules, clauses])
+    }, [findRuleForClause, clauses])
 
     // Auto-save dirty positions every 30 seconds
     useEffect(() => {
@@ -6608,8 +6636,7 @@ INSTRUCTIONS:
 
                                 {/* ==================== PLAYBOOK TAB ==================== */}
                                 {activeTab === 'playbook' && (() => {
-                                    const clauseCat = normaliseCategory(selectedClause.category)
-                                    const matchedRule = playbookRules.find(r => normaliseCategory(r.category) === clauseCat)
+                                    const matchedRule = findRuleForClause(selectedClause.clauseName, selectedClause.category)
                                     const clausePos = selectedClause.clarencePosition
 
                                     if (playbookRules.length === 0) {
