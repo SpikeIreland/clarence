@@ -253,11 +253,12 @@ export default function ContractLibraryPage() {
             const systemTemplates = allTemplates.filter(t => t.isSystem)
             const companyTemplates = allTemplates.filter(t =>
                 !t.isSystem &&
-                t.companyId === user.companyId
+                !t.sourceSessionId &&
+                (t.companyId === user.companyId || t.companyId == null)
             )
             const userTemplates = allTemplates.filter(t =>
                 !t.isSystem &&
-                !t.isPublic &&
+                !!t.sourceSessionId &&
                 t.createdByUserId === user.userId
             )
 

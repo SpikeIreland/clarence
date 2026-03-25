@@ -114,6 +114,27 @@ const CONTRACT_TYPE_ICONS: Record<string, string> = {
     'employment': '👔', 'it_services': '💻', 'consulting': '💼', 'custom': '📄',
 }
 
+// Maps local option values → canonical document_type_key (contract_type_roles.contract_type_key)
+const DOCUMENT_TYPE_KEY_MAP: Record<string, string> = {
+    'nda':          'nda_mutual',
+    'bpo':          'bpo_agreement',
+    'saas':         'saas_agreement',
+    'msa':          'service_agreement',
+    'employment':   'employment_contract',
+    'it_services':  'it_outsourcing',
+    'consulting':   'consultancy_agreement',
+    'custom':       'service_agreement',
+    // pass-through for values already in canonical form
+    'nda_mutual':           'nda_mutual',
+    'nda_one_way':          'nda_one_way',
+    'bpo_agreement':        'bpo_agreement',
+    'saas_agreement':       'saas_agreement',
+    'service_agreement':    'service_agreement',
+    'employment_contract':  'employment_contract',
+    'it_outsourcing':       'it_outsourcing',
+    'consultancy_agreement':'consultancy_agreement',
+}
+
 // ============================================================================
 // SECTION 3: LOADING COMPONENT
 // ============================================================================
@@ -1086,7 +1107,8 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
     }
 
     const fetchPlaybookRulesForType = async (contractType: string): Promise<PlaybookRule[]> => {
-        if (playbookRulesCache[contractType]) return playbookRulesCache[contractType]
+        const canonicalType = DOCUMENT_TYPE_KEY_MAP[contractType] || contractType
+        if (playbookRulesCache[canonicalType]) return playbookRulesCache[canonicalType]
         if (!userInfo?.companyId) return []
         try {
             const supabase = createClient()
@@ -1095,7 +1117,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                 .select('playbook_id')
                 .eq('company_id', userInfo.companyId)
                 .eq('is_active', true)
-                .eq('contract_type_key', contractType)
+                .eq('contract_type_key', canonicalType)
                 .limit(1)
                 .maybeSingle()
             if (!pb?.playbook_id) return []
@@ -1111,7 +1133,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                     ? (() => { try { return JSON.parse(r.range_context as unknown as string) } catch { return null } })()
                     : r.range_context,
             }))
-            setPlaybookRulesCache(prev => ({ ...prev, [contractType]: loadedRules }))
+            setPlaybookRulesCache(prev => ({ ...prev, [canonicalType]: loadedRules }))
             return loadedRules
         } catch { return [] }
     }
@@ -1329,7 +1351,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                     file_type: selectedFile.type || 'application/octet-stream',
                     file_size: selectedFile.size,
                     contract_type: contractType,
-                    contract_type_key: contractType,
+                    contract_type_key: DOCUMENT_TYPE_KEY_MAP[contractType] || contractType,
                     template_name: templateName,
                     create_as_template: true,
                     is_company_template: true
