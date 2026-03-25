@@ -223,7 +223,6 @@ function TrainingStudioPage() {
                 .from('contract_templates')
                 .select('template_id, template_name, contract_type, clause_count, description, is_system, is_public, company_id, created_by_user_id')
                 .eq('is_active', true)
-                .eq('is_system', false)
                 .order('template_name', { ascending: true })
 
             if (error || !data) return []
@@ -240,8 +239,9 @@ function TrainingStudioPage() {
                 createdByUserId: (t.created_by_user_id as string) || null,
             }))
 
-            // Filter by ownership: company templates (public + same company) + user's own templates
+            // Filter: system templates (visible to all) + company templates + user's own
             const owned = allTemplates.filter(t =>
+                t.isSystem ||
                 (t.isPublic && companyId && t.companyId === companyId) ||
                 (userId && t.createdByUserId === userId)
             )
@@ -800,7 +800,7 @@ function TrainingStudioPage() {
                         agentId: agentConfig.agentId || null,
                         sessionId: sessionResult.sessionId,
                         leverageResult: agentConfig.leverageResult || null,
-                        difficulty: agentConfig.personalityTraits?.style || 'balanced',
+                        difficulty: selectedDifficulty || 'intermediate',
                     }),
                 })
 
@@ -850,7 +850,7 @@ function TrainingStudioPage() {
         if (actionId === 'back') {
             router.push('/auth/training')
         }
-    }, [scenario, agentConfig, userInfo, selectedTemplateId, selectedRole, selectedPath, supabase, router, startConversation, companyPlaybooks, addMessage])
+    }, [scenario, agentConfig, userInfo, selectedTemplateId, selectedRole, selectedPath, selectedDifficulty, supabase, router, startConversation, companyPlaybooks, addMessage])
 
     // ========================================================================
     // SECTION 10B: COLLEAGUE SESSION CREATION
