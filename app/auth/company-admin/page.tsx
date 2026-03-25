@@ -2682,7 +2682,6 @@ function CompanyAdminContent() {
                 .from('contract_templates')
                 .select('*')
                 .eq('company_id', companyId)
-                .eq('is_public', true)
                 .eq('is_system', false)
                 .order('created_at', { ascending: false })
 
