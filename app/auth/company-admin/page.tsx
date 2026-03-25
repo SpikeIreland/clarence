@@ -1303,7 +1303,6 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
         setIsUploading(true)
         setUploadError(null)
         setUploadProgress('Extracting text from document...')
-        const supabase = createClient()
 
         try {
             // --- Observability: Log text extraction started ---
@@ -1384,41 +1383,11 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                 upload_source: 'company_admin'
             })
 
-            // Poll until n8n finishes parsing (status = 'ready'), then redirect to studio.
-            // This ensures the user arrives at a fully-loaded clause list rather than a blank page.
-            setUploadProgress('Analysing contract… this usually takes 20–30 seconds')
-
-            const MAX_POLLS = 80 // 80 × 3s = 4 minutes max
-            let polls = 0
-            const pollInterval = setInterval(async () => {
-                polls++
-                try {
-                    const { data } = await supabase
-                        .from('uploaded_contracts')
-                        .select('status, processing_error')
-                        .eq('contract_id', contractId)
-                        .single()
-
-                    if (data?.status === 'ready') {
-                        clearInterval(pollInterval)
-                        const studioUrl = `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
-                            + (uploadLinkedPlaybookId ? `&linked_playbook_id=${uploadLinkedPlaybookId}` : '')
-                        router.push(studioUrl)
-                    } else if (data?.status === 'failed') {
-                        clearInterval(pollInterval)
-                        setUploadError(data.processing_error || 'Contract parsing failed — please try again')
-                        setIsUploading(false)
-                    } else if (polls >= MAX_POLLS) {
-                        clearInterval(pollInterval)
-                        setUploadError('Parsing timed out after 4 minutes — please try again')
-                        setIsUploading(false)
-                    } else {
-                        setUploadProgress(`Analysing contract… ${polls * 3}s elapsed`)
-                    }
-                } catch (pollErr) {
-                    console.warn('Poll error (will retry):', pollErr)
-                }
-            }, 3000)
+            // Redirect immediately — the studio handles the "still parsing" state
+            // with a spinner and polls until clauses arrive.
+            const studioUrl = `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
+                + (uploadLinkedPlaybookId ? `&linked_playbook_id=${uploadLinkedPlaybookId}` : '')
+            router.push(studioUrl)
 
         } catch (e) {
             console.error('Upload error:', e)
