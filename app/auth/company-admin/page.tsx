@@ -1857,9 +1857,9 @@ const CLARENCE_ROLES: Array<{
     { value: 'admin', label: 'Admin', color: 'text-purple-700', bgColor: 'bg-purple-100',
       description: 'Full platform control — manage users, templates, playbooks, and all company settings.',
       canApprove: true, accessSummary: 'All access + user management' },
-    { value: 'template_manager', label: 'Template Manager', color: 'text-blue-700', bgColor: 'bg-blue-100',
-      description: 'Uploads, maintains and activates contract templates and playbooks for the organisation.',
-      canApprove: true, accessSummary: 'Templates, playbooks, contracts' },
+    { value: 'template_manager', label: 'Legal Operations Manager', color: 'text-blue-700', bgColor: 'bg-blue-100',
+      description: 'Oversees contract and playbook governance — uploads, maintains and activates templates and playbooks across the organisation.',
+      canApprove: true, accessSummary: 'Templates, playbooks, contracts + approval authority' },
     { value: 'hr_manager', label: 'HR Manager', color: 'text-teal-700', bgColor: 'bg-teal-100',
       description: 'Manages user onboarding, training access and team compliance visibility.',
       canApprove: false, accessSummary: 'People, training, compliance reports' },
@@ -1900,6 +1900,17 @@ const DEMO_STATS = {
     ],
 }
 
+type TrainingType = 'training_partner' | 'training_admin' | 'ai_enabled'
+
+const TRAINING_OPTIONS: Array<{ value: TrainingType; label: string; description: string }> = [
+    { value: 'training_partner', label: 'Training Partner',
+      description: 'Can join training sessions as a participant and access shared learning materials.' },
+    { value: 'training_admin', label: 'Training Admin',
+      description: 'Can create training sessions and invite other participants.' },
+    { value: 'ai_enabled', label: 'AI Enabled',
+      description: 'Can use AI-assisted features including AI roleplay scenarios and automated feedback.' },
+]
+
 interface Person {
     email: string
     fullName: string
@@ -1910,9 +1921,9 @@ interface Person {
     systemStatus?: 'invited' | 'active' | 'suspended' | 'removed'
     systemInvitedAt?: string
     lastActiveAt?: string
-    // From approved_training_users
-    trainingUserId?: string
-    trainingType?: 'training_partner' | 'training_admin' | 'ai_enabled'
+    // From approved_training_users (one row per type — multiple allowed)
+    trainingTypes: TrainingType[]
+    trainingIds: Partial<Record<TrainingType, string>>   // type → DB row ID
     trainingStatus?: 'pending' | 'active' | 'suspended' | 'expired'
     sessionsCompleted?: number
     trainingInvitationSent?: boolean
@@ -1928,6 +1939,8 @@ const DEMO_PERSON: Person = {
     systemStatus: 'active',
     healthSignal: 'green',
     sessionsCompleted: 47,
+    trainingTypes: [],
+    trainingIds: {},
     isDemo: true,
 }
 
@@ -1949,16 +1962,18 @@ function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[])
             systemUserId: u.id, userId: u.userId,
             role: u.role, systemStatus: u.status,
             systemInvitedAt: u.invitedAt, lastActiveAt: u.lastActiveAt,
+            trainingTypes: [], trainingIds: {},
         }
         map.set(key, { ...base, healthSignal: deriveHealthSignal(base) })
     })
     trainingUsers.forEach(u => {
         if (!u.email) return
         const key = u.email.toLowerCase()
+        const type = u.approvalType as TrainingType
         const existing = map.get(key)
         if (existing) {
-            existing.trainingUserId = u.id
-            existing.trainingType = u.approvalType
+            if (!existing.trainingTypes.includes(type)) existing.trainingTypes.push(type)
+            existing.trainingIds[type] = u.id
             existing.trainingStatus = u.status
             existing.sessionsCompleted = u.sessionsCompleted
             existing.trainingInvitationSent = u.invitationSent
@@ -1966,7 +1981,7 @@ function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[])
         } else {
             const base: Omit<Person, 'healthSignal'> = {
                 email: u.email, fullName: u.fullName,
-                trainingUserId: u.id, trainingType: u.approvalType,
+                trainingTypes: [type], trainingIds: { [type]: u.id },
                 trainingStatus: u.status, sessionsCompleted: u.sessionsCompleted,
                 trainingInvitationSent: u.invitationSent,
             }
@@ -2137,10 +2152,10 @@ function UserProfileModal({ person, onClose }: UserProfileModalProps) {
 // ============================================================================
 
 interface PersonFormModalProps {
-    editingPerson?: Person         // Provided when editing; absent when adding
+    editingPerson?: Person
     isCurrentUserAdmin: boolean
-    onAdd: (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => Promise<void>
-    onUpdate: (systemUserId: string, fullName: string, role: string, grantTraining: boolean, trainingType: string, trainingUserId?: string) => Promise<void>
+    onAdd: (email: string, fullName: string, role: string, trainingTypes: TrainingType[]) => Promise<void>
+    onUpdate: (systemUserId: string, fullName: string, role: string, trainingTypes: TrainingType[], trainingIds: Partial<Record<TrainingType, string>>) => Promise<void>
     onClose: () => void
 }
 
@@ -2149,23 +2164,36 @@ function PersonFormModal({ editingPerson, isCurrentUserAdmin, onAdd, onUpdate, o
     const [email, setEmail] = useState(editingPerson?.email ?? '')
     const [fullName, setFullName] = useState(editingPerson?.fullName ?? '')
     const [role, setRole] = useState<ClarenceRole>(editingPerson?.role ?? 'negotiator')
-    const [grantTraining, setGrantTraining] = useState(!!(editingPerson?.trainingType))
-    const [trainingType, setTrainingType] = useState<'training_partner' | 'training_admin' | 'ai_enabled'>(editingPerson?.trainingType ?? 'training_partner')
+    const [selectedTypes, setSelectedTypes] = useState<Set<TrainingType>>(new Set(editingPerson?.trainingTypes ?? []))
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
 
     const roleDef = CLARENCE_ROLES.find(r => r.value === role)
-    const availableRoles = isCurrentUserAdmin ? CLARENCE_ROLES : CLARENCE_ROLES.filter(r => r.value !== 'admin')
+
+    // Always include the person's current role in the list so it renders correctly when editing
+    const baseRoles = isCurrentUserAdmin ? CLARENCE_ROLES : CLARENCE_ROLES.filter(r => r.value !== 'admin')
+    const availableRoles = (isEditing && editingPerson.role && !baseRoles.find(r => r.value === editingPerson.role))
+        ? [CLARENCE_ROLES.find(r => r.value === editingPerson.role)!, ...baseRoles]
+        : baseRoles
+
+    const toggleType = (t: TrainingType) => {
+        setSelectedTypes(prev => {
+            const next = new Set(prev)
+            next.has(t) ? next.delete(t) : next.add(t)
+            return next
+        })
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setFormError(null)
         setIsSubmitting(true)
         try {
+            const types = Array.from(selectedTypes)
             if (isEditing && editingPerson.systemUserId) {
-                await onUpdate(editingPerson.systemUserId, fullName, role, grantTraining, trainingType, editingPerson.trainingUserId)
+                await onUpdate(editingPerson.systemUserId, fullName, role, types, editingPerson.trainingIds)
             } else {
-                await onAdd(email, fullName, role, grantTraining, trainingType)
+                await onAdd(email, fullName, role, types)
             }
             onClose()
         } catch (e) {
@@ -2178,7 +2206,7 @@ function PersonFormModal({ editingPerson, isCurrentUserAdmin, onAdd, onUpdate, o
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
+            <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
                     <h3 className="text-base font-semibold text-slate-800">{isEditing ? `Edit ${editingPerson.fullName}` : 'New Person'}</h3>
@@ -2221,21 +2249,25 @@ function PersonFormModal({ editingPerson, isCurrentUserAdmin, onAdd, onUpdate, o
                         )}
                     </div>
 
+                    {/* Training Studio — multi-select checkboxes */}
                     <div className="border-t border-slate-200 pt-4">
-                        <label className="flex items-center gap-3 cursor-pointer select-none">
-                            <input type="checkbox" checked={grantTraining} onChange={e => setGrantTraining(e.target.checked)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded" />
-                            <span className="text-sm font-medium text-slate-700">Training Studio access</span>
-                        </label>
-                        {grantTraining && (
-                            <div className="mt-3 ml-7">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Access Type</label>
-                                <select value={trainingType} onChange={e => setTrainingType(e.target.value as 'training_partner' | 'training_admin' | 'ai_enabled')} className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                                    <option value="training_partner">Training Partner</option>
-                                    <option value="training_admin">Training Admin</option>
-                                    <option value="ai_enabled">AI Enabled</option>
-                                </select>
-                            </div>
-                        )}
+                        <p className="text-sm font-medium text-slate-700 mb-3">Training Studio Access</p>
+                        <div className="space-y-2">
+                            {TRAINING_OPTIONS.map(opt => (
+                                <label key={opt.value} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedTypes.has(opt.value) ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedTypes.has(opt.value)}
+                                        onChange={() => toggleType(opt.value)}
+                                        className="mt-0.5 w-4 h-4 text-indigo-600 border-slate-300 rounded flex-shrink-0"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-700">{opt.label}</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">{opt.description}</p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
                     </div>
 
                     {formError && <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{formError}</div>}
@@ -2261,8 +2293,8 @@ interface PeopleTabProps {
     trainingUsers: TrainingUser[]
     isLoading: boolean
     isCurrentUserAdmin: boolean
-    onAddPerson: (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => Promise<void>
-    onUpdatePerson: (systemUserId: string, fullName: string, role: string, grantTraining: boolean, trainingType: string, trainingUserId?: string) => Promise<void>
+    onAddPerson: (email: string, fullName: string, role: string, trainingTypes: TrainingType[]) => Promise<void>
+    onUpdatePerson: (systemUserId: string, fullName: string, role: string, trainingTypes: TrainingType[], trainingIds: Partial<Record<TrainingType, string>>) => Promise<void>
     onRemoveSystemUser: (id: string) => Promise<void>
     onRemoveTrainingUser: (id: string) => Promise<void>
     onSendSystemInvite: (id: string, email: string) => Promise<void>
@@ -2355,10 +2387,17 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
                                     )}
                                 </div>
                                 <div className="w-28 flex-shrink-0">
-                                    {person.trainingType ? (
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${person.trainingStatus === 'active' ? 'bg-emerald-100 text-emerald-700' : person.trainingStatus === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                                            {person.trainingType.replace(/_/g, ' ')}
-                                        </span>
+                                    {person.trainingTypes.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1">
+                                            {person.trainingTypes.slice(0, 2).map(t => (
+                                                <span key={t} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
+                                                    {t === 'training_partner' ? 'Partner' : t === 'training_admin' ? 'Admin' : 'AI'}
+                                                </span>
+                                            ))}
+                                            {person.trainingTypes.length > 2 && (
+                                                <span className="text-xs text-slate-400">+{person.trainingTypes.length - 2}</span>
+                                            )}
+                                        </div>
                                     ) : (
                                         <span className="text-xs text-slate-300">—</span>
                                     )}
@@ -2378,12 +2417,12 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
                                             {person.systemStatus === 'invited' && person.systemUserId && (
                                                 <button onClick={() => onSendSystemInvite(person.systemUserId!, person.email)} className="text-xs text-slate-500 hover:text-slate-700">Resend</button>
                                             )}
-                                            {person.trainingUserId && !person.trainingInvitationSent && (
-                                                <button onClick={() => onSendTrainingInvite(person.trainingUserId!, person.email)} className="text-xs text-slate-500 hover:text-slate-700">Invite</button>
+                                            {person.trainingTypes.length > 0 && !person.trainingInvitationSent && (
+                                                <button onClick={() => { const firstId = Object.values(person.trainingIds)[0]; if (firstId) onSendTrainingInvite(firstId, person.email) }} className="text-xs text-slate-500 hover:text-slate-700">Invite</button>
                                             )}
-                                            {(person.systemUserId || person.trainingUserId) && (
+                                            {(person.systemUserId || person.trainingTypes.length > 0) && (
                                                 <button
-                                                    onClick={() => person.systemUserId ? onRemoveSystemUser(person.systemUserId) : onRemoveTrainingUser(person.trainingUserId!)}
+                                                    onClick={() => person.systemUserId ? onRemoveSystemUser(person.systemUserId) : Object.values(person.trainingIds).forEach(id => id && onRemoveTrainingUser(id))}
                                                     className="text-xs text-red-500 hover:text-red-700"
                                                 >Remove</button>
                                             )}
@@ -2967,7 +3006,7 @@ function CompanyAdminContent() {
 
     const handleAddTrainingUser = async (email: string, fullName: string, approvalType: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
-        const { error } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: approvalType, status: 'active', approved_by_email: userInfo.email, approved_at: new Date().toISOString() })
+        const { error } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: approvalType, status: 'active' })
         if (error) { if (error.code === '23505') throw new Error('User already exists'); throw new Error(error.message) }
         await handleSendTrainingInvite('', email); await loadTrainingUsers(userInfo.companyId)
     }
@@ -2986,15 +3025,15 @@ function CompanyAdminContent() {
         await handleSendCompanyInvite('', email); await loadCompanyUsers(userInfo.companyId)
     }
 
-    const handleAddPerson = async (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => {
+    const handleAddPerson = async (email: string, fullName: string, role: string, trainingTypes: TrainingType[]) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
         const { error: sysError } = await supabase.from('company_users').insert({ company_id: userInfo.companyId, email, full_name: fullName, role, status: 'invited', invited_by: userInfo.userId, invited_at: new Date().toISOString() })
         if (sysError) { if (sysError.code === '23505') throw new Error('User already exists'); throw new Error(sysError.message) }
         await handleSendCompanyInvite('', email)
-        if (grantTraining) {
-            const { error: trainError } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: trainingType, status: 'active', approved_by_email: userInfo.email, approved_at: new Date().toISOString() })
-            if (trainError && trainError.code !== '23505') throw new Error(trainError.message)
-            await handleSendTrainingInvite('', email)
+        if (trainingTypes.length > 0) {
+            await Promise.all(trainingTypes.map(t =>
+                supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: t, status: 'active' })
+            ))
         }
         await Promise.all([loadCompanyUsers(userInfo.companyId), loadTrainingUsers(userInfo.companyId)])
     }
@@ -3008,23 +3047,26 @@ function CompanyAdminContent() {
         await loadCompanyUsers(userInfo.companyId)
     }
 
-    const handleUpdatePerson = async (systemUserId: string, fullName: string, role: string, grantTraining: boolean, trainingType: string, trainingUserId?: string) => {
+    const handleUpdatePerson = async (systemUserId: string, fullName: string, role: string, trainingTypes: TrainingType[], trainingIds: Partial<Record<TrainingType, string>>) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
         const { error } = await supabase.from('company_users').update({ full_name: fullName, role }).eq('company_user_id', systemUserId)
         if (error) throw new Error(error.message)
-        if (grantTraining) {
-            const { data: cu } = await supabase.from('company_users').select('email').eq('company_user_id', systemUserId).single()
-            if (cu?.email) {
-                if (trainingUserId) {
-                    await supabase.from('approved_training_users').update({ approval_type: trainingType }).eq('id', trainingUserId)
-                } else {
-                    const { error: trainError } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: cu.email, user_full_name: fullName, approval_type: trainingType, status: 'active', approved_by_email: userInfo.email, approved_at: new Date().toISOString() })
-                    if (trainError && trainError.code !== '23505') throw new Error(trainError.message)
+        // Get email for training inserts
+        const { data: cu } = await supabase.from('company_users').select('email').eq('company_user_id', systemUserId).single()
+        if (cu?.email) {
+            const allTypes: TrainingType[] = ['training_partner', 'training_admin', 'ai_enabled']
+            await Promise.all(allTypes.map(async t => {
+                const existingId = trainingIds[t]
+                const shouldHave = trainingTypes.includes(t)
+                if (shouldHave && !existingId) {
+                    // Add new training type
+                    await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: cu.email, user_full_name: fullName, approval_type: t, status: 'active' })
+                } else if (!shouldHave && existingId) {
+                    // Remove revoked training type
+                    await supabase.from('approved_training_users').delete().eq('id', existingId)
                 }
-            }
-        } else if (trainingUserId) {
-            await supabase.from('approved_training_users').delete().eq('id', trainingUserId)
+            }))
         }
         await Promise.all([loadCompanyUsers(userInfo.companyId), loadTrainingUsers(userInfo.companyId)])
     }
@@ -3162,7 +3204,7 @@ function CompanyAdminContent() {
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                                 {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} playbooks={playbooks} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
-                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={userInfo?.role === 'admin'} onAddPerson={handleAddPerson} onUpdatePerson={handleUpdatePerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
+                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={isAdmin} onAddPerson={handleAddPerson} onUpdatePerson={handleUpdatePerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
                                 {activeTab === 'audit' && <AuditLogTab />}
                             </div>
                         )}
