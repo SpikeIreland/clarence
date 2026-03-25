@@ -413,46 +413,83 @@ function QuickContractStudioContent() {
 
     // Playbook rule overlays for template mode: clauseName (lowercase) → rule positions
     const [playbookRuleOverlays, setPlaybookRuleOverlays] = useState<Map<string, { ideal: number; min: number; max: number }>>(new Map())
-    // Clause name → full PlaybookRule, populated from mapping table when editTemplateId is set
+    // Clause name → full PlaybookRule, populated from mapping table
     const [mappedClauseToRule, setMappedClauseToRule] = useState<Map<string, PlaybookRule>>(new Map())
+
+    // Helper: build overlay + nameToRule maps from a set of mappings + their clause/rule data
+    const buildRuleMaps = useCallback((
+        mappings: { template_clause_id: string; playbook_rule_id: string }[],
+        tClauses: { template_clause_id: string; clause_name: string }[],
+        rules: any[]
+    ) => {
+        const ruleMap = Object.fromEntries(rules.map(r => [r.rule_id, r]))
+        const clauseNameMap = Object.fromEntries(tClauses.map(c => [c.template_clause_id, c.clause_name?.toLowerCase()]))
+        const overlays = new Map<string, { ideal: number; min: number; max: number }>()
+        const nameToRule = new Map<string, PlaybookRule>()
+        for (const m of mappings) {
+            const name = clauseNameMap[m.template_clause_id]
+            const rule = ruleMap[m.playbook_rule_id]
+            if (!name || !rule) continue
+            // Always map name → rule (even without position data — needed for Playbook tab)
+            if (!nameToRule.has(name)) nameToRule.set(name, rule as PlaybookRule)
+            // Position overlay only when ideal_position is configured
+            if (rule.ideal_position != null && !overlays.has(name)) {
+                overlays.set(name, {
+                    ideal: rule.ideal_position,
+                    min: rule.minimum_position ?? rule.ideal_position,
+                    max: rule.maximum_position ?? rule.ideal_position,
+                })
+            }
+        }
+        return { overlays, nameToRule }
+    }, [])
+
     useEffect(() => {
-        if (!editTemplateId || !linkedPlaybookId) return
+        if (!linkedPlaybookId) return
         const supabase = createClient()
+        const RULE_FIELDS = 'rule_id, ideal_position, minimum_position, maximum_position, fallback_position, clause_name, category, is_deal_breaker, is_non_negotiable, importance_level, rationale, negotiation_tips, range_context, requires_approval_below, escalation_trigger, escalation_contact, escalation_contact_email, source_quote, quality_flags, playbook_id, clause_code'
+
         async function loadRuleOverlays() {
-            const { data: mappings } = await supabase
-                .from('playbook_rule_clause_map')
-                .select('template_clause_id, playbook_rule_id')
-                .eq('template_id', editTemplateId)
-                .eq('playbook_id', linkedPlaybookId)
-                .neq('status', 'rejected')
-            if (!mappings?.length) return
-            const clauseIds = mappings.map(m => m.template_clause_id)
-            const ruleIds = mappings.map(m => m.playbook_rule_id)
+            let mappings: { template_clause_id: string; playbook_rule_id: string }[] = []
+
+            if (editTemplateId) {
+                // Precise: load mappings for this specific template
+                const { data } = await supabase
+                    .from('playbook_rule_clause_map')
+                    .select('template_clause_id, playbook_rule_id')
+                    .eq('template_id', editTemplateId)
+                    .eq('playbook_id', linkedPlaybookId)
+                    .neq('status', 'rejected')
+                mappings = data || []
+            } else {
+                // Broad: load best mappings across all templates using this playbook.
+                // Useful when edit_template_id is absent (fresh upload not yet saved as template).
+                // De-duplicate by clause_name keeping highest-confidence entry.
+                const { data } = await supabase
+                    .from('playbook_rule_clause_map')
+                    .select('template_clause_id, playbook_rule_id, match_confidence')
+                    .eq('playbook_id', linkedPlaybookId)
+                    .neq('status', 'rejected')
+                    .order('match_confidence', { ascending: false })
+                mappings = data || []
+            }
+
+            if (!mappings.length) return
+
+            const clauseIds = [...new Set(mappings.map(m => m.template_clause_id))]
+            const ruleIds = [...new Set(mappings.map(m => m.playbook_rule_id))]
             const [{ data: tClauses }, { data: rules }] = await Promise.all([
                 supabase.from('template_clauses').select('template_clause_id, clause_name').in('template_clause_id', clauseIds),
-                supabase.from('playbook_rules').select('rule_id, ideal_position, minimum_position, maximum_position, fallback_position, clause_name, category, is_deal_breaker, is_non_negotiable, importance_level, rationale, negotiation_tips, range_context, requires_approval_below, escalation_trigger, escalation_contact, escalation_contact_email, source_quote, quality_flags, playbook_id, clause_code').in('rule_id', ruleIds),
+                supabase.from('playbook_rules').select(RULE_FIELDS).in('rule_id', ruleIds),
             ])
-            const ruleMap = Object.fromEntries((rules || []).map(r => [r.rule_id, r]))
-            const clauseNameMap = Object.fromEntries((tClauses || []).map(c => [c.template_clause_id, c.clause_name?.toLowerCase()]))
-            const overlays = new Map<string, { ideal: number; min: number; max: number }>()
-            const nameToRule = new Map<string, PlaybookRule>()
-            for (const m of mappings) {
-                const name = clauseNameMap[m.template_clause_id]
-                const rule = ruleMap[m.playbook_rule_id]
-                if (name && rule?.ideal_position != null) {
-                    overlays.set(name, {
-                        ideal: rule.ideal_position,
-                        min: rule.minimum_position ?? rule.ideal_position,
-                        max: rule.maximum_position ?? rule.ideal_position,
-                    })
-                    nameToRule.set(name, rule as PlaybookRule)
-                }
-            }
+
+            const { overlays, nameToRule } = buildRuleMaps(mappings, tClauses || [], rules || [])
             setPlaybookRuleOverlays(overlays)
             setMappedClauseToRule(nameToRule)
         }
+
         loadRuleOverlays()
-    }, [editTemplateId, linkedPlaybookId])
+    }, [editTemplateId, linkedPlaybookId, buildRuleMaps])
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
