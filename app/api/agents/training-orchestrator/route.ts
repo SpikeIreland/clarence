@@ -209,7 +209,28 @@ export async function POST(request: NextRequest) {
                 console.log(`[TrainingOrchestrator API] Leverage written: ${custLev}/${provLev}`)
             }
 
+            // Write Role Matrix fields if provided (playbook sessions — 12.05 doesn't set these)
+            const { initiatorPartyRole, contractTypeKey } = body
+            if (initiatorPartyRole || contractTypeKey) {
+                const roleUpdate: Record<string, string> = {}
+                if (initiatorPartyRole) roleUpdate.initiator_party_role = initiatorPartyRole
+                if (contractTypeKey) roleUpdate.contract_type_key = contractTypeKey
+                await supabase
+                    .from('sessions')
+                    .update(roleUpdate)
+                    .eq('session_id', sessionId)
+                console.log(`[TrainingOrchestrator API] Role Matrix written: role=${initiatorPartyRole}, type=${contractTypeKey}`)
+            }
+
             // Diverge provider positions from customer to create negotiation gaps
+            // Skipped for playbook sessions — 12.05 already populated positions from playbook_rules
+            // with personality/leverage adjustments baked in; diverging again would double-adjust.
+            if (body.skipPositionDivergence) {
+                console.log(`[TrainingOrchestrator API] Skipping position divergence (playbook session)`)
+                console.log(`[TrainingOrchestrator API] Agent ${agentId} linked to session ${sessionId}`)
+                return NextResponse.json({ success: true })
+            }
+
             // This MUST run server-side with service role because:
             //   1. n8n may not have finished populating positions yet (race condition)
             //   2. RLS may block client-side updates on session_clause_positions

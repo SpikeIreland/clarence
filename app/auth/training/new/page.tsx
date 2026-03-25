@@ -744,53 +744,92 @@ function TrainingStudioPage() {
             })
 
             try {
-                // Create session via n8n webhook WITH template so clauses are populated
-                const sessionResponse = await fetch(`${API_BASE}/session-create`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: userInfo.userId,
-                        userEmail: userInfo.email,
-                        userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim(),
-                        companyName: userInfo.company,
-                        companyId: userInfo.companyId,
-                        contractType: scenario.contractType,
-                        contract_type: scenario.contractType,
-                        contractName: `Training: ${agentConfig.persona.company} — ${scenario.contractContext}`,
-                        contract_name: `Training: ${agentConfig.persona.company} — ${scenario.contractContext}`,
-                        dealValue: scenario.dealValue,
-                        dealCurrency: scenario.dealCurrency || 'GBP',
-                        dealDuration: scenario.dealDurationMonths,
-                        isTraining: true,
-                        // Role Matrix fields — ensures training sessions get proper party labels
-                        contract_type_key: scenario.contractType,
-                        initiator_party_role: selectedRole || 'protected',
-                        // Template — this tells session-create to load clauses from the template
-                        template_source: 'existing_template',
-                        source_template_id: selectedTemplateId,
-                        assessment_completed: true,
-                        // AI counterpart info
-                        deal_context: {
-                            training_mode: selectedPath === 'colleague' ? 'colleague' : 'dynamic',
-                            training_role: selectedRole || 'protected',
-                            ai_character_name: agentConfig.persona.name,
-                            ai_company_name: agentConfig.persona.company,
-                            ai_personality: agentConfig.personalityTraits.style,
-                        },
-                        aiCompanyName: agentConfig.persona.company,
-                        aiPersonality: agentConfig.personalityTraits.style,
-                        characterName: agentConfig.persona.name,
-                        notes: `Dynamic Training | AI: ${agentConfig.personalityTraits.style} | Opponent: ${agentConfig.persona.name} | Company: ${agentConfig.persona.company}`,
-                    }),
-                })
+                let sessionResult: { sessionId: string }
+                let skipPositionDivergence = false
 
-                const sessionResult = await sessionResponse.json()
+                if (selectedPath === 'playbook' && selectedPlaybookId) {
+                    // ── Playbook Training path → 12.05 (training-start-playbook) ──
+                    // 12.05 derives clause structure from playbook_rules directly.
+                    // It does NOT accept template_source, source_template_id, or Role Matrix fields.
+                    // Role Matrix fields are written by the link action after session creation.
+                    const selectedPlaybook = companyPlaybooks.find(p => p.playbookId === selectedPlaybookId)
+                    const aiPersonality = agentConfig.personalityTraits?.style || 'balanced'
+                    const custLev = Math.round(agentConfig.leverageResult?.customerLeverage || 50)
+                    const provLev = Math.round(agentConfig.leverageResult?.providerLeverage || 50)
 
-                if (!sessionResult.sessionId) {
-                    throw new Error('No session ID returned')
+                    const pbResponse = await fetch(`${API_BASE}/training-start-playbook`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: userInfo.userId,
+                            userEmail: userInfo.email,
+                            userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim(),
+                            companyName: userInfo.company,
+                            companyId: userInfo.companyId,
+                            playbookId: selectedPlaybookId,
+                            playbookName: selectedPlaybook?.playbookName || 'Company Playbook',
+                            characterId: agentConfig.agentId || null,
+                            characterName: agentConfig.persona.name,
+                            aiCompanyName: agentConfig.persona.company,
+                            aiPersonality,
+                            baseLeverageCustomer: custLev,
+                            baseLeverageProvider: provLev,
+                            trainingMode: 'practice',
+                            focusArea: 'all',
+                            showGuidance: true,
+                            showHints: selectedDifficulty === 'beginner',
+                            allowDeviations: true,
+                        }),
+                    })
+                    const pbResult = await pbResponse.json()
+                    if (!pbResult.sessionId) throw new Error('No session ID returned from playbook session')
+                    sessionResult = pbResult
+                    skipPositionDivergence = true // 12.05 already populated positions from playbook_rules
+                } else {
+                    // ── Dynamic / Quick path → 02.01 (session-create) ──
+                    const scResponse = await fetch(`${API_BASE}/session-create`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: userInfo.userId,
+                            userEmail: userInfo.email,
+                            userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim(),
+                            companyName: userInfo.company,
+                            companyId: userInfo.companyId,
+                            contractType: scenario.contractType,
+                            contract_type: scenario.contractType,
+                            contractName: `Training: ${agentConfig.persona.company} — ${scenario.contractContext}`,
+                            contract_name: `Training: ${agentConfig.persona.company} — ${scenario.contractContext}`,
+                            dealValue: scenario.dealValue,
+                            dealCurrency: scenario.dealCurrency || 'GBP',
+                            dealDuration: scenario.dealDurationMonths,
+                            isTraining: true,
+                            contract_type_key: scenario.contractType,
+                            initiator_party_role: selectedRole || 'protected',
+                            template_source: 'existing_template',
+                            source_template_id: selectedTemplateId,
+                            assessment_completed: true,
+                            deal_context: {
+                                training_mode: 'dynamic',
+                                training_role: selectedRole || 'protected',
+                                ai_character_name: agentConfig.persona.name,
+                                ai_company_name: agentConfig.persona.company,
+                                ai_personality: agentConfig.personalityTraits.style,
+                            },
+                            aiCompanyName: agentConfig.persona.company,
+                            aiPersonality: agentConfig.personalityTraits.style,
+                            characterName: agentConfig.persona.name,
+                            notes: `Dynamic Training | AI: ${agentConfig.personalityTraits.style} | Opponent: ${agentConfig.persona.name} | Company: ${agentConfig.persona.company}`,
+                        }),
+                    })
+                    const scResult = await scResponse.json()
+                    if (!scResult.sessionId) throw new Error('No session ID returned')
+                    sessionResult = scResult
                 }
 
-                // Link agent + diverge positions + write leverage (server-side with service role + retry)
+                // Link agent + write leverage + (optionally) diverge positions
+                // For playbook sessions: skip divergence (12.05 already populated from playbook_rules)
+                // but still write leverage and Role Matrix fields
                 await fetch('/api/agents/training-orchestrator', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -801,6 +840,10 @@ function TrainingStudioPage() {
                         sessionId: sessionResult.sessionId,
                         leverageResult: agentConfig.leverageResult || null,
                         difficulty: selectedDifficulty || 'intermediate',
+                        skipPositionDivergence,
+                        // Role Matrix — written here for playbook sessions (12.05 doesn't accept these)
+                        initiatorPartyRole: selectedRole || 'protected',
+                        contractTypeKey: scenario?.contractType || null,
                     }),
                 })
 
@@ -850,7 +893,7 @@ function TrainingStudioPage() {
         if (actionId === 'back') {
             router.push('/auth/training')
         }
-    }, [scenario, agentConfig, userInfo, selectedTemplateId, selectedRole, selectedPath, selectedDifficulty, supabase, router, startConversation, companyPlaybooks, addMessage])
+    }, [scenario, agentConfig, userInfo, selectedTemplateId, selectedRole, selectedPath, selectedDifficulty, selectedPlaybookId, supabase, router, startConversation, companyPlaybooks, addMessage])
 
     // ========================================================================
     // SECTION 10B: COLLEAGUE SESSION CREATION
