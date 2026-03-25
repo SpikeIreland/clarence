@@ -582,8 +582,8 @@ export async function buildSessionContext(
         const isTraining = !!sessionRow.is_training
         let trainingOpponentType: string | null = null
         let opponentPersonality: string | null = null
-        if (isTraining && sessionRow.notes) {
-            const opponentMatch = (sessionRow.notes as string).match(/Opponent:\s*(.+)/i)
+        if (isTraining && (sessionRow as Record<string, unknown>).notes) {
+            const opponentMatch = ((sessionRow as Record<string, unknown>).notes as string).match(/Opponent:\s*(.+)/i)
             if (opponentMatch) trainingOpponentType = opponentMatch[1].trim()
         }
 
