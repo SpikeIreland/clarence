@@ -411,6 +411,44 @@ function QuickContractStudioContent() {
         loadPlaybookRules()
     }, [userInfo?.companyId, userInfo?.userId, contract?.uploadedByUserId, contract?.contractTypeKey, linkedPlaybookId])
 
+    // Playbook rule overlays for template mode: clauseName (lowercase) → rule positions
+    const [playbookRuleOverlays, setPlaybookRuleOverlays] = useState<Map<string, { ideal: number; min: number; max: number }>>(new Map())
+    useEffect(() => {
+        if (!editTemplateId || !linkedPlaybookId) return
+        const supabase = createClient()
+        async function loadRuleOverlays() {
+            const { data: mappings } = await supabase
+                .from('playbook_rule_clause_map')
+                .select('template_clause_id, playbook_rule_id')
+                .eq('template_id', editTemplateId)
+                .eq('playbook_id', linkedPlaybookId)
+                .neq('status', 'rejected')
+            if (!mappings?.length) return
+            const clauseIds = mappings.map(m => m.template_clause_id)
+            const ruleIds = mappings.map(m => m.playbook_rule_id)
+            const [{ data: tClauses }, { data: rules }] = await Promise.all([
+                supabase.from('template_clauses').select('template_clause_id, clause_name').in('template_clause_id', clauseIds),
+                supabase.from('playbook_rules').select('rule_id, ideal_position, minimum_position, maximum_position').in('rule_id', ruleIds),
+            ])
+            const ruleMap = Object.fromEntries((rules || []).map(r => [r.rule_id, r]))
+            const clauseNameMap = Object.fromEntries((tClauses || []).map(c => [c.template_clause_id, c.clause_name?.toLowerCase()]))
+            const overlays = new Map<string, { ideal: number; min: number; max: number }>()
+            for (const m of mappings) {
+                const name = clauseNameMap[m.template_clause_id]
+                const rule = ruleMap[m.playbook_rule_id]
+                if (name && rule?.ideal_position != null) {
+                    overlays.set(name, {
+                        ideal: rule.ideal_position,
+                        min: rule.minimum_position ?? rule.ideal_position,
+                        max: rule.maximum_position ?? rule.ideal_position,
+                    })
+                }
+            }
+            setPlaybookRuleOverlays(overlays)
+        }
+        loadRuleOverlays()
+    }, [editTemplateId, linkedPlaybookId])
+
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
     // Dual-party agreement tracking - both must agree for clause to be fully agreed
@@ -1324,6 +1362,25 @@ function QuickContractStudioContent() {
     // POSITION BAR HELPER: Map position 1-10 to 0%-100% across the bar width
     // Position 1 sits at the left edge (0%), position 10 at the right edge (100%)
     const positionToPercent = (pos: number) => (pos / 10) * 100
+
+    // Map clarence_fairness DB values to human-readable labels with party-specific terminology.
+    // Do NOT use clarence_fairness to drive dot position — it is for display/tooltip only.
+    const getFairnessLabel = (fairness: string | null): string => {
+        if (!fairness) return ''
+        const prov = roleContext?.providingPartyLabel || 'Provider'
+        const prot = roleContext?.protectedPartyLabel || 'Customer'
+        const map: Record<string, string> = {
+            heavily_provider_favoring: `Strongly favours ${prov}`,
+            provider_favoring: `Favours ${prov}`,
+            slightly_provider_favoring: `Slightly favours ${prov}`,
+            balanced: 'Balanced / Market standard',
+            slightly_customer_favoring: `Slightly favours ${prot}`,
+            customer_favoring: `Favours ${prot}`,
+            heavily_customer_favoring: `Strongly favours ${prot}`,
+            review_recommended: 'Review recommended',
+        }
+        return map[fairness] || fairness
+    }
 
     // Enhanced position label: use range data if available, fallback to DEFAULT_POSITION_OPTIONS
     const getRangeAwareLabel = (position: number | null, clauseId: string): string => {
@@ -5709,6 +5766,31 @@ INSTRUCTIONS:
                                                         />
                                                     ))}
 
+                                                    {/* Playbook rule overlay — shown in template mode when clause has a confirmed mapping */}
+                                                    {isTemplateMode && (() => {
+                                                        const overlay = playbookRuleOverlays.get(selectedClause.clauseName?.toLowerCase())
+                                                        if (!overlay) return null
+                                                        const idealPct = positionToPercent(overlay.ideal)
+                                                        const minPct = positionToPercent(overlay.min)
+                                                        const maxPct = positionToPercent(overlay.max)
+                                                        return (
+                                                            <>
+                                                                {/* Acceptable range band */}
+                                                                <div
+                                                                    className="absolute inset-y-1 rounded-full bg-indigo-400/30 border border-indigo-400/50 z-10"
+                                                                    style={{ left: `${minPct}%`, width: `${Math.max(0.5, maxPct - minPct)}%` }}
+                                                                    title={`Playbook range: ${overlay.min}–${overlay.max}`}
+                                                                />
+                                                                {/* Ideal position marker */}
+                                                                <div
+                                                                    className="absolute top-0 bottom-0 w-1 bg-indigo-600 z-10 rounded-full"
+                                                                    style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }}
+                                                                    title={`Playbook ideal: ${overlay.ideal}`}
+                                                                />
+                                                            </>
+                                                        )
+                                                    })()}
+
                                                     {/* CLARENCE Badge - Only marker shown */}
                                                     {/* POSITION BAR: Left = Provider-Favouring (1), Right = Customer-Favouring (10) */}
                                                     {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
@@ -5826,6 +5908,24 @@ INSTRUCTIONS:
                                                 )}
                                             </div>
 
+                                            {/* Playbook overlay legend — template mode only */}
+                                            {isTemplateMode && (() => {
+                                                const overlay = playbookRuleOverlays.get(selectedClause.clauseName?.toLowerCase())
+                                                if (!overlay) return null
+                                                return (
+                                                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mb-3">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <div className="w-3 h-3 rounded-sm bg-indigo-400/50 border border-indigo-400"></div>
+                                                            <span>Playbook acceptable range ({overlay.min}–{overlay.max})</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <div className="w-0.5 h-3 bg-indigo-600 rounded-full"></div>
+                                                            <span>Ideal position ({overlay.ideal})</span>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })()}
+
                                             {/* Position Details */}
                                             <div className="flex items-center gap-6">
                                                 <div className="flex-1 p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
@@ -5849,20 +5949,33 @@ INSTRUCTIONS:
                                                     </div>
                                                 </div>
 
-                                                {selectedClause.clarenceFairness && (
-                                                    <div className={`px-4 py-3 rounded-lg ${selectedClause.clarenceFairness === 'balanced'
-                                                        ? 'bg-emerald-50 border border-emerald-200'
-                                                        : 'bg-amber-50 border border-amber-200'
-                                                        }`}>
-                                                        <div className={`text-sm font-medium ${selectedClause.clarenceFairness === 'balanced'
-                                                            ? 'text-emerald-700'
-                                                            : 'text-amber-700'
+                                                {selectedClause.clarenceFairness && (() => {
+                                                    const isBalanced = selectedClause.clarenceFairness === 'balanced'
+                                                    const isReview = selectedClause.clarenceFairness === 'review_recommended'
+                                                    const label = getFairnessLabel(selectedClause.clarenceFairness)
+                                                    return (
+                                                        <div className={`px-4 py-3 rounded-lg ${isBalanced
+                                                            ? 'bg-emerald-50 border border-emerald-200'
+                                                            : isReview
+                                                                ? 'bg-amber-50 border border-amber-200'
+                                                                : selectedClause.clarenceFairness.includes('provider')
+                                                                    ? 'bg-blue-50 border border-blue-200'
+                                                                    : 'bg-purple-50 border border-purple-200'
                                                             }`}>
-                                                            {selectedClause.clarenceFairness === 'balanced' ? '\u2714 Balanced' : '\u26A0 Review Recommended'}
+                                                            <div className={`text-sm font-medium ${isBalanced
+                                                                ? 'text-emerald-700'
+                                                                : isReview
+                                                                    ? 'text-amber-700'
+                                                                    : selectedClause.clarenceFairness.includes('provider')
+                                                                        ? 'text-blue-700'
+                                                                        : 'text-purple-700'
+                                                                }`}>
+                                                                {isBalanced ? '✓ ' : isReview ? '⚠ ' : ''}{label}
+                                                            </div>
+                                                            <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
                                                         </div>
-                                                        <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
-                                                    </div>
-                                                )}
+                                                    )
+                                                })()}
                                             </div>
                                         </div>
 

@@ -2345,6 +2345,25 @@ function ContractStudioContent() {
     const [uploadedContractName, setUploadedContractName] = useState<string | null>(null)
     const isSoloPrep = sessionStatus === 'solo_prep'
 
+    // Map clarence_fairness DB values to human-readable labels using party-specific terminology.
+    // Do NOT use this to drive dot position on the bar — it is display/tooltip only.
+    const getFairnessLabel = (fairness: string | null): string => {
+        if (!fairness) return ''
+        const prov = roleContext?.providingPartyLabel || 'Provider'
+        const prot = roleContext?.protectedPartyLabel || 'Customer'
+        const map: Record<string, string> = {
+            heavily_provider_favoring: `Strongly favours ${prov}`,
+            provider_favoring: `Favours ${prov}`,
+            slightly_provider_favoring: `Slightly favours ${prov}`,
+            balanced: 'Balanced / Market standard',
+            slightly_customer_favoring: `Slightly favours ${prot}`,
+            customer_favoring: `Favours ${prot}`,
+            heavily_customer_favoring: `Strongly favours ${prot}`,
+            review_recommended: 'Review recommended',
+        }
+        return map[fairness] || fairness
+    }
+
     // ============================================================================
     // SECTION 6E: MULTI-PROVIDER STATE
     // ============================================================================
@@ -8900,7 +8919,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         {selectedClause.negotiationGuidance && (
                                             <div className="mt-2 pt-2 border-t border-purple-200">
                                                 <p className="text-xs font-medium text-purple-600 mb-1">Fairness Assessment</p>
-                                                <p className="text-sm text-purple-700">{selectedClause.negotiationGuidance}</p>
+                                                <p className="text-sm text-purple-700">{getFairnessLabel(selectedClause.negotiationGuidance)}</p>
                                             </div>
                                         )}
                                     </div>
