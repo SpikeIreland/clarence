@@ -3971,14 +3971,12 @@ INSTRUCTIONS:
         const effectiveId = resolvedContractId || contractId
         if (!effectiveId || !clauses.length) return
 
-        // Check if there are any uncertified non-header clauses
-        // Must check BOTH processingStatus AND clarenceCertified
-        // (button requires clarenceCertified, so we must poll until that's true too)
+        // Check if there are any uncertified non-header clauses that are still in-progress.
+        // Failed clauses are excluded — they are settled and must not keep polling alive.
         const uncertified = clauses.filter(c =>
-            !c.isHeader && (
-                (c.processingStatus !== 'certified' && c.processingStatus !== 'failed') ||
-                !c.clarenceCertified
-            )
+            !c.isHeader &&
+            c.processingStatus !== 'failed' &&
+            (c.processingStatus !== 'certified' || !c.clarenceCertified)
         )
 
         if (uncertified.length === 0) {
