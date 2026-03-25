@@ -148,8 +148,8 @@ export const CONTRACT_TYPE_DEFINITIONS: ContractTypeDefinition[] = [
     {
         contractTypeKey: 'nda_mutual',
         contractTypeName: 'NDA (Mutual)',
-        protectedPartyLabel: 'Disclosing Parties',
-        providingPartyLabel: 'Receiving Parties',
+        protectedPartyLabel: 'Disclosing Party',
+        providingPartyLabel: 'Receiving Party',
         protectedPartyDescription: 'Both parties as disclosers of confidential information',
         providingPartyDescription: 'Both parties as recipients of confidential information',
         displayOrder: 10,

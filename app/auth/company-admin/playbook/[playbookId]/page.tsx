@@ -62,7 +62,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
     rule: PlaybookRule
     onPositionChange: (field: string, value: number) => void
 }) {
-    const toPercent = (val: number) => ((val - 1) / 9) * 100
+    const toPercent = (val: number) => (((val ?? 5) - 1) / 9) * 100
     const rangeCtx = getEffectiveRangeContext(rule)
     const label = (pos: number) => translateRulePosition(rule, pos)
 
@@ -134,7 +134,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     <svg className="w-2.5 h-2.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
-                    {rule.importance_level}/10
+                    {rule.importance_level ?? 5}/10
                 </span>
                 {/* Info tooltip */}
                 <div className="relative group/info">
@@ -176,7 +176,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 <div className="absolute top-0" style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
                     <div className="flex flex-col items-center">
                         <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                            Ideal · {rule.ideal_position}
+                            Ideal · {rule.ideal_position ?? 5}
                         </span>
                         <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
                     </div>
@@ -186,7 +186,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     <div className="flex flex-col items-center">
                         <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
                         <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                            Fallback · {rule.fallback_position}
+                            Fallback · {rule.fallback_position ?? 5}
                         </span>
                     </div>
                 </div>
@@ -468,13 +468,14 @@ function AddRuleModal({ categoryOptions, onAdd, onClose, saving }: {
 // RULE CARD
 // ============================================================================
 
-function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, saving }: {
+function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, saving, onDelete }: {
     rule: PlaybookRule
     isDirty: boolean
     onFieldChange: (field: string, value: unknown) => void
     onPositionChange: (field: string, value: number) => void
     onSave: () => void
     saving: boolean
+    onDelete: () => void
 }) {
     const [editingField, setEditingField] = useState<string | null>(null)
     const [showSource, setShowSource] = useState(false)
@@ -518,15 +519,26 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                         <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200 flex-shrink-0">Needs Review</span>
                     )}
                 </div>
-                {isDirty && (
+                <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
+                    {isDirty && (
+                        <button
+                            onClick={onSave}
+                            disabled={saving}
+                            className="px-2.5 py-1 text-[11px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-50 transition-colors"
+                        >
+                            {saving ? 'Saving...' : 'Save'}
+                        </button>
+                    )}
                     <button
-                        onClick={onSave}
-                        disabled={saving}
-                        className="ml-3 px-2.5 py-1 text-[11px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-50 transition-colors flex-shrink-0"
+                        onClick={() => { if (window.confirm(`Remove rule "${rule.clause_name}"? This cannot be undone.`)) onDelete() }}
+                        className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                        title="Remove rule"
                     >
-                        {saving ? 'Saving...' : 'Save'}
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                     </button>
-                )}
+                </div>
             </div>
 
             {/* Description (market-perspective summary) */}
@@ -893,6 +905,21 @@ function PlaybookReviewContent() {
         }
     }
 
+    // Deactivate (soft-delete) a rule
+    const handleDeleteRule = async (ruleId: string) => {
+        try {
+            await fetch(`/api/playbooks/${playbookId}/rules/${ruleId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: false }),
+            })
+            setRules(prev => prev.filter(r => r.rule_id !== ruleId))
+            setDirtyRules(prev => { const next = new Map(prev); next.delete(ruleId); return next })
+        } catch (e) {
+            console.error('Delete rule error:', e)
+        }
+    }
+
     // Add a blank rule
     const handleAddRule = async (clauseName: string, category: string) => {
         setAddingRule(true)
@@ -1206,6 +1233,7 @@ function PlaybookReviewContent() {
                                         onPositionChange={(field, value) => handlePositionChange(rule.rule_id, field, value)}
                                         onSave={() => saveRule(rule.rule_id)}
                                         saving={savingRules.has(rule.rule_id)}
+                                        onDelete={() => handleDeleteRule(rule.rule_id)}
                                     />
                                 ))}
                             </div>

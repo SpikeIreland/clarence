@@ -3280,7 +3280,7 @@ function CompanyAdminContent() {
             const user = await checkAuth(); if (!user) return
             setUserInfo(user); setCompanyName(user.company || 'Your Company')
             const hasAccess = await checkAdminAccess(user.email, user.companyId); setIsAdmin(hasAccess)
-            if (!hasAccess) { router.push('/auth/contracts-dashboard'); return }
+            if (!hasAccess) { router.push('/auth/home'); return }
             if (user.companyId) {
                 await Promise.all([
                     loadPlaybooks(user.companyId),
@@ -3295,7 +3295,7 @@ function CompanyAdminContent() {
     }, [checkAuth, checkAdminAccess, loadPlaybooks, loadCompanyTemplates, loadTrainingUsers, loadCompanyUsers, router])
 
     if (loading) return <CompanyAdminLoading />
-    if (!isAdmin) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="text-center"><h2 className="text-xl font-semibold text-slate-800 mb-2">Access Denied</h2><button onClick={() => router.push('/auth/contracts-dashboard')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Go to Dashboard</button></div></div>
+    if (!isAdmin) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="text-center"><h2 className="text-xl font-semibold text-slate-800 mb-2">Access Denied</h2><button onClick={() => router.push('/auth/home')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Go to Dashboard</button></div></div>
 
     const peoplePendingCount = companyUsers.filter(u => u.status === 'invited').length + trainingUsers.filter(u => u.status === 'pending').length
 
@@ -3313,7 +3313,7 @@ function CompanyAdminContent() {
             {/* Indigo Banner */}
             <header className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => router.push('/auth/contracts-dashboard')} className="p-2 text-indigo-200 hover:text-white hover:bg-indigo-700 rounded-lg transition-colors">
+                    <button onClick={() => router.push('/auth/home')} className="p-2 text-indigo-200 hover:text-white hover:bg-indigo-700 rounded-lg transition-colors">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     </button>
                     <div className="h-6 w-px bg-indigo-400"></div>

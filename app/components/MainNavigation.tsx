@@ -277,7 +277,7 @@ export default function MainNavigation() {
                         How It Works
                       </div>
                       <div className="text-xs text-slate-400">
-                        The Create / Negotiate / Agree journey
+                        The full contract lifecycle, end to end
                       </div>
                     </div>
                   </Link>
