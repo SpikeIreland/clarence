@@ -121,6 +121,7 @@ interface UserInfo {
     lastName?: string
     email?: string
     company?: string
+    companyId?: string
     role?: 'customer' | 'provider'
     userId?: string
 }
@@ -2208,6 +2209,7 @@ function DocumentCentreContent() {
                 lastName: parsed.userInfo?.lastName || '',
                 email: parsed.userInfo?.email || '',
                 company: parsed.userInfo?.company || '',
+                companyId: parsed.userInfo?.companyId || '',
                 role: parsed.userInfo?.role || 'customer',
                 userId: parsed.userInfo?.userId || ''
             } as UserInfo
