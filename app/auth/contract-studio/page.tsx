@@ -826,13 +826,6 @@ async function callClarenceAI(
                 viewerUserId: chatUserId,
                 contractTypeKey: contextFields?.contractTypeKey || null,
                 initiatorPartyRole: contextFields?.initiatorPartyRole || null,
-                roleContext: roleContext ? {
-                    contractTypeKey: roleContext.contractTypeName,
-                    protectedPartyLabel: roleContext.protectedPartyLabel,
-                    providingPartyLabel: roleContext.providingPartyLabel,
-                    userRoleLabel: roleContext.userRoleLabel,
-                    counterpartyRoleLabel: roleContext.counterpartyRoleLabel,
-                } : null,
                 clauseId: options.clauseId || null,
                 clauseName: options.clauseName || null,
                 clauseCategory: options.clauseCategory || null,

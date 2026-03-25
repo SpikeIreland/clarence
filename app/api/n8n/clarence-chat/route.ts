@@ -137,12 +137,13 @@ export async function POST(request: NextRequest) {
             )
 
             if (!contextResult.success || !contextResult.context) {
-                console.error('Session context build failed')
+                console.error('Session context build failed. Reason:', contextResult.errorReason || 'unknown')
                 return NextResponse.json(
                     {
                         error: 'Failed to build negotiation context',
                         success: false,
-                        response: 'I apologize, but I could not load the negotiation context. Please refresh and try again.'
+                        response: 'I apologize, but I could not load the negotiation context. Please refresh and try again.',
+                        _debug: { errorReason: contextResult.errorReason || 'unknown', sessionId: body.sessionId }
                     },
                     { status: 502 }
                 )

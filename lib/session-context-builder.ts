@@ -191,7 +191,7 @@ export async function buildSessionContext(
         alignmentScore?: number | null
         viewerCompanyId?: string | null
     }
-): Promise<{ success: boolean; context: SessionContext | null; buildTime: number }> {
+): Promise<{ success: boolean; context: SessionContext | null; buildTime: number; errorReason?: string }> {
     const start = Date.now()
 
     try {
@@ -213,8 +213,8 @@ export async function buildSessionContext(
             .single()
 
         if (sessErr || !sessionRow) {
-            console.error('[ContextBuilder] Session not found:', sessErr)
-            return { success: false, context: null, buildTime: Date.now() - start }
+            console.error('[ContextBuilder] Session not found:', sessErr?.message, '| sessionId:', sessionId)
+            return { success: false, context: null, buildTime: Date.now() - start, errorReason: `session_not_found: ${sessErr?.message || 'no row'}` }
         }
 
         // ------------------------------------------------------------------
@@ -719,7 +719,8 @@ export async function buildSessionContext(
         return { success: true, context, buildTime: Date.now() - start }
 
     } catch (error) {
-        console.error('[ContextBuilder] Failed:', error)
-        return { success: false, context: null, buildTime: Date.now() - start }
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('[ContextBuilder] Exception:', msg)
+        return { success: false, context: null, buildTime: Date.now() - start, errorReason: msg }
     }
 }
