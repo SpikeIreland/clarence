@@ -10,6 +10,25 @@
 
 import { createClient } from '@/lib/supabase'
 
+// Maps local session contract type values → canonical contract_type_key
+// (same canonical 20-key list from contract_type_roles.contract_type_key)
+const DOCUMENT_TYPE_KEY_MAP: Record<string, string> = {
+    'nda':          'nda_mutual',
+    'bpo':          'bpo_agreement',
+    'saas':         'saas_agreement',
+    'msa':          'service_agreement',
+    'employment':   'employment_contract',
+    'it_services':  'it_outsourcing',
+    'consulting':   'consultancy_agreement',
+    'custom':       'service_agreement',
+}
+
+/** Normalise a raw contract type value to its canonical document_type_key. */
+export function normaliseContractTypeKey(raw: string | null): string | null {
+    if (!raw) return null
+    return DOCUMENT_TYPE_KEY_MAP[raw] ?? raw
+}
+
 export interface PlaybookMatch {
     playbook_id: string
     playbook_name: string
@@ -29,15 +48,16 @@ export async function findActivePlaybook(
     contractTypeKey: string | null
 ): Promise<PlaybookMatch | null> {
     const supabase = createClient()
+    const canonicalKey = normaliseContractTypeKey(contractTypeKey)
 
-    // Tier 1: Type-specific match
-    if (contractTypeKey) {
+    // Tier 1: Type-specific match (using canonical key)
+    if (canonicalKey) {
         const { data } = await supabase
             .from('company_playbooks')
             .select(PLAYBOOK_FIELDS)
             .eq('company_id', companyId)
             .eq('is_active', true)
-            .eq('contract_type_key', contractTypeKey)
+            .eq('contract_type_key', canonicalKey)
             .limit(1)
             .maybeSingle()
 
