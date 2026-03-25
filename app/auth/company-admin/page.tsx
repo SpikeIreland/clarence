@@ -1329,6 +1329,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                     file_type: selectedFile.type || 'application/octet-stream',
                     file_size: selectedFile.size,
                     contract_type: contractType,
+                    contract_type_key: contractType,
                     template_name: templateName,
                     create_as_template: true,
                     is_company_template: true
@@ -1400,11 +1401,33 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                     `Polling timed out after ${maxAttempts} attempts`, 'POLLING_TIMEOUT')
             }
 
-            setUploadProgress('Redirecting to certification studio...')
-            const studioUrl = uploadLinkedPlaybookId
-                ? `/auth/quick-contract/studio/${contractId}?mode=template&company=true&linked_playbook_id=${uploadLinkedPlaybookId}`
-                : `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
-            router.push(studioUrl)
+            // Wait for the template record to be created by the n8n workflow
+            setUploadProgress('Finalising template...')
+            let templateId: string | null = null
+            let templateAttempts = 0
+            while (!templateId && templateAttempts < 20) {
+                await new Promise(r => setTimeout(r, 2000))
+                const { data: tmpl } = await supabase
+                    .from('contract_templates')
+                    .select('template_id')
+                    .eq('source_contract_id', contractId)
+                    .maybeSingle()
+                if (tmpl?.template_id) {
+                    templateId = tmpl.template_id
+                    break
+                }
+                templateAttempts++
+            }
+
+            // Link playbook if selected
+            if (templateId && uploadLinkedPlaybookId) {
+                await supabase
+                    .from('contract_templates')
+                    .update({ linked_playbook_id: uploadLinkedPlaybookId })
+                    .eq('template_id', templateId)
+            }
+
+            router.push('/auth/company-admin?tab=templates')
 
         } catch (e) {
             console.error('Upload error:', e)
@@ -3139,25 +3162,16 @@ function CompanyAdminContent() {
         const templateName = companyTemplates.find(t => t.templateId === templateId)?.templateName
 
         try {
-            const { error: clausesError } = await supabase
-                .from('template_clauses')
-                .delete()
-                .eq('template_id', templateId)
-
-            if (clausesError) {
-                console.error('Error deleting template clauses:', clausesError)
-            }
-
             const { error: templateError } = await supabase
                 .from('contract_templates')
-                .delete()
+                .update({ is_active: false, updated_at: new Date().toISOString() })
                 .eq('template_id', templateId)
                 .eq('company_id', userInfo.companyId)
                 .eq('is_system', false)
 
             if (templateError) throw new Error(templateError.message)
 
-            console.log('Template permanently deleted:', templateId)
+            console.log('Template soft-deleted (is_active=false):', templateId)
             await logAdminAction('template_deleted', `Template deleted: "${templateName || templateId}"`, templateName)
             await loadCompanyTemplates(userInfo.companyId)
 

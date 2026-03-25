@@ -691,7 +691,7 @@ function CrossCheckContent() {
                 .from('contract_templates')
                 .select('template_id, template_name, contract_type, clause_count')
                 .eq('company_id', companyId)
-                .eq('is_public', true)
+                .eq('is_active', true)
                 .eq('is_system', false)
                 .order('template_name')
             setTemplates((tmplData || []).map((t: Record<string, unknown>) => ({
