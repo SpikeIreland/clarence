@@ -2456,15 +2456,140 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
 // SECTION 8: AUDIT LOG TAB COMPONENT
 // ============================================================================
 
-function AuditLogTab() {
+interface AuditEntry {
+    log_id: string
+    event_type: string
+    event_description: string
+    actor_email?: string
+    actor_name?: string
+    resource_name?: string
+    created_at: string
+}
+
+function getEventStyle(eventType: string): { color: string; bgColor: string; label: string } {
+    if (eventType === 'playbook_breach')     return { color: 'text-red-700',     bgColor: 'bg-red-100',     label: 'Breach'    }
+    if (eventType.startsWith('playbook_'))   return { color: 'text-blue-700',    bgColor: 'bg-blue-100',    label: 'Playbook'  }
+    if (eventType.startsWith('template_'))   return { color: 'text-emerald-700', bgColor: 'bg-emerald-100', label: 'Template'  }
+    if (eventType.startsWith('user_'))       return { color: 'text-purple-700',  bgColor: 'bg-purple-100',  label: 'People'    }
+    return                                          { color: 'text-slate-700',   bgColor: 'bg-slate-100',   label: 'System'    }
+}
+
+function formatRelativeTime(ts: string): string {
+    const diff = Date.now() - new Date(ts).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1)  return 'just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24)  return `${hrs}h ago`
+    const days = Math.floor(hrs / 24)
+    if (days < 7)  return `${days}d ago`
+    return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function AuditEventIcon({ eventType }: { eventType: string }) {
+    if (eventType === 'playbook_breach')
+        return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+    if (eventType.startsWith('playbook_'))
+        return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+    if (eventType.startsWith('template_'))
+        return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+    if (eventType.startsWith('user_'))
+        return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+    return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+}
+
+interface AuditLogTabProps { companyId: string }
+
+function AuditLogTab({ companyId }: AuditLogTabProps) {
+    const [entries, setEntries] = useState<AuditEntry[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [activeFilter, setActiveFilter] = useState('all')
+
+    const loadEntries = useCallback(async () => {
+        if (!companyId) { setIsLoading(false); return }
+        setIsLoading(true)
+        const supabase = createClient()
+        const { data } = await supabase
+            .from('company_audit_log')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false })
+            .limit(200)
+        setEntries(data || [])
+        setIsLoading(false)
+    }, [companyId])
+
+    useEffect(() => { loadEntries() }, [loadEntries])
+
+    const FILTERS = [
+        { value: 'all',             label: 'All'       },
+        { value: 'playbook_',       label: 'Playbooks' },
+        { value: 'template_',       label: 'Templates' },
+        { value: 'user_',           label: 'People'    },
+        { value: 'playbook_breach', label: 'Breaches'  },
+    ]
+
+    const filtered = activeFilter === 'all'
+        ? entries
+        : entries.filter(e => e.event_type.startsWith(activeFilter))
+
     return (
         <div className="p-6">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Audit Log</h3>
-            <div className="text-center py-12 text-slate-500">
-                <svg className="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                <p className="font-medium">Audit logging coming soon</p>
-                <p className="text-sm mt-1">Track all admin actions and changes</p>
+            <div className="flex items-center justify-between mb-5">
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-800">Audit Log</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                        {entries.length} {entries.length === 1 ? 'event' : 'events'} recorded
+                    </p>
+                </div>
+                <button onClick={loadEntries} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    Refresh
+                </button>
             </div>
+
+            <div className="flex gap-2 mb-5 flex-wrap">
+                {FILTERS.map(f => (
+                    <button
+                        key={f.value}
+                        onClick={() => setActiveFilter(f.value)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${activeFilter === f.value ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                    >{f.label}</button>
+                ))}
+            </div>
+
+            {isLoading ? (
+                <div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>
+            ) : filtered.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                    <svg className="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    <p className="font-medium">No events yet</p>
+                    <p className="text-sm mt-1">Admin actions will appear here as they happen.</p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {filtered.map(entry => {
+                        const style = getEventStyle(entry.event_type)
+                        return (
+                            <div key={entry.log_id} className="flex items-start gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${style.bgColor} ${style.color}`}>
+                                    <AuditEventIcon eventType={entry.event_type} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-slate-800">{entry.event_description}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        {entry.actor_name || entry.actor_email || 'System'}
+                                        {' · '}{formatRelativeTime(entry.created_at)}
+                                    </p>
+                                </div>
+                                <span className={`flex-shrink-0 mt-0.5 text-xs px-2 py-0.5 rounded-full font-medium ${style.bgColor} ${style.color}`}>
+                                    {style.label}
+                                </span>
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
         </div>
     )
 }
@@ -2588,6 +2713,25 @@ function CompanyAdminContent() {
     }, [])
 
 
+    // -------------------------------------------------------------------------
+    // AUDIT LOGGING HELPER
+    // -------------------------------------------------------------------------
+    const logAdminAction = async (eventType: string, description: string, resourceName?: string) => {
+        if (!userInfo?.companyId) return
+        try {
+            const supabase = createClient()
+            const actorName = `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || userInfo.email
+            await supabase.from('company_audit_log').insert({
+                company_id: userInfo.companyId,
+                event_type: eventType,
+                event_description: description,
+                actor_email: userInfo.email,
+                actor_name: actorName,
+                resource_name: resourceName ?? null,
+            })
+        } catch { /* never let audit logging block the primary action */ }
+    }
+
     const handlePlaybookUpload = async (file: File, contractTypeKey: string | null = null, perspective: 'customer' | 'provider' = 'customer') => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
@@ -2597,9 +2741,10 @@ function CompanyAdminContent() {
         const fileName = `${companyId}/${Date.now()}.${file.name.split('.').pop()}`
         const { error: uploadError } = await supabase.storage.from('playbooks').upload(fileName, file)
         if (uploadError) throw new Error(uploadError.message)
+        const playbookName = file.name.replace(/\.[^/.]+$/, '')
         const { error: insertError } = await supabase.from('company_playbooks').insert({
             company_id: companyId,
-            playbook_name: file.name.replace(/\.[^/.]+$/, ''),
+            playbook_name: playbookName,
             source_file_name: file.name,
             source_file_path: fileName,
             status: 'pending_parse',
@@ -2608,6 +2753,7 @@ function CompanyAdminContent() {
             playbook_perspective: perspective,
         })
         if (insertError) throw new Error(insertError.message)
+        await logAdminAction('playbook_added', `Playbook uploaded: "${playbookName}"`, playbookName)
         await loadPlaybooks(companyId!)
     }
 
@@ -2786,12 +2932,16 @@ function CompanyAdminContent() {
     const handlePlaybookActivate = async (playbookId: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
         await supabase.from('company_playbooks').update({ is_active: true, activated_at: new Date().toISOString(), status: 'active' }).eq('playbook_id', playbookId)
+        const name = playbooks.find(p => p.playbookId === playbookId)?.playbookName
+        await logAdminAction('playbook_activated', `Playbook activated: "${name || playbookId}"`, name)
         await loadPlaybooks(userInfo.companyId)
     }
 
     const handlePlaybookDeactivate = async (playbookId: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
         await supabase.from('company_playbooks').update({ is_active: false, status: 'inactive' }).eq('playbook_id', playbookId)
+        const name = playbooks.find(p => p.playbookId === playbookId)?.playbookName
+        await logAdminAction('playbook_deactivated', `Playbook deactivated: "${name || playbookId}"`, name)
         await loadPlaybooks(userInfo.companyId)
     }
 
@@ -2811,6 +2961,7 @@ function CompanyAdminContent() {
             console.log('No company ID, aborting')
             return
         }
+        const playbookName = playbooks.find(p => p.playbookId === playbookId)?.playbookName
 
         const supabase = createClient()
 
@@ -2862,6 +3013,7 @@ function CompanyAdminContent() {
         }
 
         // 5. Reload playbooks
+        await logAdminAction('playbook_deleted', `Playbook deleted: "${playbookName || playbookId}"`, playbookName)
         await loadPlaybooks(userInfo.companyId)
     }
 
@@ -2876,11 +3028,13 @@ function CompanyAdminContent() {
     const handlePlaybookRename = async (playbookId: string, newName: string) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
+        const oldName = playbooks.find(p => p.playbookId === playbookId)?.playbookName
         const { error } = await supabase
             .from('company_playbooks')
             .update({ playbook_name: newName, updated_at: new Date().toISOString() })
             .eq('playbook_id', playbookId)
         if (error) throw new Error(error.message)
+        await logAdminAction('playbook_edited', `Playbook renamed: "${oldName || playbookId}" → "${newName}"`, newName)
         await loadPlaybooks(userInfo.companyId)
     }
 
@@ -2955,12 +3109,14 @@ function CompanyAdminContent() {
         if (!returnedContractId) {
             throw new Error('No contract ID returned from parse workflow')
         }
+        await logAdminAction('template_added', `Template uploaded: "${templateName}"`, templateName)
         return returnedContractId
     }
 
     const handleTemplateDelete = async (templateId: string) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
+        const templateName = companyTemplates.find(t => t.templateId === templateId)?.templateName
 
         try {
             const { error: clausesError } = await supabase
@@ -2982,6 +3138,7 @@ function CompanyAdminContent() {
             if (templateError) throw new Error(templateError.message)
 
             console.log('Template permanently deleted:', templateId)
+            await logAdminAction('template_deleted', `Template deleted: "${templateName || templateId}"`, templateName)
             await loadCompanyTemplates(userInfo.companyId)
 
         } catch (error) {
@@ -2993,6 +3150,7 @@ function CompanyAdminContent() {
     const handleTemplateToggleActive = async (templateId: string, isActive: boolean) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
+        const name = companyTemplates.find(t => t.templateId === templateId)?.templateName
 
         const { error } = await supabase
             .from('contract_templates')
@@ -3001,6 +3159,11 @@ function CompanyAdminContent() {
             .eq('company_id', userInfo.companyId)
 
         if (error) throw new Error(error.message)
+        await logAdminAction(
+            isActive ? 'template_activated' : 'template_deactivated',
+            `Template ${isActive ? 'activated' : 'deactivated'}: "${name || templateId}"`,
+            name
+        )
         await loadCompanyTemplates(userInfo.companyId)
     }
 
@@ -3035,10 +3198,17 @@ function CompanyAdminContent() {
                 supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: t, status: 'active' })
             ))
         }
+        await logAdminAction('user_added', `User invited: ${fullName} (${email}) as ${role}`, fullName)
         await Promise.all([loadCompanyUsers(userInfo.companyId), loadTrainingUsers(userInfo.companyId)])
     }
 
-    const handleRemoveCompanyUser = async (id: string) => { if (!userInfo?.companyId) return; const supabase = createClient(); await supabase.from('company_users').update({ status: 'removed' }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
+    const handleRemoveCompanyUser = async (id: string) => {
+        if (!userInfo?.companyId) return; const supabase = createClient()
+        const user = companyUsers.find(u => u.id === id)
+        await supabase.from('company_users').update({ status: 'removed' }).eq('company_user_id', id)
+        await logAdminAction('user_removed', `User removed: ${user?.fullName || user?.email || id}`, user?.fullName)
+        await loadCompanyUsers(userInfo.companyId)
+    }
 
     const handleUpdateRole = async (id: string, role: string) => {
         if (!userInfo?.companyId) return
@@ -3068,6 +3238,7 @@ function CompanyAdminContent() {
                 }
             }))
         }
+        await logAdminAction('user_edited', `User updated: ${fullName} — role set to ${role}`, fullName)
         await Promise.all([loadCompanyUsers(userInfo.companyId), loadTrainingUsers(userInfo.companyId)])
     }
 
@@ -3205,7 +3376,7 @@ function CompanyAdminContent() {
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                                 {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} playbooks={playbooks} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                                 {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={isAdmin} onAddPerson={handleAddPerson} onUpdatePerson={handleUpdatePerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
-                                {activeTab === 'audit' && <AuditLogTab />}
+                                {activeTab === 'audit' && <AuditLogTab companyId={userInfo?.companyId || ''} />}
                             </div>
                         )}
                     </div>
