@@ -24,14 +24,16 @@ interface UserInfo {
     role?: string
 }
 
+type ClarenceRole = 'admin' | 'template_manager' | 'hr_manager' | 'senior_negotiator' | 'negotiator' | 'trainee'
+
 interface CompanyUser {
     id: string
     userId?: string
     email: string
     fullName: string
-    role: 'admin' | 'manager' | 'user' | 'viewer'
+    role: ClarenceRole
     status: 'invited' | 'active' | 'suspended' | 'removed'
-    approvalRole: 'negotiator' | 'approver' | 'admin'
+    approvalRole: string    // Legacy — kept for DB backward compat; use role instead
     invitedAt: string
     lastActiveAt?: string
 }
@@ -1843,15 +1845,69 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
 // SECTION 6: PEOPLE TAB COMPONENT (consolidates Users + Training Access)
 // ============================================================================
 
+const CLARENCE_ROLES: Array<{
+    value: ClarenceRole
+    label: string
+    color: string
+    bgColor: string
+    description: string
+    canApprove: boolean
+    accessSummary: string
+}> = [
+    { value: 'admin', label: 'Admin', color: 'text-purple-700', bgColor: 'bg-purple-100',
+      description: 'Full platform control — manage users, templates, playbooks, and all company settings.',
+      canApprove: true, accessSummary: 'All access + user management' },
+    { value: 'template_manager', label: 'Template Manager', color: 'text-blue-700', bgColor: 'bg-blue-100',
+      description: 'Uploads, maintains and activates contract templates and playbooks for the organisation.',
+      canApprove: true, accessSummary: 'Templates, playbooks, contracts' },
+    { value: 'hr_manager', label: 'HR Manager', color: 'text-teal-700', bgColor: 'bg-teal-100',
+      description: 'Manages user onboarding, training access and team compliance visibility.',
+      canApprove: false, accessSummary: 'People, training, compliance reports' },
+    { value: 'senior_negotiator', label: 'Senior Negotiator', color: 'text-indigo-700', bgColor: 'bg-indigo-100',
+      description: 'Leads contract negotiations, reviews junior work, and gives final approvals.',
+      canApprove: true, accessSummary: 'All contracts + approval authority' },
+    { value: 'negotiator', label: 'Negotiator', color: 'text-emerald-700', bgColor: 'bg-emerald-100',
+      description: 'Negotiates and manages contracts end-to-end within the platform.',
+      canApprove: false, accessSummary: 'Contracts, quick contracts, analysis' },
+    { value: 'trainee', label: 'Trainee', color: 'text-amber-700', bgColor: 'bg-amber-100',
+      description: 'Training-track access. Can observe contracts and complete training modules.',
+      canApprove: false, accessSummary: 'Training studio, read-only contracts' },
+]
+
+const DEMO_STATS = {
+    totalSessions: 47,
+    complianceRate: 94,
+    avgPositionScore: 8.2,
+    clausesReviewed: 312,
+    monthlyActivity: [
+        { month: 'Oct', sessions: 6 },
+        { month: 'Nov', sessions: 9 },
+        { month: 'Dec', sessions: 5 },
+        { month: 'Jan', sessions: 11 },
+        { month: 'Feb', sessions: 8 },
+        { month: 'Mar', sessions: 8 },
+    ],
+    categoryBreakdown: [
+        { category: 'Liability', compliance: 96 },
+        { category: 'IP & Data', compliance: 91 },
+        { category: 'Payment', compliance: 98 },
+        { category: 'Termination', compliance: 89 },
+        { category: 'Dispute Resolution', compliance: 95 },
+    ],
+    areasToWatch: [
+        'Limitation of liability caps — occasionally accepting positions below fallback threshold',
+        'IP ownership provisions — sub-contractor clauses may need tightening',
+    ],
+}
+
 interface Person {
     email: string
     fullName: string
     // From company_users
     systemUserId?: string
     userId?: string
-    role?: 'admin' | 'manager' | 'user' | 'viewer'
+    role?: ClarenceRole
     systemStatus?: 'invited' | 'active' | 'suspended' | 'removed'
-    approvalRole?: 'negotiator' | 'approver' | 'admin'
     systemInvitedAt?: string
     lastActiveAt?: string
     // From approved_training_users
@@ -1862,6 +1918,17 @@ interface Person {
     trainingInvitationSent?: boolean
     // Derived
     healthSignal: 'green' | 'amber' | 'red'
+    isDemo?: boolean
+}
+
+const DEMO_PERSON: Person = {
+    email: 'alex.morgan@acme-corp.com',
+    fullName: 'Alex Morgan',
+    role: 'senior_negotiator',
+    systemStatus: 'active',
+    healthSignal: 'green',
+    sessionsCompleted: 47,
+    isDemo: true,
 }
 
 function deriveHealthSignal(p: Omit<Person, 'healthSignal'>): 'green' | 'amber' | 'red' {
@@ -1881,7 +1948,6 @@ function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[])
             email: u.email, fullName: u.fullName,
             systemUserId: u.id, userId: u.userId,
             role: u.role, systemStatus: u.status,
-            approvalRole: u.approvalRole,
             systemInvitedAt: u.invitedAt, lastActiveAt: u.lastActiveAt,
         }
         map.set(key, { ...base, healthSignal: deriveHealthSignal(base) })
@@ -1910,41 +1976,214 @@ function mergePeople(companyUsers: CompanyUser[], trainingUsers: TrainingUser[])
     return Array.from(map.values()).sort((a, b) => a.fullName.localeCompare(b.fullName))
 }
 
+function getRoleDef(role?: ClarenceRole) {
+    return CLARENCE_ROLES.find(r => r.value === role)
+}
+
+// ============================================================================
+// USER PROFILE MODAL
+// ============================================================================
+
+interface UserProfileModalProps {
+    person: Person
+    onClose: () => void
+}
+
+function UserProfileModal({ person, onClose }: UserProfileModalProps) {
+    const roleDef = getRoleDef(person.role)
+    const stats = person.isDemo ? DEMO_STATS : null
+    const maxActivity = stats ? Math.max(...stats.monthlyActivity.map(m => m.sessions)) : 1
+    const initials = person.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div
+                className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-start justify-between p-6 border-b border-slate-100">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-md flex-shrink-0">
+                            <span className="text-white font-bold text-xl">{initials}</span>
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-xl font-bold text-slate-800">{person.fullName}</h2>
+                                {person.isDemo && <span className="text-xs text-slate-400 font-normal">(Demo)</span>}
+                            </div>
+                            <p className="text-sm text-slate-500">{person.email}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                                {roleDef && (
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${roleDef.bgColor} ${roleDef.color}`}>
+                                        {roleDef.label}
+                                    </span>
+                                )}
+                                <span className={`inline-flex items-center gap-1 text-xs ${person.healthSignal === 'green' ? 'text-emerald-600' : person.healthSignal === 'amber' ? 'text-amber-600' : 'text-red-600'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full inline-block ${person.healthSignal === 'green' ? 'bg-emerald-400' : person.healthSignal === 'amber' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                                    {person.systemStatus === 'active' ? 'Active' : person.systemStatus === 'invited' ? 'Invite pending' : person.systemStatus || 'No access'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                    {/* Role Description */}
+                    {roleDef && (
+                        <div className={`p-4 rounded-xl border ${roleDef.bgColor}`}>
+                            <p className="text-sm font-medium text-slate-700">{roleDef.description}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Access: {roleDef.accessSummary}
+                                {roleDef.canApprove && <span className="ml-2 text-indigo-600">· Can approve contracts</span>}
+                            </p>
+                        </div>
+                    )}
+
+                    {stats ? (
+                        <>
+                            {/* Stat Cards */}
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                {[
+                                    { label: 'Sessions', value: stats.totalSessions, sub: 'total' },
+                                    { label: 'Compliance', value: `${stats.complianceRate}%`, sub: 'avg rate' },
+                                    { label: 'Avg Score', value: stats.avgPositionScore, sub: 'position' },
+                                    { label: 'Clauses', value: stats.clausesReviewed, sub: 'reviewed' },
+                                ].map(s => (
+                                    <div key={s.label} className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
+                                        <p className="text-2xl font-bold text-slate-800">{s.value}</p>
+                                        <p className="text-xs font-medium text-slate-600 mt-0.5">{s.label}</p>
+                                        <p className="text-xs text-slate-400">{s.sub}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Activity Chart */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-slate-700 mb-3">Monthly Activity</h4>
+                                <div className="flex items-end gap-2 h-28 px-2">
+                                    {stats.monthlyActivity.map(m => (
+                                        <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                                            <span className="text-xs text-slate-500 font-medium">{m.sessions}</span>
+                                            <div
+                                                className="w-full bg-indigo-500 rounded-t-md transition-all"
+                                                style={{ height: `${Math.round((m.sessions / maxActivity) * 64)}px` }}
+                                            />
+                                            <span className="text-xs text-slate-400">{m.month}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Category Compliance */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-slate-700 mb-3">Compliance by Category</h4>
+                                <div className="space-y-2.5">
+                                    {stats.categoryBreakdown.map(c => (
+                                        <div key={c.category} className="flex items-center gap-3">
+                                            <span className="text-xs text-slate-600 w-28 flex-shrink-0">{c.category}</span>
+                                            <div className="flex-1 bg-slate-100 rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full ${c.compliance >= 90 ? 'bg-emerald-500' : c.compliance >= 75 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                    style={{ width: `${c.compliance}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-xs font-medium text-slate-600 w-8 text-right">{c.compliance}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Areas to Watch */}
+                            {stats.areasToWatch.length > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-semibold text-slate-700 mb-2">Areas to Watch</h4>
+                                    <ul className="space-y-2">
+                                        {stats.areasToWatch.map((a, i) => (
+                                            <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                                                <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                                                {a}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="text-center py-8 text-slate-400">
+                            {person.sessionsCompleted !== undefined && person.sessionsCompleted > 0 && (
+                                <div className="mb-4">
+                                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 mb-2">
+                                        <span className="text-2xl font-bold text-indigo-600">{person.sessionsCompleted}</span>
+                                    </div>
+                                    <p className="text-sm text-slate-600 font-medium">Training sessions completed</p>
+                                </div>
+                            )}
+                            <p className="text-sm">Detailed activity analytics coming soon</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// PEOPLE TAB
+// ============================================================================
+
 interface PeopleTabProps {
     companyUsers: CompanyUser[]
     trainingUsers: TrainingUser[]
     isLoading: boolean
-    onAddPerson: (email: string, fullName: string, role: string, approvalRole: string, grantTraining: boolean, trainingType: string) => Promise<void>
+    isCurrentUserAdmin: boolean
+    onAddPerson: (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => Promise<void>
     onRemoveSystemUser: (id: string) => Promise<void>
     onRemoveTrainingUser: (id: string) => Promise<void>
     onSendSystemInvite: (id: string, email: string) => Promise<void>
     onSendTrainingInvite: (id: string, email: string) => Promise<void>
-    onUpdateApprovalRole: (id: string, approvalRole: string) => Promise<void>
+    onUpdateRole: (id: string, role: string) => Promise<void>
     onRefresh: () => void
 }
 
-function PeopleTab({ companyUsers, trainingUsers, isLoading, onAddPerson, onRemoveSystemUser, onRemoveTrainingUser, onSendSystemInvite, onSendTrainingInvite, onUpdateApprovalRole, onRefresh }: PeopleTabProps) {
+function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin, onAddPerson, onRemoveSystemUser, onRemoveTrainingUser, onSendSystemInvite, onSendTrainingInvite, onUpdateRole, onRefresh }: PeopleTabProps) {
     const [showAddForm, setShowAddForm] = useState(false)
     const [newEmail, setNewEmail] = useState('')
     const [newFullName, setNewFullName] = useState('')
-    const [newRole, setNewRole] = useState('user')
-    const [newApprovalRole, setNewApprovalRole] = useState('negotiator')
+    const [newRole, setNewRole] = useState<ClarenceRole>('negotiator')
     const [grantTraining, setGrantTraining] = useState(false)
     const [newTrainingType, setNewTrainingType] = useState('training_partner')
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [formError, setFormError] = useState<string | null>(null)
+    const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
 
     const people = mergePeople(companyUsers, trainingUsers)
+    const allPeople = [DEMO_PERSON, ...people]
     const activeCount = people.filter(p => p.healthSignal === 'green').length
     const pendingCount = people.filter(p => p.healthSignal === 'amber').length
+    const selectedRoleDef = CLARENCE_ROLES.find(r => r.value === newRole)
+    const availableRoles = isCurrentUserAdmin ? CLARENCE_ROLES : CLARENCE_ROLES.filter(r => r.value !== 'admin')
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault(); setError(null); setIsSubmitting(true)
+        e.preventDefault()
+        setFormError(null)
+        setIsSubmitting(true)
         try {
-            await onAddPerson(newEmail, newFullName, newRole, newApprovalRole, grantTraining, newTrainingType)
-            setShowAddForm(false); setNewEmail(''); setNewFullName('')
-            setNewRole('user'); setNewApprovalRole('negotiator'); setGrantTraining(false)
-        } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setIsSubmitting(false) }
+            await onAddPerson(newEmail, newFullName, newRole, grantTraining, newTrainingType)
+            setShowAddForm(false)
+            setNewEmail('')
+            setNewFullName('')
+            setNewRole('negotiator')
+            setGrantTraining(false)
+        } catch (e) {
+            setFormError(e instanceof Error ? e.message : 'Failed')
+        } finally {
+            setIsSubmitting(false)
+        }
     }
 
     return (
@@ -1953,120 +2192,166 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, onAddPerson, onRemo
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h3 className="text-lg font-semibold text-slate-800">People</h3>
-                    <p className="text-sm text-slate-500 mt-1">{people.length} {people.length === 1 ? 'person' : 'people'} · <span className="text-emerald-600">{activeCount} active</span> · <span className="text-amber-600">{pendingCount} pending</span></p>
+                    <p className="text-sm text-slate-500 mt-1">
+                        {people.length} {people.length === 1 ? 'person' : 'people'}
+                        {' · '}<span className="text-emerald-600">{activeCount} active</span>
+                        {' · '}<span className="text-amber-600">{pendingCount} pending</span>
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Refresh</button>
-                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{showAddForm ? 'Cancel' : '+ Add Person'}</button>
+                    <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        Refresh
+                    </button>
+                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                        {showAddForm ? 'Cancel' : '+ Add Person'}
+                    </button>
                 </div>
             </div>
 
             {/* Add Person Form */}
             {showAddForm && (
-                <form onSubmit={handleSubmit} className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <form onSubmit={handleSubmit} className="mb-6 p-5 bg-slate-50 rounded-xl border border-slate-200">
                     <h4 className="text-sm font-semibold text-slate-700 mb-4">New Person</h4>
                     <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Jane Smith" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">System Role</label><select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="admin">Admin</option><option value="manager">Manager</option><option value="user">User</option><option value="viewer">Viewer</option></select></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Approval Role</label><select value={newApprovalRole} onChange={(e) => setNewApprovalRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="negotiator">Negotiator</option><option value="approver">Approver</option><option value="admin">Admin</option></select></div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                            <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                            <input type="text" value={newFullName} onChange={e => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Jane Smith" />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                            <select value={newRole} onChange={e => setNewRole(e.target.value as ClarenceRole)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                {availableRoles.map(r => (
+                                    <option key={r.value} value={r.value}>{r.label}</option>
+                                ))}
+                            </select>
+                            {selectedRoleDef && (
+                                <div className={`mt-2 p-3 rounded-lg ${selectedRoleDef.bgColor}`}>
+                                    <p className="text-xs font-medium text-slate-700">{selectedRoleDef.description}</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Access: {selectedRoleDef.accessSummary}
+                                        {selectedRoleDef.canApprove && <span className="ml-1 text-indigo-600">· Can approve contracts</span>}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div className="border-t border-slate-200 pt-4">
                         <label className="flex items-center gap-3 cursor-pointer select-none">
-                            <input type="checkbox" checked={grantTraining} onChange={(e) => setGrantTraining(e.target.checked)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded" />
+                            <input type="checkbox" checked={grantTraining} onChange={e => setGrantTraining(e.target.checked)} className="w-4 h-4 text-indigo-600 border-slate-300 rounded" />
                             <span className="text-sm font-medium text-slate-700">Grant Training Studio access</span>
                         </label>
                         {grantTraining && (
-                            <div className="mt-3 ml-7"><label className="block text-sm font-medium text-slate-700 mb-1">Training Access Type</label><select value={newTrainingType} onChange={(e) => setNewTrainingType(e.target.value)} className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="training_partner">Training Partner</option><option value="training_admin">Training Admin</option><option value="ai_enabled">AI Enabled</option></select></div>
+                            <div className="mt-3 ml-7">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Training Access Type</label>
+                                <select value={newTrainingType} onChange={e => setNewTrainingType(e.target.value)} className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                    <option value="training_partner">Training Partner</option>
+                                    <option value="training_admin">Training Admin</option>
+                                    <option value="ai_enabled">AI Enabled</option>
+                                </select>
+                            </div>
                         )}
                     </div>
-                    {error && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
-                    <div className="mt-4 flex justify-end"><button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">{isSubmitting ? 'Adding...' : 'Add & Send Invite'}</button></div>
+                    {formError && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{formError}</div>}
+                    <div className="mt-4 flex justify-end">
+                        <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                            {isSubmitting ? 'Adding...' : 'Add & Send Invite'}
+                        </button>
+                    </div>
                 </form>
             )}
 
             {/* Roster */}
             {isLoading ? (
-                <div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
-            ) : people.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                    <svg className="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    <p>No people yet. Add your first team member.</p>
-                </div>
+                <div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>
             ) : (
                 <div className="space-y-1.5">
-                    {/* Column headers */}
                     <div className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                        <div className="w-3 flex-shrink-0"></div>
+                        <div className="w-3 flex-shrink-0" />
                         <div className="flex-1 min-w-0">Person</div>
-                        <div className="w-32 flex-shrink-0">System Role</div>
-                        <div className="w-32 flex-shrink-0">Training</div>
+                        <div className="w-36 flex-shrink-0">Role</div>
+                        <div className="w-28 flex-shrink-0">Training</div>
                         <div className="w-20 flex-shrink-0 text-center">Sessions</div>
-                        <div className="w-20 flex-shrink-0 text-center">Academy</div>
                         <div className="w-24 flex-shrink-0 text-right">Actions</div>
                     </div>
-                    {people.map((person) => (
-                        <div key={person.email} className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all">
-                            {/* Health signal */}
-                            <div className="w-3 flex-shrink-0">
-                                <span className={`block w-2.5 h-2.5 rounded-full ${person.healthSignal === 'green' ? 'bg-emerald-400' : person.healthSignal === 'amber' ? 'bg-amber-400' : 'bg-red-400'}`} title={person.healthSignal === 'green' ? 'Active' : person.healthSignal === 'amber' ? 'Pending' : 'Suspended'}></span>
-                            </div>
-                            {/* Name + email */}
-                            <div className="flex-1 min-w-0">
-                                <p className="font-medium text-slate-800 text-sm truncate">{person.fullName}</p>
-                                <p className="text-xs text-slate-500 truncate">{person.email}</p>
-                            </div>
-                            {/* System role + approval role */}
-                            <div className="w-32 flex-shrink-0 space-y-1">
-                                {person.role ? (
-                                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${person.role === 'admin' ? 'bg-purple-100 text-purple-700' : person.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{person.role}</span>
-                                ) : (
-                                    <span className="text-xs text-slate-300">no access</span>
-                                )}
-                                {person.approvalRole && person.systemUserId && (
-                                    <select value={person.approvalRole} onChange={(e) => onUpdateApprovalRole(person.systemUserId!, e.target.value)} className="block w-full px-1.5 py-0.5 text-xs border border-slate-200 rounded bg-white text-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200">
-                                        <option value="negotiator">Negotiator</option>
-                                        <option value="approver">Approver</option>
-                                        <option value="admin">Admin</option>
-                                    </select>
-                                )}
-                            </div>
-                            {/* Training access */}
-                            <div className="w-32 flex-shrink-0">
-                                {person.trainingType ? (
-                                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${person.trainingStatus === 'active' ? 'bg-emerald-100 text-emerald-700' : person.trainingStatus === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{person.trainingType.replace(/_/g, ' ')}</span>
-                                ) : (
-                                    <span className="text-xs text-slate-300">no access</span>
-                                )}
-                            </div>
-                            {/* Sessions completed */}
-                            <div className="w-20 flex-shrink-0 text-center">
-                                {person.sessionsCompleted !== undefined ? (
-                                    <span className="text-sm font-medium text-slate-700">{person.sessionsCompleted}</span>
-                                ) : <span className="text-xs text-slate-300">—</span>}
-                            </div>
-                            {/* Academy progress — coming soon */}
-                            <div className="w-20 flex-shrink-0 text-center">
-                                <span className="text-xs text-slate-300 italic">soon</span>
-                            </div>
-                            {/* Actions */}
-                            <div className="w-24 flex-shrink-0 flex items-center justify-end gap-2">
-                                {person.systemStatus === 'invited' && person.systemUserId && (
-                                    <button onClick={() => onSendSystemInvite(person.systemUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend</button>
-                                )}
-                                {person.trainingUserId && !person.trainingInvitationSent && (
-                                    <button onClick={() => onSendTrainingInvite(person.trainingUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Invite</button>
-                                )}
-                                {person.systemUserId && (
-                                    <button onClick={() => onRemoveSystemUser(person.systemUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                                )}
-                                {person.trainingUserId && !person.systemUserId && (
-                                    <button onClick={() => onRemoveTrainingUser(person.trainingUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                                )}
-                            </div>
+
+                    {allPeople.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500">
+                            <svg className="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            <p>No people yet. Add your first team member.</p>
                         </div>
-                    ))}
+                    ) : allPeople.map((person) => {
+                        const roleDef = getRoleDef(person.role)
+                        return (
+                            <div
+                                key={person.email}
+                                className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer group"
+                                onClick={() => setSelectedPerson(person)}
+                            >
+                                <div className="w-3 flex-shrink-0">
+                                    <span className={`block w-2.5 h-2.5 rounded-full ${person.healthSignal === 'green' ? 'bg-emerald-400' : person.healthSignal === 'amber' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-slate-800 text-sm truncate group-hover:text-indigo-700 transition-colors">
+                                        {person.fullName}
+                                        {person.isDemo && <span className="ml-1.5 text-xs text-slate-400 font-normal">(Demo)</span>}
+                                    </p>
+                                    <p className="text-xs text-slate-500 truncate">{person.email}</p>
+                                </div>
+                                <div className="w-36 flex-shrink-0">
+                                    {roleDef ? (
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${roleDef.bgColor} ${roleDef.color}`}>
+                                            {roleDef.label}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-slate-300">no access</span>
+                                    )}
+                                </div>
+                                <div className="w-28 flex-shrink-0">
+                                    {person.trainingType ? (
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${person.trainingStatus === 'active' ? 'bg-emerald-100 text-emerald-700' : person.trainingStatus === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                                            {person.trainingType.replace(/_/g, ' ')}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-slate-300">—</span>
+                                    )}
+                                </div>
+                                <div className="w-20 flex-shrink-0 text-center">
+                                    {person.sessionsCompleted !== undefined
+                                        ? <span className="text-sm font-medium text-slate-700">{person.sessionsCompleted}</span>
+                                        : <span className="text-xs text-slate-300">—</span>
+                                    }
+                                </div>
+                                <div className="w-24 flex-shrink-0 flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                    {!person.isDemo && (
+                                        <>
+                                            {person.systemStatus === 'invited' && person.systemUserId && (
+                                                <button onClick={() => onSendSystemInvite(person.systemUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend</button>
+                                            )}
+                                            {person.trainingUserId && !person.trainingInvitationSent && (
+                                                <button onClick={() => onSendTrainingInvite(person.trainingUserId!, person.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Invite</button>
+                                            )}
+                                            {person.systemUserId && (
+                                                <button onClick={() => onRemoveSystemUser(person.systemUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                                            )}
+                                            {person.trainingUserId && !person.systemUserId && (
+                                                <button onClick={() => onRemoveTrainingUser(person.trainingUserId!)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })}
                 </div>
+            )}
+
+            {selectedPerson && (
+                <UserProfileModal person={selectedPerson} onClose={() => setSelectedPerson(null)} />
             )}
         </div>
     )
@@ -2645,9 +2930,9 @@ function CompanyAdminContent() {
         await handleSendCompanyInvite('', email); await loadCompanyUsers(userInfo.companyId)
     }
 
-    const handleAddPerson = async (email: string, fullName: string, role: string, approvalRole: string, grantTraining: boolean, trainingType: string) => {
+    const handleAddPerson = async (email: string, fullName: string, role: string, grantTraining: boolean, trainingType: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
-        const { error: sysError } = await supabase.from('company_users').insert({ company_id: userInfo.companyId, email, full_name: fullName, role, approval_role: approvalRole, status: 'invited', invited_by: userInfo.userId, invited_at: new Date().toISOString() })
+        const { error: sysError } = await supabase.from('company_users').insert({ company_id: userInfo.companyId, email, full_name: fullName, role, status: 'invited', invited_by: userInfo.userId, invited_at: new Date().toISOString() })
         if (sysError) { if (sysError.code === '23505') throw new Error('User already exists'); throw new Error(sysError.message) }
         await handleSendCompanyInvite('', email)
         if (grantTraining) {
@@ -2660,10 +2945,10 @@ function CompanyAdminContent() {
 
     const handleRemoveCompanyUser = async (id: string) => { if (!userInfo?.companyId) return; const supabase = createClient(); await supabase.from('company_users').update({ status: 'removed' }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
 
-    const handleUpdateApprovalRole = async (id: string, approvalRole: string) => {
+    const handleUpdateRole = async (id: string, role: string) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
-        await supabase.from('company_users').update({ approval_role: approvalRole }).eq('company_user_id', id)
+        await supabase.from('company_users').update({ role }).eq('company_user_id', id)
         await loadCompanyUsers(userInfo.companyId)
     }
 
@@ -2800,7 +3085,7 @@ function CompanyAdminContent() {
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                                 {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} playbooks={playbooks} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
-                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} onAddPerson={handleAddPerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
+                                {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={userInfo?.role === 'admin'} onAddPerson={handleAddPerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
                                 {activeTab === 'audit' && <AuditLogTab />}
                             </div>
                         )}
