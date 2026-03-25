@@ -203,11 +203,9 @@ export async function buildSessionContext(
         const { data: sessionRow, error: sessErr } = await supabase
             .from('sessions')
             .select(`
-                session_id, session_number, customer_company, status,
-                currency, is_training, notes,
+                session_id, session_number, status, is_training,
                 contract_type_key, initiator_party_role,
-                leverage_tracker_customer, leverage_tracker_provider,
-                leverage_tracker_calculated_at
+                leverage_tracker_customer, leverage_tracker_provider
             `)
             .eq('session_id', sessionId)
             .single()
@@ -592,7 +590,7 @@ export async function buildSessionContext(
         // ------------------------------------------------------------------
         // PARTY INFO
         // ------------------------------------------------------------------
-        const customerCompany = (cr?.company_name as string) || (sessionRow.customer_company as string) || 'Customer'
+        const customerCompany = (cr?.company_name as string) || 'Customer'
         const customerName = (cr?.contact_name as string) || 'Customer Contact'
         const customerEmail = (cr?.contact_email as string) || ''
         const providerCompany = (pb?.provider_company as string) || 'Provider'
@@ -649,7 +647,7 @@ export async function buildSessionContext(
                 currentPhase,
                 phaseName: PHASE_NAMES[currentPhase] || 'Active Negotiation',
                 dealValue: (cr?.deal_value as number) || 0,
-                currency: (sessionRow.currency as string) || 'GBP',
+                currency: (cr?.currency as string) || 'GBP',
                 industry: (cr?.industry as string) || 'Not specified',
                 status: (sessionRow.status as string) || 'active',
                 sessionNumber: (sessionRow.session_number as string) || sessionId.substring(0, 8),
