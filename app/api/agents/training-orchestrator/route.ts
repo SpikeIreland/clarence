@@ -213,10 +213,17 @@ export async function POST(request: NextRequest) {
             // This MUST run server-side with service role because:
             //   1. n8n may not have finished populating positions yet (race condition)
             //   2. RLS may block client-side updates on session_clause_positions
-            const difficulty = body.difficulty || 'balanced'
-            const shiftRange = difficulty === 'cooperative' ? { min: 2, max: 3 }
+            // Normalise difficulty — frontend sends beginner/intermediate/advanced,
+            // older callers may send cooperative/balanced/aggressive
+            const rawDifficulty = body.difficulty || 'intermediate'
+            const difficulty = rawDifficulty === 'beginner' ? 'cooperative'
+                : rawDifficulty === 'advanced' ? 'aggressive'
+                : rawDifficulty === 'cooperative' ? 'cooperative'
+                : rawDifficulty === 'aggressive' ? 'aggressive'
+                : 'balanced'
+            const shiftRange = difficulty === 'cooperative' ? { min: 1, max: 2 }
                 : difficulty === 'aggressive' ? { min: 3, max: 5 }
-                : { min: 2, max: 4 } // balanced
+                : { min: 2, max: 3 } // balanced
 
             const highWeightCategories = ['liability', 'indemnification', 'limitation of liability', 'termination', 'payment', 'pricing', 'intellectual property', 'data protection', 'confidentiality', 'insurance', 'warranties']
             const lowWeightCategories = ['notices', 'definitions', 'general provisions', 'governing law', 'amendments', 'severability', 'entire agreement', 'assignment', 'waiver']

@@ -349,12 +349,16 @@ The scenario must create realistic commercial pressure on the ${playbookContext.
 
 ${profile?.weaknesses?.length ? `The user struggles with: ${profile.weaknesses.join(', ')}. Design the scenario to test these areas.` : ''}
 
-Make it commercially realistic — a real situation two companies might face. The scenario should test whether the user can negotiate within their organisation's risk tolerance.`
+Make it commercially realistic — a real situation two companies might face. The scenario should test whether the user can negotiate within their organisation's risk tolerance.
+
+IMPORTANT — Variety: Each scenario must feel distinct. Vary the industry sector, deal size, urgency level, and counterparty seniority. Do not default to generic IT services or software deals unless the contract type requires it. Consider sectors such as: manufacturing, logistics, financial services, healthcare, media, energy, retail, professional services, construction, or public sector. Vary deal values across a wide range (£50k to £10m+). Make the counterparty's situation specific and commercially credible.`
         : `Design a ${difficulty}-level ${contractType} training scenario focused on: ${focusAreas.join(', ')}.
 
 ${profile?.weaknesses?.length ? `The user struggles with: ${profile.weaknesses.join(', ')}. Design the scenario to test these areas.` : 'This is a general training scenario.'}
 
-Make it commercially realistic — a real situation two companies might face.`
+Make it commercially realistic — a real situation two companies might face.
+
+IMPORTANT — Variety: Each scenario must feel distinct. Vary the industry sector, deal size, urgency level, and counterparty seniority. Do not default to generic IT services or software deals unless the contract type requires it. Consider sectors such as: manufacturing, logistics, financial services, healthcare, media, energy, retail, professional services, construction, or public sector. Vary deal values across a wide range (£50k to £10m+). Make the counterparty's situation specific and commercially credible.`
 
     try {
         const response = await client.messages.create({
@@ -406,6 +410,9 @@ export async function generateAgent(
         : 'cooperative'
 
     const systemPrompt = `You are CLARENCE — The Honest Broker. You are generating an AI opponent agent for a training negotiation.
+
+## Geography & Demographics
+CLARENCE Legal is a UK-registered platform. The counterparty persona and company must be predominantly UK, European, or North American in origin. Default to British, Irish, French, German, Dutch, Scandinavian, or US/Canadian names and companies. Occasional global diversity is fine but should not be the default. Do not generate predominantly Asian-centric names or companies.
 
 ## Scenario
 ${scenario.narrative}
