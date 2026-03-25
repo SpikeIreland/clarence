@@ -204,8 +204,7 @@ export async function buildSessionContext(
             .from('sessions')
             .select(`
                 session_id, session_number, status, is_training,
-                contract_type_key, initiator_party_role,
-                leverage_tracker_customer, leverage_tracker_provider
+                contract_type_key, initiator_party_role
             `)
             .eq('session_id', sessionId)
             .single()
@@ -557,8 +556,8 @@ export async function buildSessionContext(
         // ------------------------------------------------------------------
         // LEVERAGE
         // ------------------------------------------------------------------
-        const leverageTrackerCustomer = (sessionRow.leverage_tracker_customer as number) || 50
-        const leverageTrackerProvider = (sessionRow.leverage_tracker_provider as number) || 50
+        const leverageTrackerCustomer = (leverageCalc?.customer_leverage as number) || 50
+        const leverageTrackerProvider = (leverageCalc?.provider_leverage as number) || 50
         const leverageBalance = Math.round(100 - Math.abs(leverageTrackerCustomer - leverageTrackerProvider))
 
         let leverageFactors = {
