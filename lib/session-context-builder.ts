@@ -203,8 +203,9 @@ export async function buildSessionContext(
         const { data: sessionRow, error: sessErr } = await supabase
             .from('sessions')
             .select(`
-                session_id, session_number, status, is_training,
-                contract_type_key, initiator_party_role
+                session_id, session_number, status, currency,
+                is_training, contract_type_key, initiator_party_role,
+                customer_company_id
             `)
             .eq('session_id', sessionId)
             .single()
@@ -217,7 +218,7 @@ export async function buildSessionContext(
         // ------------------------------------------------------------------
         // QUERY 2-5: Parallel queries
         // ------------------------------------------------------------------
-        const [crResult, pbResult, posResult, chatResult, leverageResult, partyMsgResult, posHistResult] = await Promise.all([
+        const [crResult, pbResult, posResult, chatResult, leverageResult, partyMsgResult, posHistResult, companyResult] = await Promise.all([
             // Customer requirements
             supabase
                 .from('customer_requirements')
@@ -281,6 +282,15 @@ export async function buildSessionContext(
                 .eq('session_id', sessionId)
                 .order('changed_at', { ascending: false })
                 .limit(20),
+
+            // Customer company name (customer_company renamed to customer_company_id → FK to companies)
+            sessionRow.customer_company_id
+                ? supabase
+                    .from('companies')
+                    .select('company_name')
+                    .eq('company_id', sessionRow.customer_company_id)
+                    .single()
+                : Promise.resolve({ data: null, error: null }),
         ])
 
         const cr = crResult.data
@@ -589,7 +599,7 @@ export async function buildSessionContext(
         // ------------------------------------------------------------------
         // PARTY INFO
         // ------------------------------------------------------------------
-        const customerCompany = (cr?.company_name as string) || 'Customer'
+        const customerCompany = (companyResult?.data?.company_name as string) || (cr?.company_name as string) || 'Customer'
         const customerName = (cr?.contact_name as string) || 'Customer Contact'
         const customerEmail = (cr?.contact_email as string) || ''
         const providerCompany = (pb?.provider_company as string) || 'Provider'
@@ -646,7 +656,7 @@ export async function buildSessionContext(
                 currentPhase,
                 phaseName: PHASE_NAMES[currentPhase] || 'Active Negotiation',
                 dealValue: (cr?.deal_value as number) || 0,
-                currency: 'GBP',
+                currency: (sessionRow.currency as string) || 'GBP',
                 industry: (cr?.industry as string) || 'Not specified',
                 status: (sessionRow.status as string) || 'active',
                 sessionNumber: (sessionRow.session_number as string) || sessionId.substring(0, 8),
