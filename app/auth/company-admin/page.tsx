@@ -1303,6 +1303,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
         setIsUploading(true)
         setUploadError(null)
         setUploadProgress('Extracting text from document...')
+        const supabase = createClient()
 
         try {
             // --- Observability: Log text extraction started ---
@@ -1383,12 +1384,41 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                 upload_source: 'company_admin'
             })
 
-            // Redirect to studio immediately — n8n processes the template in the background
-            // and the studio shows real-time clause parsing as they arrive.
-            // Pass linked_playbook_id as URL param so the studio loads playbook rules.
-            const studioUrl = `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
-                + (uploadLinkedPlaybookId ? `&linked_playbook_id=${uploadLinkedPlaybookId}` : '')
-            router.push(studioUrl)
+            // Poll until n8n finishes parsing (status = 'ready'), then redirect to studio.
+            // This ensures the user arrives at a fully-loaded clause list rather than a blank page.
+            setUploadProgress('Analysing contract… this usually takes 20–30 seconds')
+
+            const MAX_POLLS = 30 // 30 × 3s = 90s max
+            let polls = 0
+            const pollInterval = setInterval(async () => {
+                polls++
+                try {
+                    const { data } = await supabase
+                        .from('uploaded_contracts')
+                        .select('status, processing_error')
+                        .eq('contract_id', contractId)
+                        .single()
+
+                    if (data?.status === 'ready') {
+                        clearInterval(pollInterval)
+                        const studioUrl = `/auth/quick-contract/studio/${contractId}?mode=template&company=true`
+                            + (uploadLinkedPlaybookId ? `&linked_playbook_id=${uploadLinkedPlaybookId}` : '')
+                        router.push(studioUrl)
+                    } else if (data?.status === 'failed') {
+                        clearInterval(pollInterval)
+                        setUploadError(data.processing_error || 'Contract parsing failed — please try again')
+                        setIsUploading(false)
+                    } else if (polls >= MAX_POLLS) {
+                        clearInterval(pollInterval)
+                        setUploadError('Parsing timed out after 90 seconds — please try again')
+                        setIsUploading(false)
+                    } else {
+                        setUploadProgress(`Analysing contract… ${polls * 3}s elapsed`)
+                    }
+                } catch (pollErr) {
+                    console.warn('Poll error (will retry):', pollErr)
+                }
+            }, 3000)
 
         } catch (e) {
             console.error('Upload error:', e)

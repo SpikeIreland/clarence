@@ -4426,8 +4426,8 @@ INSTRUCTIONS:
                             return null
                         })()}
 
-                        {/* Save as Template (template mode only, not when workflow already created it) */}
-                        {isTemplateMode && !isCompanyTemplate && (() => {
+                        {/* Save as Template (template mode only) */}
+                        {isTemplateMode && (() => {
                             const leafClauses = clauses.filter(c => !c.isHeader)
                             const certifiedCount = leafClauses.filter(c => c.clarenceCertified).length
                             const failedCount = leafClauses.filter(c => c.processingStatus === 'failed').length
