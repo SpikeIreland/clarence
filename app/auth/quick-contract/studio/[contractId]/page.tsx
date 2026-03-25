@@ -686,7 +686,7 @@ function QuickContractStudioContent() {
                 // Try to get enriched user info from the users table
                 const { data: dbUser } = await supabase
                     .from('users')
-                    .select('user_id, first_name, last_name, email, company_id, companies(company_name)')
+                    .select('user_id, first_name, last_name, email, company_id, companies!users_company_id_fkey(company_name)')
                     .eq('user_id', supabaseUser.id)
                     .single()
 
