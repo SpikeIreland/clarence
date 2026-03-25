@@ -826,6 +826,13 @@ async function callClarenceAI(
                 viewerUserId: chatUserId,
                 contractTypeKey: contextFields?.contractTypeKey || null,
                 initiatorPartyRole: contextFields?.initiatorPartyRole || null,
+                roleContext: roleContext ? {
+                    contractTypeKey: roleContext.contractTypeName,
+                    protectedPartyLabel: roleContext.protectedPartyLabel,
+                    providingPartyLabel: roleContext.providingPartyLabel,
+                    userRoleLabel: roleContext.userRoleLabel,
+                    counterpartyRoleLabel: roleContext.counterpartyRoleLabel,
+                } : null,
                 clauseId: options.clauseId || null,
                 clauseName: options.clauseName || null,
                 clauseCategory: options.clauseCategory || null,
@@ -8913,8 +8920,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     />
                                                 </div>
                                                 <div className="flex justify-between mt-1 text-xs text-slate-400">
-                                                    <span>Provider Favoured</span>
-                                                    <span>Customer Favoured</span>
+                                                    <span>{roleContext ? `${roleContext.providingPartyLabel} Favoured` : 'Provider Favoured'}</span>
+                                                    <span>{roleContext ? `${roleContext.protectedPartyLabel} Favoured` : 'Customer Favoured'}</span>
                                                 </div>
                                             </div>
                                             <div className="text-right">

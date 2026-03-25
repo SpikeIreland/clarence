@@ -1138,9 +1138,16 @@ function QuickContractStudioContent() {
                     viewerRole: getPartyRole(),
                     viewerUserId: userInfo?.userId,
                     viewerCompanyId: userInfo?.companyId,
-                    // Role matrix fields — enables contract-type-specific party labels
+                    // Role matrix fields — enables contract-type-specific party labels in chat
                     contractTypeKey: contract?.contractTypeKey || null,
                     initiatorPartyRole: contract?.initiatorPartyRole || null,
+                    roleContext: roleContext ? {
+                        contractTypeKey: roleContext.contractTypeName,
+                        protectedPartyLabel: roleContext.protectedPartyLabel,
+                        providingPartyLabel: roleContext.providingPartyLabel,
+                        userRoleLabel: roleContext.userRoleLabel,
+                        counterpartyRoleLabel: roleContext.counterpartyRoleLabel,
+                    } : null,
                 })
             })
 
@@ -2520,6 +2527,13 @@ INSTRUCTIONS:
                     viewerCompanyId: userInfo?.companyId,
                     contractTypeKey: contract?.contractTypeKey || null,
                     initiatorPartyRole: contract?.initiatorPartyRole || null,
+                    roleContext: roleContext ? {
+                        contractTypeKey: roleContext.contractTypeName,
+                        protectedPartyLabel: roleContext.protectedPartyLabel,
+                        providingPartyLabel: roleContext.providingPartyLabel,
+                        userRoleLabel: roleContext.userRoleLabel,
+                        counterpartyRoleLabel: roleContext.counterpartyRoleLabel,
+                    } : null,
                 })
             })
 
@@ -2740,6 +2754,13 @@ INSTRUCTIONS:
                     viewerCompanyId: userInfo?.companyId,
                     contractTypeKey: contract?.contractTypeKey || null,
                     initiatorPartyRole: contract?.initiatorPartyRole || null,
+                    roleContext: roleContext ? {
+                        contractTypeKey: roleContext.contractTypeName,
+                        protectedPartyLabel: roleContext.protectedPartyLabel,
+                        providingPartyLabel: roleContext.providingPartyLabel,
+                        userRoleLabel: roleContext.userRoleLabel,
+                        counterpartyRoleLabel: roleContext.counterpartyRoleLabel,
+                    } : null,
                 })
             })
 
