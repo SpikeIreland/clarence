@@ -1602,6 +1602,14 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                                                             const val = e.target.value || null
                                                             const supabase = createClient()
                                                             await supabase.from('contract_templates').update({ linked_playbook_id: val }).eq('template_id', template.templateId)
+                                                            // Auto-run clause mapping when a playbook is first linked
+                                                            if (val && template.clauseCount > 0) {
+                                                                await supabase.rpc('map_playbook_rules_to_template_clauses', {
+                                                                    template_id: template.templateId,
+                                                                    playbook_id: val,
+                                                                    replace_existing: false,
+                                                                })
+                                                            }
                                                             setLinkingTemplateId(null)
                                                             onRefresh()
                                                         }}
@@ -1633,6 +1641,16 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
+                                    {template.status === 'ready' && template.clauseCount > 0 && template.linkedPlaybookId && (
+                                        <button
+                                            onClick={() => router.push(`/auth/company-admin/template/${template.templateId}/mapping`)}
+                                            className="px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-100 hover:bg-violet-200 rounded-lg flex items-center gap-1.5"
+                                            title="Review clause-to-rule mappings"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                                            Review Mappings
+                                        </button>
+                                    )}
                                     {template.status === 'ready' && template.clauseCount > 0 && (
                                         <button
                                             onClick={() => handleEditTemplate(template)}
