@@ -78,6 +78,7 @@ interface CompanyTemplate {
     templateName: string
     description: string
     contractType: string
+    documentTypeKey: string
     industry: string | null
     clauseCount: number
     version: number
@@ -1141,7 +1142,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
     const handleViewTemplate = async (template: CompanyTemplate) => {
         await Promise.all([
             fetchTemplateClauses(template.templateId),
-            fetchPlaybookRulesForType(template.contractType),
+            fetchPlaybookRulesForType(template.documentTypeKey || template.contractType),
         ])
         setViewingTemplate(template)
     }
@@ -2744,6 +2745,7 @@ function CompanyAdminContent() {
                 templateName: t.template_name,
                 description: t.description || '',
                 contractType: t.contract_type || 'custom',
+                documentTypeKey: t.document_type_key || DOCUMENT_TYPE_KEY_MAP[t.contract_type] || t.contract_type || 'service_agreement',
                 industry: t.industry,
                 clauseCount: t.clause_count || 0,
                 version: t.version || 1,

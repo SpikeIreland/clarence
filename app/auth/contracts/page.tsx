@@ -50,6 +50,7 @@ interface ContractTemplate {
     description: string
     industry: string | null
     contractType: string
+    documentTypeKey: string
     clauseCount: number
     version: number
     timesUsed: number
@@ -86,6 +87,12 @@ type UploadStage = 'idle' | 'selecting' | 'extracting' | 'parsing' | 'complete' 
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+const DOCUMENT_TYPE_KEY_MAP: Record<string, string> = {
+    'nda': 'nda_mutual', 'bpo': 'bpo_agreement', 'saas': 'saas_agreement',
+    'msa': 'service_agreement', 'employment': 'employment_contract',
+    'it_services': 'it_outsourcing', 'consulting': 'consultancy_agreement', 'custom': 'service_agreement',
+}
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
     'bpo': 'B',
@@ -235,6 +242,7 @@ export default function ContractLibraryPage() {
                 description: t.description || '',
                 industry: t.industry,
                 contractType: t.contract_type || 'custom',
+                documentTypeKey: t.document_type_key || DOCUMENT_TYPE_KEY_MAP[t.contract_type] || t.contract_type || 'service_agreement',
                 clauseCount: t.clause_count || 0,
                 version: t.version || 1,
                 timesUsed: t.times_used || 0,
