@@ -4131,7 +4131,7 @@ function DocumentCentreContent() {
                     is_system: false,
                     is_public: false,
                     is_active: true,
-                    company_id: null,
+                    company_id: userInfo.companyId || null,
                     created_by_user_id: userInfo.userId || null,
                     source_session_id: session.sessionId,
                     clause_count: positionsData.length,
