@@ -325,6 +325,26 @@ export default function ContractLibraryPage() {
         init()
     }, [loadUserInfo, loadTemplates])
 
+    // Re-fetch templates when the page becomes visible (e.g. user navigates
+    // back from Studio after saving a template, or switches browser tabs).
+    // Without this, Next.js client-side cache can serve stale data.
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible' && userInfo) {
+                loadTemplates(userInfo)
+            }
+        }
+        const handleFocus = () => {
+            if (userInfo) loadTemplates(userInfo)
+        }
+        document.addEventListener('visibilitychange', handleVisibility)
+        window.addEventListener('focus', handleFocus)
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibility)
+            window.removeEventListener('focus', handleFocus)
+        }
+    }, [userInfo, loadTemplates])
+
     // ==========================================================================
     // SECTION 6: SIGN OUT
     // ==========================================================================
