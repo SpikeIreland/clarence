@@ -207,21 +207,21 @@ function EditablePositionBar({ rule, onPositionChange }: {
             )}
 
             {/* Position chips — Market vs Company */}
-            <div className="flex gap-2 mt-2">
+            <div className="flex flex-wrap gap-2 mt-2">
                 {/* Market values */}
-                <div className="flex-1 rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5">
+                <div className="flex-1 min-w-0 rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5">
                     <p className="text-[9px] font-semibold text-amber-500 uppercase tracking-wide mb-1.5">Market Range</p>
-                    <div className="flex gap-1.5">
+                    <div className="flex flex-wrap gap-1.5">
                         {[
                             { key: 'minimum_position', label: 'Min', value: rule.minimum_position, bg: 'bg-amber-100 text-amber-700' },
                             { key: 'maximum_position', label: 'Max', value: rule.maximum_position, bg: 'bg-amber-100 text-amber-700' },
                         ].map(p => (
-                            <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
-                                <span>{p.label}:</span>
+                            <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded min-w-0 ${p.bg}`}>
+                                <span className="flex-shrink-0">{p.label}:</span>
                                 <select
                                     value={safePos(p.value)}
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
-                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
+                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 max-w-[80px] truncate"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                         <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
@@ -232,19 +232,19 @@ function EditablePositionBar({ rule, onPositionChange }: {
                     </div>
                 </div>
                 {/* Company values */}
-                <div className="flex-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                <div className="flex-1 min-w-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
                     <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Company Positions</p>
-                    <div className="flex gap-1.5">
+                    <div className="flex flex-wrap gap-1.5">
                         {[
                             { key: 'ideal_position', label: 'Ideal', value: rule.ideal_position, bg: 'bg-emerald-50 text-emerald-700' },
                             { key: 'fallback_position', label: 'Fallback', value: rule.fallback_position, bg: 'bg-red-50 text-red-600' },
                         ].map(p => (
-                            <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded ${p.bg}`}>
-                                <span>{p.label}:</span>
+                            <div key={p.key} className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded min-w-0 ${p.bg}`}>
+                                <span className="flex-shrink-0">{p.label}:</span>
                                 <select
                                     value={safePos(p.value)}
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
-                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2"
+                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 max-w-[80px] truncate"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                         <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
