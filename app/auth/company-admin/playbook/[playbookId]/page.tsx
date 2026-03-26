@@ -221,7 +221,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                                 <select
                                     value={safePos(p.value)}
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
-                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 max-w-[80px] truncate"
+                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 flex-1 truncate"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                         <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
@@ -244,7 +244,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                                 <select
                                     value={safePos(p.value)}
                                     onChange={(e) => onPositionChange(p.key, parseInt(e.target.value))}
-                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 max-w-[80px] truncate"
+                                    className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 flex-1 truncate"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                         <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
