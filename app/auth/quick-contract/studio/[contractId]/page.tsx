@@ -502,6 +502,10 @@ function QuickContractStudioContent() {
     const [unreadActivityCount, setUnreadActivityCount] = useState(0)
     const [activityViewMode, setActivityViewMode] = useState<'all' | 'clause'>('all')
 
+    // Staggered clause reveal — controls progressive population after parse
+    const [revealedClauseCount, setRevealedClauseCount] = useState<number | null>(null) // null = show all (normal mode)
+    const staggerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
     // Commit modal
     const [commitModalState, setCommitModalState] = useState<CommitModalState>('closed')
 
@@ -3164,7 +3168,9 @@ INSTRUCTIONS:
     // SECTION 4E: FILTERED CLAUSES
     // ========================================================================
 
-    const filteredClauses = clauses.filter(c => {
+    const filteredClauses = clauses.filter((c, index) => {
+        // During staggered reveal, only show clauses up to the revealed count
+        if (revealedClauseCount !== null && index >= revealedClauseCount) return false
         if (!clauseSearchTerm) return true
         const search = clauseSearchTerm.toLowerCase()
         return (
@@ -3919,11 +3925,33 @@ INSTRUCTIONS:
                         positionOptions: DEFAULT_POSITION_OPTIONS
                     }))
 
+                    // Store all clauses in state but start staggered reveal
                     setClauses(mappedClauses)
-
-                    // Belt-and-suspenders: ensure loading spinner is cleared
                     setLoading(false)
                     setContract(prev => prev ? { ...prev, clauseCount: clausesData.length } : prev)
+
+                    // --- Staggered clause reveal ---
+                    // Start with 0 visible, then reveal one at a time for a
+                    // progressive "watch them load" experience.
+                    // Speed: ~250ms per clause = ~4s for 17 clauses, ~25s for 100.
+                    setRevealedClauseCount(0)
+                    let revealed = 0
+                    const totalClauses = mappedClauses.length
+
+                    // Clear any existing stagger timer
+                    if (staggerTimerRef.current) clearInterval(staggerTimerRef.current)
+
+                    staggerTimerRef.current = setInterval(() => {
+                        revealed += 1
+                        if (revealed >= totalClauses) {
+                            // All clauses revealed — switch to normal mode
+                            setRevealedClauseCount(null)
+                            if (staggerTimerRef.current) clearInterval(staggerTimerRef.current)
+                            staggerTimerRef.current = null
+                        } else {
+                            setRevealedClauseCount(revealed)
+                        }
+                    }, 250)
 
                     // Auto-select first non-header clause
                     const firstLeaf = mappedClauses.findIndex(c => !c.isHeader)
@@ -3966,7 +3994,14 @@ INSTRUCTIONS:
             }
         }, 3000) // Poll every 3 seconds
 
-        return () => clearInterval(pollForClauses)
+        return () => {
+            clearInterval(pollForClauses)
+            // Clean up stagger timer if component unmounts during reveal
+            if (staggerTimerRef.current) {
+                clearInterval(staggerTimerRef.current)
+                staggerTimerRef.current = null
+            }
+        }
     }, [contractId, contract?.status, clauses.length])
 
     // POLL FOR CERTIFICATION STATUS (when clauses exist but still being certified)
@@ -5108,7 +5143,7 @@ INSTRUCTIONS:
                                 <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center mb-4">
                                     <div className="w-6 h-6 border-3 border-teal-600 border-t-transparent rounded-full animate-spin" />
                                 </div>
-                                <h3 className="text-sm font-medium text-slate-700 mb-2">Processing Document</h3>
+                                <h3 className="text-sm font-medium text-slate-700 mb-2">Extracting Clauses</h3>
                                 <p className="text-xs text-slate-500 mb-4">
                                     CLARENCE is extracting and analyzing clauses from your document. This may take a few minutes for larger contracts.
                                 </p>
@@ -5116,6 +5151,16 @@ INSTRUCTIONS:
                                     <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse" />
                                     Scanning for clause structure...
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Staggered reveal counter — shown while clauses are populating */}
+                        {revealedClauseCount !== null && clauses.length > 0 && (
+                            <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 border-b border-teal-100">
+                                <div className="w-3 h-3 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                                <span className="text-xs font-medium text-teal-700">
+                                    Loading clauses... {revealedClauseCount} of {clauses.length}
+                                </span>
                             </div>
                         )}
 
