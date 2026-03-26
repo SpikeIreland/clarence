@@ -5819,7 +5819,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         positionId: selectedClause.positionId,
                         sender: 'clarence',
                         senderUserId: null,
-                        message: `⏳ **${session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
+                        message: `⏳ **${trainingAvatarInfo?.characterName || session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
                         messageType: 'notification',
                         relatedPositionChange: false,
                         triggeredBy: 'training_auto_confirm',
@@ -5849,7 +5849,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 positionId: selectedClause.positionId,
                                 sender: 'clarence',
                                 senderUserId: null,
-                                message: `✅ **${session.providerContactName || 'AI Opponent'}** has confirmed the agreement!\n\n⚠ **Clause Locked:** ${selectedClause.clauseName} is now agreed at position ${providerPosition.toFixed(1)}.`,
+                                message: `✅ **${trainingAvatarInfo?.characterName || session.providerContactName || 'AI Opponent'}** has confirmed the agreement!\n\n⚠ **Clause Locked:** ${selectedClause.clauseName} is now agreed at position ${providerPosition.toFixed(1)}.`,
                                 messageType: 'notification',
                                 relatedPositionChange: true,
                                 triggeredBy: 'training_auto_confirm',
@@ -9619,7 +9619,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     {isTrainingMode
                                         ? (selectedClause
                                             ? `Training: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
-                                            : 'Training Session - AI Opponent')
+                                            : `Training Session — vs ${trainingAvatarInfo?.characterName || session?.providerContactName || 'AI Opponent'}`)
                                         : (selectedClause
                                             ? `Discussing: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
                                             : 'General Discussion')
@@ -9717,7 +9717,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             {/* Text content */}
                             <div>
                                 <div className="font-semibold text-lg">
-                                    {session?.providerContactName || 'AI Opponent'}
+                                    {trainingAvatarInfo?.characterName || session?.providerContactName || 'AI Opponent'}
                                 </div>
                                 <div className="flex items-center gap-2 text-white/90">
                                     <span className="text-sm">is considering your move</span>
@@ -9739,7 +9739,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* Optional: Top notification bar */}
                     <div className="fixed top-0 left-0 right-0 z-50">
                         <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium shadow-lg">
-                            ⏳ Waiting for {session?.providerContactName || 'AI Opponent'} to respond...
+                            ⏳ Waiting for {trainingAvatarInfo?.characterName || session?.providerContactName || 'AI Opponent'} to respond...
                         </div>
                     </div>
                 </>
