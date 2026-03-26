@@ -2182,6 +2182,7 @@ function QuickContractStudioContent() {
                         created_by_user_id: userInfo.userId,
                         clause_count: certifiedClauses.length,
                         linked_playbook_id: linkedPlaybookId || null,
+                        source_contract_id: resolvedContractId || contractId,
                         version: 1,
                         times_used: 0,
                         created_at: new Date().toISOString(),
@@ -2199,6 +2200,8 @@ function QuickContractStudioContent() {
                 const rm = rangeMappings.get(clause.clauseId)
                 return {
                     template_id: targetTemplateId,
+                    owner_type: isCompanyTemplate ? 'company' : 'company',  // RLS requires 'company' for user access
+                    company_id: userInfo.companyId,
                     clause_number: clause.clauseNumber,
                     clause_name: clause.clauseName,
                     category: clause.category,
