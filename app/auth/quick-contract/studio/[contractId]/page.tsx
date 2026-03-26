@@ -63,6 +63,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'rea
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import AuthenticatedHeader from '@/components/AuthenticatedHeader'
 import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat-panel'
 
 // ROLE MATRIX Phase 2: Dynamic position labels
@@ -1054,7 +1055,9 @@ function QuickContractStudioContent() {
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: isCertifying
+                    content: totalCount === 0
+                        ? `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI'm currently extracting clauses from "${displayName}" — this typically takes a minute or two depending on the document size.\n\nOnce the clauses appear, I'll begin certifying each one with a recommended position and analysis.`
+                        : isCertifying
                         ? `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI'm currently reviewing "${displayName}" — certification is in progress (${certifiedCount} of ${totalCount} clauses done so far).\n\nYou can start exploring certified clauses now, or wait until I've finished reviewing the full contract.`
                         : `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${certifiedCount} of ${totalCount} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
                     timestamp: new Date()
@@ -1588,6 +1591,26 @@ function QuickContractStudioContent() {
         if (contract?.uploadedByUserId === userInfo?.userId) return 'initiator'
         return 'respondent'
     }
+
+    // Sign out handler for AuthenticatedHeader
+    const handleSignOut = async () => {
+        try {
+            await supabase.auth.signOut()
+            localStorage.removeItem('clarence_auth')
+            localStorage.removeItem('clarence_provider_session')
+            router.push('/auth/login')
+        } catch (err) {
+            console.error('Sign out error:', err)
+        }
+    }
+
+    // Map studio userInfo to AuthenticatedHeader format
+    const headerUserInfo = userInfo ? {
+        firstName: userInfo.fullName?.split(' ')[0],
+        lastName: userInfo.fullName?.split(' ').slice(1).join(' '),
+        email: userInfo.email,
+        company: userInfo.companyName || undefined
+    } : null
 
     // ========================================================================
     // AGREEMENT STATUS HELPERS - Dual-party tracking
@@ -3971,6 +3994,23 @@ INSTRUCTIONS:
                         setExpandedSections(new Set(headerIds))
                     }
 
+                    // Update welcome message now that clauses have arrived
+                    const nonHeaderArrived = mappedClauses.filter(c => !c.isHeader)
+                    const certifiedArrived = nonHeaderArrived.filter(c => c.clarenceCertified).length
+                    const totalArrived = nonHeaderArrived.length
+                    const contractName = contract?.contractName || 'your document'
+                    const shortName = contractName.length > 50 ? contractName.substring(0, 47) + '...' : contractName
+                    setChatMessages(prev => prev.map(msg =>
+                        msg.id === 'welcome'
+                            ? {
+                                ...msg,
+                                content: certifiedArrived > 0
+                                    ? `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've found ${totalArrived} clauses in "${shortName}" and certification is underway (${certifiedArrived} of ${totalArrived} done so far).\n\nYou can start exploring certified clauses now, or wait until I've finished reviewing the full contract.`
+                                    : `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've extracted ${totalArrived} clauses from "${shortName}" and I'm now beginning certification — reviewing each clause to recommend a position and assessment.\n\nClauses will update in real-time as I work through them.`
+                            }
+                            : msg
+                    ))
+
                     clearInterval(pollForClauses)
                 }
 
@@ -3996,13 +4036,23 @@ INSTRUCTIONS:
 
         return () => {
             clearInterval(pollForClauses)
-            // Clean up stagger timer if component unmounts during reveal
+            // NOTE: Do NOT clear staggerTimerRef here — this cleanup runs when
+            // clauses.length changes (0→N), which would kill the stagger timer
+            // immediately after it starts. The stagger timer self-cleans when
+            // all clauses are revealed, and the dedicated unmount cleanup below
+            // handles the case where the component unmounts mid-stagger.
+        }
+    }, [contractId, contract?.status, clauses.length])
+
+    // Dedicated unmount cleanup for stagger timer
+    useEffect(() => {
+        return () => {
             if (staggerTimerRef.current) {
                 clearInterval(staggerTimerRef.current)
                 staggerTimerRef.current = null
             }
         }
-    }, [contractId, contract?.status, clauses.length])
+    }, [])
 
     // POLL FOR CERTIFICATION STATUS (when clauses exist but still being certified)
     // Also refreshes range mappings as they are generated during certification
@@ -4339,9 +4389,17 @@ INSTRUCTIONS:
     return (
         <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
 
+            {/* ============================================================ */}
+            {/* SITE-WIDE NAVIGATION HEADER */}
+            {/* ============================================================ */}
+            <AuthenticatedHeader
+                activePage="create"
+                userInfo={headerUserInfo}
+                onSignOut={handleSignOut}
+            />
 
             {/* ============================================================ */}
-            {/* SECTION 7A: HEADER */}
+            {/* SECTION 7A: STUDIO HEADER */}
             {/* ============================================================ */}
             <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
 
