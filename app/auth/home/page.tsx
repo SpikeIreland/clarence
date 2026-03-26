@@ -1029,7 +1029,13 @@ function HomePageInner() {
                     .delete()
                     .eq('quick_contract_id', contract.id)
 
-                // 9. Delete the parent contract record
+                // 9. Delete quick_contracts that reference this uploaded_contract
+                await supabase
+                    .from('quick_contracts')
+                    .delete()
+                    .eq('source_contract_id', contract.id)
+
+                // 10. Delete the parent contract record
                 const { error: deleteError } = await supabase
                     .from('uploaded_contracts')
                     .delete()
