@@ -250,6 +250,39 @@ export default function MappingReviewPage() {
 
     useEffect(() => { loadData() }, [loadData])
 
+    // Auto-run mapping on first load when a playbook is linked but no mappings exist yet.
+    // This avoids the user having to manually click "Run Auto-Mapping" every time.
+    const autoMappingTriggered = React.useRef(false)
+    useEffect(() => {
+        if (autoMappingTriggered.current) return
+        if (loading) return // Wait for initial load to finish
+        if (!template?.linked_playbook_id) return
+        if (mappings.length > 0) return // Already have mappings, nothing to do
+
+        // No mappings yet + playbook linked → auto-map
+        autoMappingTriggered.current = true
+        const autoRun = async () => {
+            setAutoMappingRunning(true)
+            setAutoMappingResult(null)
+            try {
+                const supabase = createClient()
+                const { data, error: rpcErr } = await supabase.rpc('map_playbook_rules_to_template_clauses', {
+                    template_id: templateId,
+                    playbook_id: template.linked_playbook_id,
+                    replace_existing: false,
+                })
+                if (rpcErr) throw new Error(rpcErr.message)
+                if (data?.[0]) setAutoMappingResult(data[0])
+                await loadData()
+            } catch (e: any) {
+                console.error('Auto-mapping failed:', e.message)
+            } finally {
+                setAutoMappingRunning(false)
+            }
+        }
+        autoRun()
+    }, [loading, template, mappings.length, templateId, loadData])
+
     // ---- Actions ------------------------------------------------------------
 
     const confirmMapping = async (mappingId: string) => {
@@ -539,8 +572,18 @@ export default function MappingReviewPage() {
                     </div>
                 ) : (
                     <div className="bg-white border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400">
-                        <p className="font-medium">No mappings yet</p>
-                        <p className="text-sm mt-1">Click <strong>Run Auto-Mapping</strong> above to generate initial mappings.</p>
+                        {autoMappingRunning ? (
+                            <>
+                                <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                                <p className="font-medium text-slate-600">Auto-mapping in progress…</p>
+                                <p className="text-sm mt-1">Matching playbook rules to template clauses.</p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="font-medium">No mappings yet</p>
+                                <p className="text-sm mt-1">Click <strong>Run Auto-Mapping</strong> above to generate initial mappings.</p>
+                            </>
+                        )}
                     </div>
                 )}
 
