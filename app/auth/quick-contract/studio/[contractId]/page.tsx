@@ -3931,11 +3931,11 @@ INSTRUCTIONS:
                     setContract(prev => prev ? { ...prev, clauseCount: clausesData.length } : prev)
 
                     // --- Staggered clause reveal ---
-                    // Start with 0 visible, then reveal one at a time for a
-                    // progressive "watch them load" experience.
+                    // Start with 1 visible (first clause appears instantly), then
+                    // reveal one at a time for a progressive "watch them load" effect.
                     // Speed: ~250ms per clause = ~4s for 17 clauses, ~25s for 100.
-                    setRevealedClauseCount(0)
-                    let revealed = 0
+                    setRevealedClauseCount(1)
+                    let revealed = 1
                     const totalClauses = mappedClauses.length
 
                     // Clear any existing stagger timer
