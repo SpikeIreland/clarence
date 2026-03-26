@@ -3533,6 +3533,10 @@ INSTRUCTIONS:
     }, [playbookRules, mappedClauseToRule])
 
     // Per-clause playbook compliance status for sidebar dots
+    // Uses minimum_position as breach threshold (not fallback_position) so that
+    // template clauses within the playbook's acceptable range show amber, not red.
+    // Red = below minimum (genuine breach), Amber = below ideal but acceptable,
+    // Green = at or above ideal position.
     const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach'>>(() => {
         const map = new Map<string, 'compliant' | 'warning' | 'breach'>()
         if (playbookRules.length === 0) return map
@@ -3541,7 +3545,7 @@ INSTRUCTIONS:
             const rule = findRuleForClause(clause.clauseName, clause.category)
             if (!rule) continue
             const pos = clause.clarencePosition
-            if (pos < rule.fallback_position) {
+            if (pos < rule.minimum_position) {
                 map.set(clause.clauseId, 'breach')
             } else if (pos < rule.ideal_position) {
                 map.set(clause.clauseId, 'warning')
