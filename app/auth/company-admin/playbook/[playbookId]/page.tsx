@@ -85,8 +85,17 @@ function EditablePositionBar({ rule, onPositionChange }: {
         const below = pts.filter(p => p.position < pos).pop()
         const above = pts.find(p => p.position > pos)
         if (below && above) {
+            // If scale points lack numeric values, fall back to nearest label
+            if (below.value == null || above.value == null || isNaN(below.value) || isNaN(above.value)) {
+                const nearest = Math.abs(pos - below.position) <= Math.abs(pos - above.position) ? below : above
+                return nearest.label
+            }
             const ratio = (pos - below.position) / (above.position - below.position)
             const interpolated = below.value + ratio * (above.value - below.value)
+            if (!Number.isFinite(interpolated)) {
+                const nearest = Math.abs(pos - below.position) <= Math.abs(pos - above.position) ? below : above
+                return nearest.label
+            }
             const unit = rangeCtx.range_unit || ''
             // Format based on value type
             if (rangeCtx.value_type === 'percentage') {
