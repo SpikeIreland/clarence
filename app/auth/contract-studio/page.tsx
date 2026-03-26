@@ -2339,6 +2339,10 @@ function ContractStudioContent() {
     const [uploadedContractName, setUploadedContractName] = useState<string | null>(null)
     const isSoloPrep = sessionStatus === 'solo_prep'
 
+    // Save Progress state
+    const [saveProgressStatus, setSaveProgressStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+
     // Map clarence_fairness DB values to human-readable labels using party-specific terminology.
     // Do NOT use this to drive dot position on the bar — it is display/tooltip only.
     const getFairnessLabel = (fairness: string | null): string => {
@@ -5636,6 +5640,41 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
     }
 
     // ============================================================================
+    // SECTION 8D2: SAVE PROGRESS HANDLER
+    // ============================================================================
+
+    const handleSaveProgress = async () => {
+        if (!session?.sessionId) return
+        setSaveProgressStatus('saving')
+
+        try {
+            const supabase = createClient()
+
+            // Touch session updated_at
+            await supabase
+                .from('sessions')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('session_id', session.sessionId)
+
+            // If in solo prep, also touch the uploaded contract
+            if (isSoloPrep && uploadedContractId) {
+                await supabase
+                    .from('uploaded_contracts')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('contract_id', uploadedContractId)
+            }
+
+            setSaveProgressStatus('saved')
+            setLastSavedAt(new Date())
+            setTimeout(() => setSaveProgressStatus('idle'), 3000)
+        } catch (err) {
+            console.error('Save progress error:', err)
+            setSaveProgressStatus('error')
+            setTimeout(() => setSaveProgressStatus('idle'), 5000)
+        }
+    }
+
+    // ============================================================================
     // SECTION 8E: TRADE-OFF HANDLERS
     // ============================================================================
 
@@ -7638,6 +7677,61 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <div className="flex items-center gap-2">
                             {/* Feedback Button */}
                             <FeedbackButton position="header" />
+
+                            {/* Save Progress Button */}
+                            <button
+                                onClick={handleSaveProgress}
+                                disabled={saveProgressStatus === 'saving'}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition ${
+                                    saveProgressStatus === 'saved'
+                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                        : saveProgressStatus === 'saving'
+                                            ? 'bg-slate-600 text-slate-400 cursor-wait'
+                                            : saveProgressStatus === 'error'
+                                                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white border border-slate-600'
+                                }`}
+                                title={
+                                    saveProgressStatus === 'saved'
+                                        ? `Saved at ${lastSavedAt?.toLocaleTimeString()}`
+                                        : saveProgressStatus === 'saving'
+                                            ? 'Saving...'
+                                            : lastSavedAt
+                                                ? `Last saved at ${lastSavedAt.toLocaleTimeString()}`
+                                                : 'Save your current progress'
+                                }
+                            >
+                                {saveProgressStatus === 'saving' ? (
+                                    <>
+                                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        Saving...
+                                    </>
+                                ) : saveProgressStatus === 'saved' ? (
+                                    <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Saved
+                                    </>
+                                ) : saveProgressStatus === 'error' ? (
+                                    <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                        </svg>
+                                        Retry
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                        </svg>
+                                        Save Progress
+                                    </>
+                                )}
+                            </button>
 
                             {/* Preview Contract Button */}
                             <button
