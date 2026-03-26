@@ -591,6 +591,7 @@ function QuickContractStudioContent() {
     const [dirtyPositions, setDirtyPositions] = useState<Map<string, number>>(new Map())
     const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+    const [saveProgressStatus, setSaveProgressStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
     // Draft-Position Sync: Prompt to regenerate draft after position change
     const [showDraftOfferPrompt, setShowDraftOfferPrompt] = useState(false)
@@ -3881,7 +3882,35 @@ INSTRUCTIONS:
         }
     }, [dirtyPositions, userInfo, getPositionColumn, supabase])
 
+    // Manual "Save Progress" handler — flushes positions + updates contract timestamp
+    const handleSaveProgress = useCallback(async () => {
+        if (!userInfo) return
+        setSaveProgressStatus('saving')
 
+        try {
+            // 1. Flush any dirty positions immediately
+            await forceSavePositions()
+
+            // 2. Touch updated_at on the contract so we know when it was last saved
+            const effectiveId = resolvedContractId || contractId
+            if (effectiveId) {
+                await supabase
+                    .from('uploaded_contracts')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('contract_id', effectiveId)
+            }
+
+            setSaveProgressStatus('saved')
+            setLastSavedAt(new Date())
+
+            // Reset back to idle after 3 seconds
+            setTimeout(() => setSaveProgressStatus('idle'), 3000)
+        } catch (err) {
+            console.error('Save progress error:', err)
+            setSaveProgressStatus('error')
+            setTimeout(() => setSaveProgressStatus('idle'), 5000)
+        }
+    }, [userInfo, forceSavePositions, resolvedContractId, contractId, supabase])
 
     // ========================================================================
     // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
@@ -4454,6 +4483,9 @@ INSTRUCTIONS:
                                 : 'Quick Create Studio'}
                             {' · '}{contract?.contractType}
                             {' · '}{clauses.filter(c => !c.isHeader).length} clauses
+                            {lastSavedAt && (
+                                <span className="text-slate-300"> · saved {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            )}
                         </p>
                     </div>
 
@@ -4461,6 +4493,70 @@ INSTRUCTIONS:
                     <div className="flex items-center gap-2 flex-shrink-0">
 
                         <FeedbackButton position="header" />
+
+                        {/* Save Progress Button — always visible when contract is not committed */}
+                        {contract?.status !== 'committed' && (
+                            <button
+                                onClick={handleSaveProgress}
+                                disabled={saveProgressStatus === 'saving'}
+                                className={`px-3 py-2 rounded-lg transition-all text-sm font-medium flex items-center gap-1.5 ${
+                                    saveProgressStatus === 'saved'
+                                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                                        : saveProgressStatus === 'saving'
+                                            ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-wait'
+                                            : saveProgressStatus === 'error'
+                                                ? 'bg-red-50 border border-red-200 text-red-600'
+                                                : dirtyPositions.size > 0
+                                                    ? 'bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100'
+                                                    : 'border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                                }`}
+                                title={
+                                    saveProgressStatus === 'saved'
+                                        ? `Saved at ${lastSavedAt?.toLocaleTimeString()}`
+                                        : saveProgressStatus === 'saving'
+                                            ? 'Saving...'
+                                            : dirtyPositions.size > 0
+                                                ? `${dirtyPositions.size} unsaved position change${dirtyPositions.size !== 1 ? 's' : ''}`
+                                                : lastSavedAt
+                                                    ? `Last saved at ${lastSavedAt.toLocaleTimeString()}`
+                                                    : 'Save your current progress'
+                                }
+                            >
+                                {saveProgressStatus === 'saving' ? (
+                                    <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        Saving...
+                                    </>
+                                ) : saveProgressStatus === 'saved' ? (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Saved
+                                    </>
+                                ) : saveProgressStatus === 'error' ? (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                        </svg>
+                                        Retry
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                        </svg>
+                                        Save Progress
+                                        {dirtyPositions.size > 0 && (
+                                            <span className="ml-0.5 w-2 h-2 bg-amber-500 rounded-full flex-shrink-0" />
+                                        )}
+                                    </>
+                                )}
+                            </button>
+                        )}
 
                         {/* Contract Lifecycle Button (non-template, initiator) */}
                         {!isTemplateMode && isInitiator && (() => {
