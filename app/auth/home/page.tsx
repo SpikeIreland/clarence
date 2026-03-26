@@ -1049,6 +1049,7 @@ function HomePageInner() {
                 // ============================================================
                 // Contract Create / Training pathway: cascade delete session
                 // Order: child tables first, then parent
+                // Must cover ALL FK child tables of sessions
                 // ============================================================
 
                 // 1. Delete generated documents
@@ -1093,11 +1094,117 @@ function HomePageInner() {
                     .delete()
                     .eq('session_id', contract.id)
 
-                // 8. Delete uploaded contract clauses (linked via session)
+                // 8. Delete provider bids and capabilities
+                await supabase
+                    .from('provider_capabilities')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('provider_bids')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 9. Delete customer requirements
+                await supabase
+                    .from('customer_requirements')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 10. Delete training-related tables
+                await supabase
+                    .from('playbook_training_results')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('playbook_training_sessions')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('training_session_details')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 11. Delete system events
+                await supabase
+                    .from('system_events')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 12. Delete remaining FK child tables
+                await supabase
+                    .from('playbook_clause_events')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('session_custom_clauses')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('session_gaps')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('session_negotiation_config')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('session_playbook_alerts')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('session_status_updates')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('session_agreements')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('position_history')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('trade_off_proposals')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('package_deals')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('mediation_results')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('evidence_packages')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('onboarding_data')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('document_uploads')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('email_communications')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('document_generation_queue')
+                    .delete()
+                    .eq('session_id', contract.id)
+                await supabase
+                    .from('parsed_clauses')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 13. Delete uploaded contract clauses (linked via session)
                 const { data: linkedContracts } = await supabase
                     .from('uploaded_contracts')
                     .select('contract_id')
-                    .eq('session_id', contract.id)
+                    .eq('linked_session_id', contract.id)
 
                 if (linkedContracts) {
                     for (const lc of linkedContracts) {
@@ -1110,16 +1217,28 @@ function HomePageInner() {
                     await supabase
                         .from('uploaded_contracts')
                         .delete()
-                        .eq('session_id', contract.id)
+                        .eq('linked_session_id', contract.id)
                 }
 
-                // 9. Delete audit log entries
+                // 14. Delete audit log entries
                 await supabase
                     .from('audit_log')
                     .delete()
                     .eq('session_id', contract.id)
 
-                // 10. Delete the session itself
+                // 15. Nullify any contract_templates that reference this session
+                await supabase
+                    .from('contract_templates')
+                    .update({ source_session_id: null })
+                    .eq('source_session_id', contract.id)
+
+                // 16. Nullify any quick_contracts upgraded to this session
+                await supabase
+                    .from('quick_contracts')
+                    .update({ upgraded_to_session_id: null })
+                    .eq('upgraded_to_session_id', contract.id)
+
+                // 17. Delete the session itself
                 const { error: deleteError } = await supabase
                     .from('sessions')
                     .delete()
