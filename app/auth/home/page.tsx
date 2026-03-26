@@ -641,8 +641,9 @@ function HomePageInner() {
             const sessionFields = `
                     session_id,
                     session_number,
-                    customer_company,
-                    provider_company,
+                    contract_name,
+                    customer_company_id,
+                    provider_company_id,
                     contract_type_key,
                     initiator_party_role,
                     status,
@@ -758,8 +759,8 @@ function HomePageInner() {
                     ? providerInfo?.provider_contact_name || ''
                     : customerInfo?.contact_name || ''
                 const counterpartyCompany = isInitiator
-                    ? providerInfo?.provider_company || session.provider_company || ''
-                    : customerInfo?.company_name || session.customer_company || ''
+                    ? providerInfo?.provider_company || ''
+                    : customerInfo?.company_name || ''
 
                 // Determine status
                 let statusLabel = 'Draft'
@@ -787,7 +788,7 @@ function HomePageInner() {
 
                 return {
                     id: session.session_id,
-                    name: `${session.customer_company || 'Contract'} — ${session.session_number || ''}`,
+                    name: session.contract_name || `Contract — ${session.session_number || ''}`,
                     contractType: '',
                     contractTypeKey: session.contract_type_key || null,
                     initiatorPartyRole: session.initiator_party_role || null,
