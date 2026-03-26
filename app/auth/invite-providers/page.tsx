@@ -427,7 +427,7 @@ function InviteProvidersContent() {
             await supabase
                 .from('sessions')
                 .update({
-                    session_notes: sessionNotes,
+                    notes: sessionNotes,
                     is_training: true,
                     status: 'active'
                 })
