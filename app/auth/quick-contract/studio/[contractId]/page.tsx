@@ -74,6 +74,9 @@ import { getPositionDescription } from '@/lib/role-matrix'
 import { calculatePlaybookCompliance, normaliseCategory, getEffectiveRangeContext, translateRulePosition, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
 // Schedule detection types
 import { getExpectedSchedules, getRequiredSchedules, getScheduleTypeLabel, buildScheduleExpectations } from '@/lib/schedule-types'
+// Schedule workspace components
+import StudioTabSwitcher, { type StudioTab } from '@/app/components/StudioTabSwitcher'
+import SchedulesWorkspace from '@/app/components/SchedulesWorkspace'
 import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
 import ComplianceWarningModal from '@/app/components/ComplianceWarningModal'
 import ComplianceGuidanceBanner from '@/app/components/ComplianceGuidanceBanner'
@@ -605,6 +608,9 @@ function QuickContractStudioContent() {
     const draftTargetPositionRef = useRef<number | null>(null)
 
     const [resolvedContractId, setResolvedContractId] = useState<string | null>(null)
+
+    // ---- STUDIO TAB STATE (Clauses | Schedules) ----
+    const [activeStudioTab, setActiveStudioTab] = useState<StudioTab>('clauses')
 
     // ---- SCHEDULE DETECTION STATE ----
     const [detectedSchedules, setDetectedSchedules] = useState<{ schedule_id: string; schedule_type: string; schedule_label: string; confidence_score: number; summary: string | null; status: string; checklist_status?: string | null; checklist_score?: number | null }[]>([])
@@ -5046,169 +5052,28 @@ INSTRUCTIONS:
                         </div>
                     )}
 
-                    {/* ==================== SCHEDULE DETECTION SUMMARY ==================== */}
-                    {(detectedSchedules.length > 0 || scheduleDetectionStatus === 'complete') && contract?.contractTypeKey && (
-                        <div className="border-b border-slate-200 flex-shrink-0">
-                            <button
-                                onClick={() => setSchedulePanelOpen(!schedulePanelOpen)}
-                                className="w-full px-3 py-2 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <span className="text-xs font-medium text-slate-700">
-                                        Schedules ({detectedSchedules.length})
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    {(() => {
-                                        const required = getRequiredSchedules(contract.contractTypeKey || '')
-                                        const missingRequired = required.filter(r => !detectedSchedules.find(d => d.schedule_type === r.scheduleType))
-                                        if (missingRequired.length > 0) {
-                                            return <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full">{missingRequired.length} missing</span>
-                                        }
-                                        if (detectedSchedules.length > 0) {
-                                            return <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700 rounded-full">All found</span>
-                                        }
-                                        return null
-                                    })()}
-                                    <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${schedulePanelOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </div>
-                            </button>
-                            {schedulePanelOpen && (
-                                <div className="px-3 pb-2 space-y-1">
-                                    {(() => {
-                                        const expectations = buildScheduleExpectations(contract.contractTypeKey || '', detectedSchedules as any)
-                                        return expectations.map(exp => {
-                                            const isClickable = !!exp.detected && !!exp.detectedSchedule
-                                            const isSelected = isClickable && selectedScheduleId === exp.detectedSchedule?.schedule_id
-                                            return (
-                                                <div
-                                                    key={exp.scheduleType}
-                                                    onClick={isClickable ? () => handleScheduleClick(exp.detectedSchedule!.schedule_id) : undefined}
-                                                    className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-                                                        isSelected
-                                                            ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-300'
-                                                            : exp.detected
-                                                                ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer'
-                                                                : exp.isRequired
-                                                                    ? 'bg-red-50 text-red-700'
-                                                                    : 'bg-slate-50 text-slate-500'
-                                                    }`}
-                                                >
-                                                    {exp.detected ? (
-                                                        <svg className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                    ) : (
-                                                        <svg className={`w-3.5 h-3.5 ${exp.isRequired ? 'text-red-500' : 'text-slate-400'} flex-shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                    )}
-                                                    <span className="flex-1 truncate">{exp.scheduleLabel}</span>
-                                                    {exp.isRequired && !exp.detected && (
-                                                        <span className="text-[10px] font-medium text-red-600">Required</span>
-                                                    )}
-                                                    {exp.detectedSchedule?.checklist_score != null && (
-                                                        <span className={`text-[10px] font-medium ${exp.detectedSchedule.checklist_score >= 80 ? 'text-emerald-600' : exp.detectedSchedule.checklist_score >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                            {Math.round(exp.detectedSchedule.checklist_score)}%
-                                                        </span>
-                                                    )}
-                                                    {exp.detectedSchedule && !exp.detectedSchedule.checklist_score && exp.detectedSchedule.confidence_score != null && (
-                                                        <span className="text-[10px] text-emerald-600">{Math.round(exp.detectedSchedule.confidence_score * 100)}%</span>
-                                                    )}
-                                                </div>
-                                            )
-                                        })
-                                    })()}
-
-                                    {/* Schedule Checklist Panel */}
-                                    {selectedScheduleId && (() => {
-                                        const selectedSchedule = detectedSchedules.find(s => s.schedule_id === selectedScheduleId)
-                                        if (!selectedSchedule) return null
-                                        return (
-                                            <div className="mt-2 border border-indigo-200 rounded-lg bg-white overflow-hidden">
-                                                <div className="px-3 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
-                                                    <div>
-                                                        <span className="text-[11px] font-bold text-indigo-800">{selectedSchedule.schedule_label}</span>
-                                                        {checklistScore != null && (
-                                                            <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${checklistScore >= 80 ? 'bg-emerald-100 text-emerald-700' : checklistScore >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                                                {Math.round(checklistScore)}% complete
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {resolvedContractId && (
-                                                        <button
-                                                            onClick={() => triggerChecklist(resolvedContractId, selectedScheduleId)}
-                                                            disabled={checklistLoading}
-                                                            className="text-[10px] font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            {checklistLoading ? 'Checking...' : checklistResults.length > 0 ? 'Re-check' : 'Run Checklist'}
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                {checklistLoading && (
-                                                    <div className="px-3 py-4 flex items-center justify-center">
-                                                        <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-2" />
-                                                        <span className="text-[11px] text-slate-500">Analysing schedule...</span>
-                                                    </div>
-                                                )}
-
-                                                {!checklistLoading && checklistResults.length > 0 && (
-                                                    <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
-                                                        {checklistResults.map(item => {
-                                                            const effectiveResult = item.manual_override || item.check_result
-                                                            return (
-                                                                <div key={item.result_id} className="px-3 py-1.5 flex items-start gap-2">
-                                                                    {effectiveResult === 'present' ? (
-                                                                        <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                        </svg>
-                                                                    ) : effectiveResult === 'partial' ? (
-                                                                        <svg className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                                        </svg>
-                                                                    ) : (
-                                                                        <svg className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                                        </svg>
-                                                                    )}
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-[11px] text-slate-700 leading-tight">{item.check_question}</p>
-                                                                        {item.ai_evidence && (
-                                                                            <p className="text-[10px] text-slate-400 mt-0.5 truncate italic">{item.ai_evidence}</p>
-                                                                        )}
-                                                                    </div>
-                                                                    <span className={`text-[9px] font-medium flex-shrink-0 px-1 py-0.5 rounded ${
-                                                                        effectiveResult === 'present' ? 'bg-emerald-50 text-emerald-600'
-                                                                        : effectiveResult === 'partial' ? 'bg-amber-50 text-amber-600'
-                                                                        : 'bg-red-50 text-red-600'
-                                                                    }`}>
-                                                                        {item.check_category}
-                                                                    </span>
-                                                                </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-
-                                                {!checklistLoading && checklistResults.length === 0 && (
-                                                    <div className="px-3 py-3 text-center">
-                                                        <p className="text-[11px] text-slate-400">No checklist results yet.</p>
-                                                        <p className="text-[10px] text-slate-400 mt-0.5">Click &quot;Run Checklist&quot; to analyse this schedule.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })()}
-                                </div>
-                            )}
-                        </div>
+                    {/* ==================== STUDIO TAB SWITCHER (Clauses | Schedules) ==================== */}
+                    {contract?.contractTypeKey && (
+                        <StudioTabSwitcher
+                            activeTab={activeStudioTab}
+                            onTabChange={setActiveStudioTab}
+                            clauseCount={clauses.filter(c => !c.isHeader).length}
+                            scheduleCount={detectedSchedules.length}
+                            missingRequiredCount={getRequiredSchedules(contract.contractTypeKey || '').filter(r => !detectedSchedules.find(d => d.schedule_type === r.scheduleType)).length}
+                        />
                     )}
+
+                    {/* ==================== SCHEDULES WORKSPACE (when Schedules tab active) ==================== */}
+                    {activeStudioTab === 'schedules' && contract?.contractTypeKey && (
+                        <SchedulesWorkspace
+                            contractId={resolvedContractId}
+                            contractTypeKey={contract.contractTypeKey || ''}
+                            detectedSchedules={detectedSchedules as any}
+                        />
+                    )}
+
+                    {/* ==================== CLAUSES CONTENT (when Clauses tab active) ==================== */}
+                    {activeStudioTab === 'clauses' && (<>
 
                     {/* ==================== BULK SELECT ACTION BAR ==================== */}
                     {bulkSelectedIds.size > 0 && (
@@ -5747,6 +5612,10 @@ INSTRUCTIONS:
                             })
                         })()}
                     </div>
+
+                    {/* End of Clauses tab conditional */}
+                    </>)}
+
                 </div>
 
                 {/* ======================================================== */}

@@ -14,6 +14,9 @@ import type { ComplianceCheckResult, GuidanceTip } from '@/lib/agents/compliance
 // ROLE MATRIX Phase 2: Dynamic position labels
 import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
 import PositionScaleIndicator from '@/app/components/PositionScaleIndicator'
+// Schedule workspace components
+import StudioTabSwitcher, { type StudioTab } from '@/app/components/StudioTabSwitcher'
+import SchedulesWorkspace from '@/app/components/SchedulesWorkspace'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -2194,6 +2197,7 @@ function ContractStudioContent() {
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [otherPartyStatus, setOtherPartyStatus] = useState<PartyStatus>({ isOnline: false, lastSeen: null, userName: null })
     const [session, setSession] = useState<Session | null>(null)
+    const [activeStudioTab, setActiveStudioTab] = useState<StudioTab>('clauses')
     const [clauses, setClauses] = useState<ContractClause[]>([])
     const [clauseTree, setClauseTree] = useState<ContractClause[]>([])
     const [rangeMappings, setRangeMappings] = useState<Map<string, RangeMapping>>(new Map())
@@ -8837,6 +8841,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </div>
                     </div>
 
+                    {/* ==================== STUDIO TAB SWITCHER (Clauses | Schedules) ==================== */}
+                    {session?.contractTypeKey && (
+                        <StudioTabSwitcher
+                            activeTab={activeStudioTab}
+                            onTabChange={setActiveStudioTab}
+                            clauseCount={clauses.length}
+                            scheduleCount={0}
+                            missingRequiredCount={0}
+                        />
+                    )}
+
+                    {/* ==================== SCHEDULES WORKSPACE (when Schedules tab active) ==================== */}
+                    {activeStudioTab === 'schedules' && session?.contractTypeKey && (
+                        <SchedulesWorkspace
+                            contractId={null}
+                            contractTypeKey={session.contractTypeKey || ''}
+                            detectedSchedules={[]}
+                        />
+                    )}
+
+                    {/* ==================== CLAUSES CONTENT (when Clauses tab active) ==================== */}
+                    {activeStudioTab === 'clauses' && (<>
+
                     {/* Clause Tree */}
                     <div className="flex-1 overflow-y-auto p-2">
                         {/* Main clause tree */}
@@ -8892,6 +8919,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         )}
                     </div>
+
+                    {/* End of Clauses tab conditional */}
+                    </>)}
+
                 </div>
 
                 {/* CENTER PANEL: Main Workspace */}
