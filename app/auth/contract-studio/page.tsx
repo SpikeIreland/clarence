@@ -8857,7 +8857,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <SchedulesWorkspace
                             contractId={null}
                             contractTypeKey={session.contractTypeKey || ''}
-                            detectedSchedules={[]}
                         />
                     )}
 

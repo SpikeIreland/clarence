@@ -73,7 +73,7 @@ import { getPositionDescription } from '@/lib/role-matrix'
 // Playbook compliance engine + indicator component
 import { calculatePlaybookCompliance, normaliseCategory, getEffectiveRangeContext, translateRulePosition, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
 // Schedule detection types
-import { getExpectedSchedules, getRequiredSchedules, getScheduleTypeLabel, buildScheduleExpectations } from '@/lib/schedule-types'
+import { getRequiredSchedules } from '@/lib/schedule-types'
 // Schedule workspace components
 import StudioTabSwitcher, { type StudioTab } from '@/app/components/StudioTabSwitcher'
 import SchedulesWorkspace from '@/app/components/SchedulesWorkspace'
@@ -615,68 +615,6 @@ function QuickContractStudioContent() {
     // ---- SCHEDULE DETECTION STATE ----
     const [detectedSchedules, setDetectedSchedules] = useState<{ schedule_id: string; schedule_type: string; schedule_label: string; confidence_score: number; summary: string | null; status: string; checklist_status?: string | null; checklist_score?: number | null }[]>([])
     const [scheduleDetectionStatus, setScheduleDetectionStatus] = useState<string | null>(null)
-    const [schedulePanelOpen, setSchedulePanelOpen] = useState(false)
-    const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
-
-    // ---- SCHEDULE CHECKLIST STATE ----
-    const [checklistResults, setChecklistResults] = useState<{ result_id: string; check_question: string; check_category: string; check_result: string; ai_evidence: string | null; ai_confidence: number | null; manual_override: string | null; notes: string | null }[]>([])
-    const [checklistLoading, setChecklistLoading] = useState(false)
-    const [checklistScore, setChecklistScore] = useState<number | null>(null)
-
-    // ---- SCHEDULE CHECKLIST FUNCTIONS ----
-    const fetchChecklist = async (contractId: string, scheduleId: string) => {
-        setChecklistLoading(true)
-        try {
-            const res = await fetch(`/api/contracts/${contractId}/schedules/${scheduleId}/checklist`)
-            if (!res.ok) return
-            const data = await res.json()
-            setChecklistResults(data.results || [])
-            setChecklistScore(data.checklistScore)
-        } catch {
-            /* non-critical */
-        } finally {
-            setChecklistLoading(false)
-        }
-    }
-
-    const triggerChecklist = async (contractId: string, scheduleId: string) => {
-        setChecklistLoading(true)
-        try {
-            const res = await fetch(`/api/contracts/${contractId}/schedules/${scheduleId}/checklist`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            })
-            if (!res.ok) return
-            // Refetch results after trigger
-            await fetchChecklist(contractId, scheduleId)
-            // Update the schedule's checklist_status in local state
-            setDetectedSchedules(prev => prev.map(s =>
-                s.schedule_id === scheduleId ? { ...s, checklist_status: 'complete' } : s
-            ))
-        } catch {
-            setChecklistLoading(false)
-        }
-    }
-
-    const handleScheduleClick = (scheduleId: string) => {
-        if (selectedScheduleId === scheduleId) {
-            setSelectedScheduleId(null)
-            setChecklistResults([])
-            setChecklistScore(null)
-            return
-        }
-        setSelectedScheduleId(scheduleId)
-        const schedule = detectedSchedules.find(s => s.schedule_id === scheduleId)
-        if (schedule && resolvedContractId) {
-            if (schedule.checklist_status === 'complete') {
-                fetchChecklist(resolvedContractId, scheduleId)
-            } else {
-                setChecklistResults([])
-                setChecklistScore(null)
-            }
-        }
-    }
-
     // ---- BULK SELECT STATE ----
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
     const [bulkAgreeInProgress, setBulkAgreeInProgress] = useState(false)
@@ -5068,7 +5006,7 @@ INSTRUCTIONS:
                         <SchedulesWorkspace
                             contractId={resolvedContractId}
                             contractTypeKey={contract.contractTypeKey || ''}
-                            detectedSchedules={detectedSchedules as any}
+                            initialSchedules={detectedSchedules as any}
                         />
                     )}
 

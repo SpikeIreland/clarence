@@ -27,19 +27,56 @@ interface ChecklistItem {
 interface SchedulesWorkspaceProps {
   contractId: string | null
   contractTypeKey: string
-  detectedSchedules: DetectedScheduleLocal[]
+  /** Optional: pass pre-loaded schedules to skip the initial fetch */
+  initialSchedules?: DetectedScheduleLocal[]
   onScheduleCountChange?: (count: number) => void
 }
 
 export default function SchedulesWorkspace({
   contractId,
   contractTypeKey,
-  detectedSchedules,
+  initialSchedules,
+  onScheduleCountChange,
 }: SchedulesWorkspaceProps) {
+  const [schedules, setSchedules] = useState<DetectedScheduleLocal[]>(initialSchedules || [])
+  const [schedulesLoading, setSchedulesLoading] = useState(false)
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
   const [checklistResults, setChecklistResults] = useState<ChecklistItem[]>([])
   const [checklistScore, setChecklistScore] = useState<number | null>(null)
   const [checklistLoading, setChecklistLoading] = useState(false)
+
+  // ---- SELF-LOADING: Fetch schedules from API when contractId is available ----
+  useEffect(() => {
+    if (!contractId) return
+    // Skip fetch if we were given pre-loaded schedules
+    if (initialSchedules && initialSchedules.length > 0) return
+
+    let cancelled = false
+    const loadSchedules = async () => {
+      setSchedulesLoading(true)
+      try {
+        const res = await fetch(`/api/contracts/${contractId}/schedules`)
+        if (res.ok && !cancelled) {
+          const data = await res.json()
+          setSchedules(data.schedules || [])
+          onScheduleCountChange?.(data.schedules?.length || 0)
+        }
+      } catch {
+        // Non-critical — schedule list will just be empty
+      } finally {
+        if (!cancelled) setSchedulesLoading(false)
+      }
+    }
+    loadSchedules()
+    return () => { cancelled = true }
+  }, [contractId, initialSchedules, onScheduleCountChange])
+
+  // Keep parent informed when initialSchedules changes externally
+  useEffect(() => {
+    if (initialSchedules) {
+      setSchedules(initialSchedules)
+    }
+  }, [initialSchedules])
 
   const fetchChecklist = useCallback(async (cId: string, sId: string) => {
     try {
@@ -48,7 +85,7 @@ export default function SchedulesWorkspace({
       if (res.ok) {
         const data = await res.json()
         setChecklistResults(data.results || [])
-        setChecklistScore(data.score ?? null)
+        setChecklistScore(data.checklistScore ?? data.score ?? null)
       }
     } catch {
       // Non-critical
@@ -62,10 +99,14 @@ export default function SchedulesWorkspace({
       setChecklistLoading(true)
       await fetch(`/api/contracts/${cId}/schedules/${sId}/checklist`, { method: 'POST' })
       await fetchChecklist(cId, sId)
+      // Update local schedule state so the list shows the new score
+      setSchedules(prev => prev.map(s =>
+        s.schedule_id === sId ? { ...s, checklist_status: 'complete', checklist_score: checklistScore } : s
+      ))
     } catch {
       setChecklistLoading(false)
     }
-  }, [fetchChecklist])
+  }, [fetchChecklist, checklistScore])
 
   const handleScheduleClick = useCallback((scheduleId: string) => {
     if (selectedScheduleId === scheduleId) {
@@ -75,7 +116,7 @@ export default function SchedulesWorkspace({
       return
     }
     setSelectedScheduleId(scheduleId)
-    const schedule = detectedSchedules.find(s => s.schedule_id === scheduleId)
+    const schedule = schedules.find(s => s.schedule_id === scheduleId)
     if (schedule && contractId) {
       if (schedule.checklist_status === 'complete') {
         fetchChecklist(contractId, scheduleId)
@@ -84,12 +125,12 @@ export default function SchedulesWorkspace({
         setChecklistScore(null)
       }
     }
-  }, [selectedScheduleId, detectedSchedules, contractId, fetchChecklist])
+  }, [selectedScheduleId, schedules, contractId, fetchChecklist])
 
-  const expectations = buildScheduleExpectations(contractTypeKey, detectedSchedules as any)
+  const expectations = buildScheduleExpectations(contractTypeKey, schedules as any)
   const detectedCount = expectations.filter(e => e.detected).length
   const requiredMissing = expectations.filter(e => e.isRequired && !e.detected)
-  const selectedSchedule = selectedScheduleId ? detectedSchedules.find(s => s.schedule_id === selectedScheduleId) : null
+  const selectedSchedule = selectedScheduleId ? schedules.find(s => s.schedule_id === selectedScheduleId) : null
 
   return (
     <div className="flex flex-col h-full">
@@ -115,7 +156,12 @@ export default function SchedulesWorkspace({
 
       {/* Schedule List */}
       <div className="flex-1 overflow-y-auto">
-        {expectations.length === 0 ? (
+        {schedulesLoading ? (
+          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3" />
+            <p className="text-xs text-slate-500">Loading schedules...</p>
+          </div>
+        ) : expectations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
             <svg className="w-10 h-10 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
