@@ -799,10 +799,14 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 d.restore()
             }
 
-            // Scale labels (1 and 10)
+            // Scale labels (1 and 10) — use lineBreak:false to prevent
+            // pdfkit from updating the internal text-flow cursor position
             d.font('Helvetica').fontSize(6).fillColor('#94A3B8')
-            d.text('1', x - 2, y + barH + 2, { width: 10 })
-            d.text('10', x + w - 6, y + barH + 2, { width: 14 })
+            d.text('1', x - 2, y + barH + 2, { width: 10, lineBreak: false })
+            d.text('10', x + w - 6, y + barH + 2, { width: 14, lineBreak: false })
+            // Reset text cursor to left margin so subsequent text() calls
+            // don't inherit the bar's rightward x-position and narrow width
+            d.x = 72
         }
 
         // ── Category Analysis ──
@@ -822,13 +826,13 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.roundedRect(legendX, legItemY, 20, 6, 2).fill('#EEF2FF')
         doc.roundedRect(legendX, legItemY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
         doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-            .text('Acceptable range', legendX + 24, legItemY - 1)
+            .text('Acceptable range', legendX + 24, legItemY - 1, { lineBreak: false })
 
         // Ideal marker
         const leg2X = legendX + 110
         doc.moveTo(leg2X, legItemY - 1).lineTo(leg2X, legItemY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
         doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-            .text('Ideal position', leg2X + 6, legItemY - 1)
+            .text('Ideal position', leg2X + 6, legItemY - 1, { lineBreak: false })
 
         // Template diamond
         const leg3X = leg2X + 90
@@ -837,8 +841,9 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.fill('#059669')
         doc.restore()
         doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-            .text('Template position', leg3X + 10, legItemY - 1)
+            .text('Template position', leg3X + 10, legItemY - 1, { lineBreak: false })
 
+        doc.x = 72 // Reset cursor after legend drawing
         doc.y = legItemY + 18
         doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
         doc.moveDown(0.8)
@@ -906,6 +911,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
 
                     doc.y = ruleY + 18
                 }
+                doc.x = 72 // Reset to left margin after position bar drawing
                 doc.moveDown(0.3)
             }
 
