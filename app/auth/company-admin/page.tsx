@@ -1069,6 +1069,65 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                 }
             }
 
+            // Copy schedule data from the original source contract (if any)
+            const { data: templateMeta } = await supabase
+                .from('contract_templates')
+                .select('source_contract_id')
+                .eq('template_id', template.templateId)
+                .single()
+
+            if (templateMeta?.source_contract_id) {
+                const sourceId = templateMeta.source_contract_id
+
+                // Copy contract_schedules from original → new contract
+                const { data: origSchedules } = await supabase
+                    .from('contract_schedules')
+                    .select('schedule_type, schedule_label, detection_method, confidence_score, start_position, end_position, extracted_text, summary, status, checklist_status, checklist_score')
+                    .eq('contract_id', sourceId)
+
+                if (origSchedules && origSchedules.length > 0) {
+                    await supabase
+                        .from('contract_schedules')
+                        .insert(origSchedules.map(s => ({
+                            ...s,
+                            contract_id: newContract.contract_id,
+                        })))
+
+                    // Copy schedule clause content from original uploaded_contract_clauses
+                    const { data: schedClauses } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('clause_number, clause_name, category, content, original_text, clause_level, display_order, is_header, status, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, clarence_certified_at')
+                        .eq('contract_id', sourceId)
+                        .ilike('clause_number', 'Schedule %')
+
+                    if (schedClauses && schedClauses.length > 0) {
+                        await supabase
+                            .from('uploaded_contract_clauses')
+                            .insert(schedClauses.map(sc => ({
+                                ...sc,
+                                contract_id: newContract.contract_id,
+                            })))
+                    }
+
+                    // Copy schedule metadata to the new uploaded_contracts record
+                    const { data: origContract } = await supabase
+                        .from('uploaded_contracts')
+                        .select('schedule_count, schedule_detection_status, contract_type_key')
+                        .eq('contract_id', sourceId)
+                        .single()
+
+                    if (origContract) {
+                        await supabase
+                            .from('uploaded_contracts')
+                            .update({
+                                schedule_count: origContract.schedule_count,
+                                schedule_detection_status: origContract.schedule_detection_status,
+                            })
+                            .eq('contract_id', newContract.contract_id)
+                    }
+                }
+            }
+
             router.push(`/auth/quick-contract/studio/${newContract.contract_id}?mode=template&company=true&edit_template_id=${template.templateId}`)
         } catch (e) {
             console.error('Failed to open template for editing:', e)
