@@ -23,6 +23,11 @@ import {
     RedLinesTab,
     FlexibilityTab,
 } from '@/app/components/PlaybookComplianceIndicator'
+import type {
+    AlignmentReportResult,
+    CategoryNarrative,
+    AlignmentTier,
+} from '@/lib/alignment-engine'
 
 // ============================================================================
 // TYPES
@@ -37,7 +42,7 @@ interface AuditData {
     focus_categories: string[]
     status: 'pending' | 'running' | 'complete' | 'failed'
     overall_score: number | null
-    results: ComplianceResult | null
+    results: AlignmentReportResult | null
     error_message: string | null
     created_at: string
     started_at: string | null
@@ -392,6 +397,74 @@ function SnapshotPanel({ compliance }: { compliance: ComplianceResult }) {
 }
 
 // ============================================================================
+// CATEGORY NARRATIVE PANEL
+// ============================================================================
+
+function CategoryNarrativePanel({ narrative }: { narrative: CategoryNarrative }) {
+    const tierColors = {
+        aligned: 'border-emerald-200 bg-emerald-50/50',
+        partially_aligned: 'border-amber-200 bg-amber-50/50',
+        material_gap: 'border-red-200 bg-red-50/50',
+    }
+    const tierTextColors = {
+        aligned: 'text-emerald-800',
+        partially_aligned: 'text-amber-800',
+        material_gap: 'text-red-800',
+    }
+
+    return (
+        <div className={`rounded-lg border p-4 ${tierColors[narrative.tier]}`}>
+            {/* Risk Summary */}
+            <div className="mb-3">
+                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Risk Assessment</div>
+                <p className={`text-sm leading-relaxed ${tierTextColors[narrative.tier]}`}>
+                    {narrative.riskSummary}
+                </p>
+            </div>
+
+            {/* Key Findings */}
+            {narrative.keyFindings.length > 0 && (
+                <div className="mb-3">
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Key Findings</div>
+                    <ul className="space-y-1">
+                        {narrative.keyFindings.map((finding, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-xs text-slate-700">
+                                <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-400 flex-shrink-0" />
+                                {finding}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* Remediation */}
+            <div>
+                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Recommended Action</div>
+                <p className="text-xs text-slate-700 leading-relaxed">{narrative.remediation}</p>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// EXECUTIVE SUMMARY BANNER
+// ============================================================================
+
+function ExecutiveSummaryBanner({ summary }: { summary: string }) {
+    return (
+        <div className="bg-white rounded-lg border border-indigo-200 p-5 mb-5">
+            <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h2 className="text-sm font-semibold text-slate-800">Executive Summary</h2>
+            </div>
+            <p className="text-sm text-slate-700 leading-relaxed">{summary}</p>
+        </div>
+    )
+}
+
+// ============================================================================
 // LOADING
 // ============================================================================
 
@@ -417,10 +490,10 @@ function AuditReportContent() {
 
     const [loading, setLoading] = useState(true)
     const [audit, setAudit] = useState<AuditData | null>(null)
-    const [rules, setRules] = useState<PlaybookRule[]>([])
+    const [reportResult, setReportResult] = useState<AlignmentReportResult | null>(null)
     const [templateClauses, setTemplateClauses] = useState<TemplateClauseRow[]>([])
-    const [compliance, setCompliance] = useState<ComplianceResult | null>(null)
     const [isRunning, setIsRunning] = useState(false)
+    const [runProgress, setRunProgress] = useState<string>('')
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
     // Load audit data
@@ -435,40 +508,28 @@ function AuditReportContent() {
 
                 // If results already computed, use them
                 if (auditData.status === 'complete' && auditData.results) {
-                    setCompliance(auditData.results)
+                    setReportResult(auditData.results)
+                    // Also load template clauses for alignment cards
+                    const supabase = createClient()
+                    const { data: clausesData } = await supabase
+                        .from('template_clauses')
+                        .select('*')
+                        .eq('template_id', auditData.template_id)
+                        .order('display_order', { ascending: true })
+                    setTemplateClauses((clausesData || []).map(normaliseClauseRow))
                     setLoading(false)
                     return
                 }
 
-                // Load rules and template clauses for computation
+                // For pending audits, load template clauses for preview
                 const supabase = createClient()
+                const { data: clausesData } = await supabase
+                    .from('template_clauses')
+                    .select('*')
+                    .eq('template_id', auditData.template_id)
+                    .order('display_order', { ascending: true })
+                setTemplateClauses((clausesData || []).map(normaliseClauseRow))
 
-                const [{ data: rulesData }, { data: clausesData }] = await Promise.all([
-                    supabase
-                        .from('playbook_rules')
-                        .select('*')
-                        .eq('playbook_id', auditData.playbook_id)
-                        .eq('is_active', true)
-                        .order('category')
-                        .order('display_order', { ascending: true }),
-                    supabase
-                        .from('template_clauses')
-                        .select('*')
-                        .eq('template_id', auditData.template_id)
-                        .order('display_order', { ascending: true }),
-                ])
-
-                const allRules = (rulesData || []) as PlaybookRule[]
-                const allClauses = (clausesData || []).map(normaliseClauseRow)
-
-                // Filter rules to focus categories
-                const focusCategories = new Set(auditData.focus_categories || [])
-                const filteredRules = focusCategories.size > 0
-                    ? allRules.filter(r => focusCategories.has(normaliseCategory(r.category)))
-                    : allRules
-
-                setRules(filteredRules)
-                setTemplateClauses(allClauses)
                 setLoading(false)
             } catch (err) {
                 console.error('Error loading audit:', err)
@@ -478,62 +539,42 @@ function AuditReportContent() {
         init()
     }, [auditId, router])
 
-    // Compute compliance when rules and clauses are loaded
-    const computedCompliance = useMemo(() => {
-        if (compliance) return compliance  // Already loaded from saved results
-        if (!rules.length || !templateClauses.length) return null
-        const adapted = templateClausesToComplianceClauses(templateClauses)
-        return calculatePlaybookCompliance(
-            rules,
-            adapted,
-            audit?.playbook_perspective || 'customer'
-        )
-    }, [rules, templateClauses, audit?.playbook_perspective, compliance])
-
-    // Run audit: compute and save results
+    // Run audit via server-side API (with AI narrative generation)
     const handleRunAudit = async () => {
-        if (!computedCompliance || !audit) return
+        if (!audit) return
         setIsRunning(true)
+        setRunProgress('Starting alignment analysis...')
 
         try {
-            await fetch(`/api/audits/${auditId}`, {
-                method: 'PATCH',
+            setRunProgress('Running compliance engine and generating AI narratives...')
+
+            const res = await fetch(`/api/audits/${auditId}/run`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    status: 'running',
-                    started_at: new Date().toISOString(),
-                }),
             })
 
-            // Save the computed results
-            await fetch(`/api/audits/${auditId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    status: 'complete',
-                    overall_score: computedCompliance.overallScore,
-                    results: computedCompliance,
-                    completed_at: new Date().toISOString(),
-                }),
-            })
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error || 'Audit run failed')
+            }
 
-            setAudit(prev => prev ? {
-                ...prev,
-                status: 'complete',
-                overall_score: computedCompliance.overallScore,
-                results: computedCompliance,
-            } : null)
-            setCompliance(computedCompliance)
+            setRunProgress('Loading results...')
+
+            // Reload the full audit to get saved results
+            const auditRes = await fetch(`/api/audits/${auditId}`)
+            if (auditRes.ok) {
+                const updatedAudit: AuditData = await auditRes.json()
+                setAudit(updatedAudit)
+                if (updatedAudit.results) {
+                    setReportResult(updatedAudit.results)
+                }
+            }
+
+            setRunProgress('')
         } catch (err) {
             console.error('Error running audit:', err)
-            await fetch(`/api/audits/${auditId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    status: 'failed',
-                    error_message: err instanceof Error ? err.message : 'Unknown error',
-                }),
-            })
+            setRunProgress('')
+            setAudit(prev => prev ? { ...prev, status: 'failed', error_message: err instanceof Error ? err.message : 'Unknown error' } : null)
         } finally {
             setIsRunning(false)
         }
@@ -551,10 +592,9 @@ function AuditReportContent() {
     if (loading) return <AuditReportLoading />
     if (!audit) return null
 
-    const result = computedCompliance
-    const aligned = result?.categories.filter(c => c.score >= 80).length || 0
-    const partial = result?.categories.filter(c => c.score >= 60 && c.score < 80).length || 0
-    const misaligned = result?.categories.filter(c => c.score < 60).length || 0
+    const compliance = reportResult?.compliance || null
+    const narratives = reportResult?.narratives || []
+    const narrativeMap = new Map(narratives.map(n => [n.normalisedKey, n]))
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -569,9 +609,9 @@ function AuditReportContent() {
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h1 className="text-lg font-bold text-slate-800">{audit.audit_name}</h1>
-                                    {audit.status === 'complete' && result && (
-                                        <span className={`text-lg font-bold font-mono ${result.overallScore >= 80 ? 'text-emerald-600' : result.overallScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                                            {result.overallScore}%
+                                    {audit.status === 'complete' && compliance && (
+                                        <span className={`text-lg font-bold font-mono ${compliance.overallScore >= 80 ? 'text-emerald-600' : compliance.overallScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                            {compliance.overallScore}%
                                         </span>
                                     )}
                                 </div>
@@ -581,13 +621,17 @@ function AuditReportContent() {
                                     <span>{audit.template_name}</span>
                                     <span className="text-slate-300">·</span>
                                     <span>{audit.focus_categories?.length || 0} focus categories</span>
-                                    <span className="text-slate-300">·</span>
-                                    <span>{rules.length} rules</span>
+                                    {reportResult && (
+                                        <>
+                                            <span className="text-slate-300">·</span>
+                                            <span>{reportResult.totalRulesInScope} rules</span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {audit.status === 'pending' && result && (
+                            {audit.status === 'pending' && (
                                 <button
                                     onClick={handleRunAudit}
                                     disabled={isRunning}
@@ -596,12 +640,12 @@ function AuditReportContent() {
                                     {isRunning ? (
                                         <>
                                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            Running...
+                                            {runProgress || 'Running...'}
                                         </>
                                     ) : (
                                         <>
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                            Save &amp; Run Audit
+                                            Run Alignment Audit
                                         </>
                                     )}
                                 </button>
@@ -611,6 +655,20 @@ function AuditReportContent() {
                                     Report Complete
                                 </span>
                             )}
+                            {audit.status === 'failed' && (
+                                <div className="flex items-center gap-2">
+                                    <span className="px-3 py-1.5 text-xs font-semibold bg-red-50 text-red-700 border border-red-200 rounded-lg">
+                                        Failed
+                                    </span>
+                                    <button
+                                        onClick={handleRunAudit}
+                                        disabled={isRunning}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                    >
+                                        Retry
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -618,25 +676,57 @@ function AuditReportContent() {
 
             {/* Content area */}
             <div className="max-w-6xl mx-auto px-4 py-5">
-                {!result ? (
+                {audit.status === 'pending' && !compliance ? (
+                    /* Pending state — prompt to run */
                     <div className="text-center py-16">
-                        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                         </div>
-                        <h2 className="text-lg font-semibold text-slate-700 mb-1">Loading Analysis</h2>
-                        <p className="text-sm text-slate-500">Loading playbook rules and template clauses...</p>
+                        <h2 className="text-lg font-semibold text-slate-700 mb-1">Ready to Analyse</h2>
+                        <p className="text-sm text-slate-500 max-w-md mx-auto mb-5">
+                            This audit will compare {audit.template_name} against {audit.playbook_name} across {audit.focus_categories?.length || 0} categories,
+                            and generate AI-powered risk narratives and remediation recommendations.
+                        </p>
+                        <button
+                            onClick={handleRunAudit}
+                            disabled={isRunning}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-md"
+                        >
+                            {isRunning ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    {runProgress || 'Running...'}
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    Run Alignment Audit
+                                </>
+                            )}
+                        </button>
+                        {audit.error_message && (
+                            <div className="mt-4 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 max-w-md mx-auto">
+                                {audit.error_message}
+                            </div>
+                        )}
                     </div>
-                ) : (
+                ) : compliance ? (
                     <>
-                        {/* Executive Summary */}
-                        <SnapshotPanel compliance={result} />
+                        {/* Executive Summary (AI-generated) */}
+                        {reportResult?.executiveSummary && (
+                            <ExecutiveSummaryBanner summary={reportResult.executiveSummary} />
+                        )}
 
-                        {/* Category-by-category breakdown */}
+                        {/* Snapshot Panel — radar + three-tier counts */}
+                        <SnapshotPanel compliance={compliance} />
+
+                        {/* Category-by-category breakdown with narratives */}
                         <div className="space-y-2">
-                            {result.categories.map(cat => {
+                            {compliance.categories.map(cat => {
                                 const isOpen = expandedCategories.has(cat.normalisedKey)
                                 const barColor = cat.score >= 80 ? 'bg-emerald-500' : cat.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
                                 const barTrack = cat.score >= 80 ? 'bg-emerald-100' : cat.score >= 60 ? 'bg-amber-100' : 'bg-red-100'
+                                const narrative = narrativeMap.get(cat.normalisedKey)
 
                                 return (
                                     <div key={cat.normalisedKey} className="rounded-lg border border-slate-200 overflow-hidden bg-white">
@@ -669,6 +759,14 @@ function AuditReportContent() {
 
                                         {isOpen && (
                                             <div className="border-t border-slate-100 px-4 py-3 bg-slate-50/50">
+                                                {/* AI Narrative Panel */}
+                                                {narrative && (
+                                                    <div className="mb-3">
+                                                        <CategoryNarrativePanel narrative={narrative} />
+                                                    </div>
+                                                )}
+
+                                                {/* Rule-by-rule cards */}
                                                 {cat.rules.map(scored => (
                                                     <AlignmentCard key={scored.rule.rule_id} scored={scored} templateClauses={templateClauses} />
                                                 ))}
@@ -680,27 +778,27 @@ function AuditReportContent() {
                         </div>
 
                         {/* Red Lines section if any */}
-                        {result.redLines.length > 0 && (
+                        {compliance.redLines.length > 0 && (
                             <div className="mt-6">
                                 <h3 className="text-sm font-semibold text-slate-800 mb-3">Red Lines &amp; Deal Breakers</h3>
                                 <div className="bg-white rounded-lg border border-slate-200 p-4">
-                                    <RedLinesTab redLines={result.redLines} />
+                                    <RedLinesTab redLines={compliance.redLines} />
                                 </div>
                             </div>
                         )}
 
                         {/* Flexibility section */}
-                        {result.flexibility.length > 0 && (
+                        {compliance.flexibility.length > 0 && (
                             <div className="mt-6">
                                 <h3 className="text-sm font-semibold text-slate-800 mb-3">Negotiation Flexibility</h3>
                                 <div className="bg-white rounded-lg border border-slate-200 p-4">
-                                    <FlexibilityTab flexibility={result.flexibility} />
+                                    <FlexibilityTab flexibility={compliance.flexibility} />
                                 </div>
                             </div>
                         )}
 
                         {/* Unmatched categories */}
-                        {result.unmatchedCategories.length > 0 && (
+                        {compliance.unmatchedCategories.length > 0 && (
                             <div className="mt-6">
                                 <h3 className="text-sm font-semibold text-slate-800 mb-3">Uncovered Categories</h3>
                                 <div className="bg-white rounded-lg border border-amber-200 p-4">
@@ -708,7 +806,7 @@ function AuditReportContent() {
                                         Playbook categories with no matching template clauses — these rules cannot be assessed.
                                     </p>
                                     <div className="flex flex-wrap gap-2">
-                                        {result.unmatchedCategories.map(cat => (
+                                        {compliance.unmatchedCategories.map(cat => (
                                             <span key={cat} className="px-2.5 py-1 text-xs font-medium bg-amber-50 text-amber-700 rounded-full border border-amber-200">
                                                 {getCategoryDisplayName(cat)}
                                             </span>
@@ -717,30 +815,14 @@ function AuditReportContent() {
                                 </div>
                             </div>
                         )}
-
-                        {/* Auto-run for pending audits */}
-                        {audit.status === 'pending' && (
-                            <div className="mt-6 flex justify-center">
-                                <button
-                                    onClick={handleRunAudit}
-                                    disabled={isRunning}
-                                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-md"
-                                >
-                                    {isRunning ? (
-                                        <>
-                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            Saving Report...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                                            Save Alignment Report
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        )}
                     </>
+                ) : (
+                    /* Running/loading state */
+                    <div className="text-center py-16">
+                        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <h2 className="text-lg font-semibold text-slate-700 mb-1">{runProgress || 'Processing...'}</h2>
+                        <p className="text-sm text-slate-500">This may take a moment while AI narratives are generated.</p>
+                    </div>
                 )}
             </div>
         </div>
