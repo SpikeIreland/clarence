@@ -313,7 +313,7 @@ export default function SchedulesWorkspace({
 
               return (
                 <div
-                  key={exp.scheduleType}
+                  key={exp.detectedSchedule?.schedule_id || `missing-${exp.scheduleType}`}
                   onClick={isClickable ? () => handleScheduleClick(exp.detectedSchedule!.schedule_id) : undefined}
                   className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs transition-all ${
                     isSelected

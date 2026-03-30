@@ -222,6 +222,10 @@ export function getScheduleTypeDefinition(scheduleType: string): ScheduleTypeDef
 
 /**
  * Build expected vs. detected comparison for a contract.
+ *
+ * Every detected schedule gets its own entry (using its real label).
+ * Expected types that have NO matching detected schedule still appear
+ * as "missing" rows so the user can see gaps.
  */
 export function buildScheduleExpectations(
     contractTypeKey: string,
@@ -230,31 +234,48 @@ export function buildScheduleExpectations(
     const expected = getExpectedSchedules(contractTypeKey)
     const required = new Set(getRequiredSchedules(contractTypeKey).map(s => s.scheduleType))
 
-    const expectations: ScheduleExpectation[] = expected.map(def => {
-        const match = detectedSchedules.find(d => d.schedule_type === def.scheduleType)
+    // Track which expected types have at least one detected match
+    const matchedExpectedTypes = new Set<string>()
+
+    // 1. One entry per detected schedule — use the actual schedule label
+    const expectations: ScheduleExpectation[] = detectedSchedules.map(detected => {
+        const expectedDef = expected.find(e => e.scheduleType === detected.schedule_type)
+        if (expectedDef) matchedExpectedTypes.add(detected.schedule_type)
+
         return {
-            scheduleType: def.scheduleType,
-            scheduleLabel: def.scheduleLabel,
-            isRequired: required.has(def.scheduleType),
-            importanceLevel: required.has(def.scheduleType) ? 9 : 5,
-            detected: !!match,
-            detectedSchedule: match || null,
+            scheduleType: detected.schedule_type,
+            scheduleLabel: detected.schedule_label,   // real label, e.g. "Schedule 7 - Pricing"
+            isRequired: required.has(detected.schedule_type),
+            importanceLevel: required.has(detected.schedule_type) ? 9 : expectedDef ? 5 : 3,
+            detected: true,
+            detectedSchedule: detected,
         }
     })
 
-    // Add any detected schedules that weren't in the expected list
-    for (const detected of detectedSchedules) {
-        if (!expectations.find(e => e.scheduleType === detected.schedule_type)) {
+    // 2. Add "missing" rows for expected types that had ZERO detections
+    for (const def of expected) {
+        if (!matchedExpectedTypes.has(def.scheduleType)) {
             expectations.push({
-                scheduleType: detected.schedule_type,
-                scheduleLabel: detected.schedule_label,
-                isRequired: false,
-                importanceLevel: 3,
-                detected: true,
-                detectedSchedule: detected,
+                scheduleType: def.scheduleType,
+                scheduleLabel: def.scheduleLabel,     // generic label for unfound type
+                isRequired: required.has(def.scheduleType),
+                importanceLevel: required.has(def.scheduleType) ? 9 : 5,
+                detected: false,
+                detectedSchedule: null,
             })
         }
     }
+
+    // 3. Sort: detected schedules by label (natural order), then missing at the end
+    expectations.sort((a, b) => {
+        if (a.detected && !b.detected) return -1
+        if (!a.detected && b.detected) return 1
+        // Both detected — sort by schedule number naturally
+        const numA = a.scheduleLabel.match(/Schedule\s+(\d+)/i)?.[1]
+        const numB = b.scheduleLabel.match(/Schedule\s+(\d+)/i)?.[1]
+        if (numA && numB) return parseInt(numA) - parseInt(numB)
+        return a.scheduleLabel.localeCompare(b.scheduleLabel)
+    })
 
     return expectations
 }
