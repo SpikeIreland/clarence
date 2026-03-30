@@ -813,7 +813,16 @@ function QuickContractStudioContent() {
                     return
                 }
 
-                const mappedClauses: ContractClause[] = (clausesData || []).map(c => ({
+                // Separate schedule clauses from main body clauses
+                // Schedules have clause_number like "Schedule 1", "Schedule 2", etc.
+                const isScheduleClause = (c: { clause_number?: string }) =>
+                    /^schedule\s+\d/i.test(c.clause_number || '')
+
+                const mainBodyClauses = (clausesData || []).filter(c => !isScheduleClause(c))
+                const schedClauseCount = (clausesData || []).filter(c => isScheduleClause(c)).length
+                console.log(`[QC Studio] Separated ${mainBodyClauses.length} main body clauses and ${schedClauseCount} schedule clauses`)
+
+                const mappedClauses: ContractClause[] = mainBodyClauses.map(c => ({
                     clauseId: c.clause_id,
                     positionId: c.clause_id, // Use clause_id as position_id for Quick Contract
                     clauseNumber: c.clause_number,
@@ -5007,6 +5016,8 @@ INSTRUCTIONS:
                             contractId={resolvedContractId}
                             contractTypeKey={contract.contractTypeKey || ''}
                             initialSchedules={detectedSchedules as any}
+                            partyRole={getPartyRole()}
+                            userId={userInfo?.userId}
                         />
                     )}
 
