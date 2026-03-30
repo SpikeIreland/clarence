@@ -662,7 +662,7 @@ export default function ContractLibraryPage() {
 
             console.log(`Extracted ${extractedText.length} characters from document`)
 
-            // Stage 2: Send to N8N Parse Workflow
+            // Stage 2: Send to parse workflow
             setUploadStage('parsing')
 
             const payload = {
@@ -702,11 +702,26 @@ export default function ContractLibraryPage() {
                 upload_source: 'contract_library'
             })
 
-            const response = await fetch(`${API_BASE}/parse-contract-document`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
+            // For large documents (>50K chars), use server-side chunked parsing
+            // to avoid N8N timeout. Smaller docs use the existing N8N workflow.
+            const LARGE_DOC_THRESHOLD = 50000
+            const useLargeDocRoute = extractedText.length > LARGE_DOC_THRESHOLD
+
+            let response: Response
+            if (useLargeDocRoute) {
+                console.log(`[Large doc] Using chunked server-side parsing (${extractedText.length} chars > ${LARGE_DOC_THRESHOLD} threshold)`)
+                response = await fetch('/api/contracts/parse-chunked', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                })
+            } else {
+                response = await fetch(`${API_BASE}/parse-contract-document`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                })
+            }
 
             const result = await response.json()
 
@@ -740,7 +755,7 @@ export default function ContractLibraryPage() {
                         upload_source: 'contract_library'
                     })
 
-                    const maxAttempts = 60  // 2 minutes max
+                    const maxAttempts = useLargeDocRoute ? 180 : 60  // 6 min for large docs, 2 min for normal
                     let attempts = 0
 
                     const pollForReady = async (): Promise<boolean> => {
