@@ -829,3 +829,323 @@ export function groupRulesByScheduleType(rules: PlaybookRule[]): Record<string, 
     }
     return groups
 }
+
+
+// ============================================================================
+// SECTION 10: CLAUSE-CENTRIC AUDIT TYPES AND FUNCTIONS
+// ============================================================================
+
+/**
+ * Extended clause interface with text content for audit display.
+ * This is what the audit engine receives — richer than the negotiation-time ContractClause.
+ */
+export interface AuditClause {
+    clause_id: string
+    clause_number: string | null
+    clause_name: string
+    category: string
+    content: string | null          // default_text from template_clauses
+    clarence_position: number | null
+    clarence_assessment: string | null
+    clarence_summary: string | null
+    clarence_fairness: string | null
+    range_mapping: Record<string, unknown> | null  // clause-level position bar data
+    is_header: boolean
+    display_order: number | null
+}
+
+/**
+ * A rule-to-clause mapping from the playbook_rule_clause_map table or
+ * generated dynamically by the matching function.
+ */
+export interface ClauseRuleMapping {
+    clause: AuditClause
+    rule: PlaybookRule
+    matchMethod: string             // auto_exact | auto_containment | auto_category | manual | dynamic_category
+    matchConfidence: number         // 0-100
+    matchReason: string | null
+}
+
+/**
+ * The result of scoring a single clause against its matched rule.
+ * This is the primary data unit for the clause-centric audit.
+ */
+export interface ClauseAuditResult {
+    // Clause data
+    clauseId: string
+    clauseNumber: string | null
+    clauseName: string
+    clauseCategory: string
+    clauseText: string | null
+    clausePosition: number | null   // clarence_position
+
+    // Rule data
+    ruleId: string
+    ruleClauseName: string
+    ruleCategory: string
+    ruleRationale: string | null
+    ruleSourceQuote: string | null
+    ruleIdealPosition: number
+    ruleMinimumPosition: number
+    ruleMaximumPosition: number
+    ruleFallbackPosition: number
+    ruleIsDealBreaker: boolean
+    ruleIsNonNegotiable: boolean
+    ruleImportanceLevel: number
+
+    // Match metadata
+    matchMethod: string
+    matchConfidence: number
+
+    // Scoring
+    status: RuleStatus
+    score: number                   // 0-100
+    detail: string                  // human-readable scoring explanation
+
+    // Market context
+    marketRangeContext: PlaybookRangeContext | null  // scale_points, value_type, range_unit
+    clausePositionLabel: string | null   // translated clause position (e.g. "30 days")
+    idealPositionLabel: string | null    // translated ideal (e.g. "14 days")
+    minimumPositionLabel: string | null  // translated minimum (e.g. "60 days")
+
+    // CLARENCE pre-assessment
+    clarenceAssessment: string | null
+    clarenceSummary: string | null
+    clarenceFairness: string | null
+
+    // Clause range data (for position bar rendering)
+    rangeMapping: Record<string, unknown> | null
+}
+
+/**
+ * Summary result for the clause-centric audit.
+ */
+export interface ClauseAuditSummary {
+    clauseResults: ClauseAuditResult[]
+    unmatchedClauses: AuditClause[]     // clauses with no matching rule
+    unmatchedRules: PlaybookRule[]       // rules with no matching clause
+    overallScore: number
+    totalClauses: number
+    totalRules: number
+    clausesAssessed: number
+    alignedCount: number                // score >= 80
+    partialCount: number                // score >= 60 and < 80
+    materialGapCount: number            // score < 60
+    redLineBreaches: number
+}
+
+/**
+ * Match clauses to rules using pre-existing mappings from playbook_rule_clause_map,
+ * or fall back to dynamic category-based matching.
+ *
+ * Unlike the old category-average approach, this produces one mapping per clause
+ * (or per clause-rule pair when multiple rules apply to the same clause).
+ */
+export function matchClausesToRules(
+    clauses: AuditClause[],
+    rules: PlaybookRule[],
+    existingMappings?: { playbook_rule_id: string; template_clause_id: string; match_method: string; match_confidence: number; match_reason: string | null }[]
+): { mappings: ClauseRuleMapping[]; unmatchedClauses: AuditClause[]; unmatchedRules: PlaybookRule[] } {
+    const mappings: ClauseRuleMapping[] = []
+    const matchedClauseIds = new Set<string>()
+    const matchedRuleIds = new Set<string>()
+
+    const clauseMap = new Map(clauses.map(c => [c.clause_id, c]))
+    const ruleMap = new Map(rules.map(r => [r.rule_id, r]))
+
+    // 1. Use pre-existing DB mappings first (highest quality)
+    if (existingMappings && existingMappings.length > 0) {
+        for (const em of existingMappings) {
+            const clause = clauseMap.get(em.template_clause_id)
+            const rule = ruleMap.get(em.playbook_rule_id)
+            if (clause && rule) {
+                mappings.push({
+                    clause,
+                    rule,
+                    matchMethod: em.match_method,
+                    matchConfidence: em.match_confidence,
+                    matchReason: em.match_reason,
+                })
+                matchedClauseIds.add(clause.clause_id)
+                matchedRuleIds.add(rule.rule_id)
+            }
+        }
+    }
+
+    // 2. Dynamic matching for unmatched rules → find best clause by category + name similarity
+    const unmatchedRulesForDynamic = rules.filter(r => !matchedRuleIds.has(r.rule_id))
+    const activeClauses = clauses.filter(c => !c.is_header)
+
+    for (const rule of unmatchedRulesForDynamic) {
+        const ruleNormCat = normaliseCategory(rule.category)
+
+        // Find clauses in the same normalised category
+        const categoryClauses = activeClauses.filter(c =>
+            normaliseCategory(c.category) === ruleNormCat
+        )
+
+        if (categoryClauses.length === 0) continue
+
+        // Try name similarity first — pick best match
+        let bestClause: AuditClause | null = null
+        let bestConfidence = 0
+        let bestMethod = 'dynamic_category'
+        let bestReason = 'Category match'
+
+        for (const clause of categoryClauses) {
+            const rName = rule.clause_name.toLowerCase().trim()
+            const cName = clause.clause_name.toLowerCase().trim()
+
+            if (rName === cName) {
+                bestClause = clause
+                bestConfidence = 100
+                bestMethod = 'dynamic_exact'
+                bestReason = 'Exact clause name match'
+                break
+            }
+
+            if (cName.includes(rName) || rName.includes(cName)) {
+                if (75 > bestConfidence) {
+                    bestClause = clause
+                    bestConfidence = 75
+                    bestMethod = 'dynamic_containment'
+                    bestReason = 'Name containment match'
+                }
+            }
+        }
+
+        // Fall back to first clause in category by display_order
+        if (!bestClause) {
+            bestClause = categoryClauses.sort((a, b) => (a.display_order || 0) - (b.display_order || 0))[0]
+            bestConfidence = 50
+        }
+
+        if (bestClause) {
+            mappings.push({
+                clause: bestClause,
+                rule,
+                matchMethod: bestMethod,
+                matchConfidence: bestConfidence,
+                matchReason: bestReason,
+            })
+            matchedClauseIds.add(bestClause.clause_id)
+            matchedRuleIds.add(rule.rule_id)
+        }
+    }
+
+    const unmatchedClauses = activeClauses.filter(c => !matchedClauseIds.has(c.clause_id))
+    const unmatchedRules = rules.filter(r => !matchedRuleIds.has(r.rule_id))
+
+    return { mappings, unmatchedClauses, unmatchedRules }
+}
+
+/**
+ * Score all clause-to-rule mappings and produce the full clause-centric audit result.
+ * Uses clarence_position as the effective position (not party positions).
+ */
+export function runClauseCentricAudit(
+    clauses: AuditClause[],
+    rules: PlaybookRule[],
+    existingMappings?: { playbook_rule_id: string; template_clause_id: string; match_method: string; match_confidence: number; match_reason: string | null }[],
+    perspective: PlaybookPerspective = 'customer'
+): ClauseAuditSummary {
+    const { mappings, unmatchedClauses, unmatchedRules } = matchClausesToRules(clauses, rules, existingMappings)
+
+    const clauseResults: ClauseAuditResult[] = []
+
+    for (const mapping of mappings) {
+        const { clause, rule } = mapping
+
+        // Use clarence_position directly — this is the pre-negotiation assessment
+        const effectivePosition = clause.clarence_position != null
+            ? Number(clause.clarence_position)
+            : null
+
+        // Score using the existing scoring function
+        const { status, score, detail } = scoreRule(rule, effectivePosition, perspective)
+
+        // Get market range context
+        const marketRangeContext = getEffectiveRangeContext(rule)
+
+        // Translate positions to human-readable labels
+        const clausePositionLabel = effectivePosition != null
+            ? translateRulePosition(rule, effectivePosition)
+            : null
+        const idealPositionLabel = translateRulePosition(rule, rule.ideal_position)
+        const minimumPositionLabel = translateRulePosition(rule, rule.minimum_position)
+
+        clauseResults.push({
+            clauseId: clause.clause_id,
+            clauseNumber: clause.clause_number,
+            clauseName: clause.clause_name,
+            clauseCategory: clause.category,
+            clauseText: clause.content,
+            clausePosition: effectivePosition,
+
+            ruleId: rule.rule_id,
+            ruleClauseName: rule.clause_name,
+            ruleCategory: rule.category,
+            ruleRationale: rule.rationale,
+            ruleSourceQuote: rule.source_quote || null,
+            ruleIdealPosition: rule.ideal_position,
+            ruleMinimumPosition: rule.minimum_position,
+            ruleMaximumPosition: rule.maximum_position,
+            ruleFallbackPosition: rule.fallback_position,
+            ruleIsDealBreaker: rule.is_deal_breaker,
+            ruleIsNonNegotiable: rule.is_non_negotiable,
+            ruleImportanceLevel: rule.importance_level,
+
+            matchMethod: mapping.matchMethod,
+            matchConfidence: mapping.matchConfidence,
+
+            status,
+            score,
+            detail,
+
+            marketRangeContext,
+            clausePositionLabel,
+            idealPositionLabel,
+            minimumPositionLabel,
+
+            clarenceAssessment: clause.clarence_assessment,
+            clarenceSummary: clause.clarence_summary,
+            clarenceFairness: clause.clarence_fairness,
+
+            rangeMapping: clause.range_mapping,
+        })
+    }
+
+    // Sort by clause display order (clause-first reading order)
+    clauseResults.sort((a, b) => {
+        // Extract numeric part from clause number for natural sort
+        const numA = a.clauseNumber?.match(/(\d+)/)?.[1]
+        const numB = b.clauseNumber?.match(/(\d+)/)?.[1]
+        if (numA && numB) return parseInt(numA) - parseInt(numB)
+        return (a.clauseName || '').localeCompare(b.clauseName || '')
+    })
+
+    // Calculate summary scores
+    const scorableResults = clauseResults.filter(r => r.status !== 'excluded')
+    const totalWeight = scorableResults.reduce((sum, r) => sum + r.ruleImportanceLevel, 0)
+    const weightedSum = scorableResults.reduce((sum, r) => sum + (r.score * r.ruleImportanceLevel), 0)
+    const overallScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0
+
+    const alignedCount = scorableResults.filter(r => r.score >= 80).length
+    const partialCount = scorableResults.filter(r => r.score >= 60 && r.score < 80).length
+    const materialGapCount = scorableResults.filter(r => r.score < 60).length
+    const redLineBreaches = scorableResults.filter(r => r.status === 'breach').length
+
+    return {
+        clauseResults,
+        unmatchedClauses,
+        unmatchedRules,
+        overallScore,
+        totalClauses: clauses.filter(c => !c.is_header).length,
+        totalRules: rules.length,
+        clausesAssessed: scorableResults.length,
+        alignedCount,
+        partialCount,
+        materialGapCount,
+        redLineBreaches,
+    }
+}

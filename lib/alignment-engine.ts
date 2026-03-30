@@ -12,11 +12,15 @@ import {
     type ComplianceResult,
     type CategoryResult,
     type PlaybookPerspective,
+    type ClauseAuditResult,
+    type ClauseAuditSummary,
+    type AuditClause,
     calculatePlaybookCompliance,
     normaliseCategory,
     getCategoryDisplayName,
     getEffectiveRangeContext,
     translateRulePosition,
+    runClauseCentricAudit,
 } from '@/lib/playbook-compliance'
 
 
@@ -400,6 +404,395 @@ export async function runAlignmentAudit(
         alignedCount: aligned,
         partialCount: partial,
         materialGapCount: gaps,
+        generatedAt: new Date().toISOString(),
+    }
+}
+
+
+// ============================================================================
+// SECTION 6: CLAUSE-CENTRIC AUDIT — TYPES
+// ============================================================================
+
+/**
+ * AI-generated assessment for a single clause-rule pair.
+ */
+export interface ClauseNarrative {
+    clauseId: string
+    ruleId: string
+    tier: AlignmentTier
+    score: number
+    alignmentAssessment: string      // How the clause relates to the rule
+    gapAnalysis: string              // Where and how they differ
+    recommendation: string           // What should change
+    riskLevel: 'low' | 'medium' | 'high' | 'critical'
+}
+
+/**
+ * Full result from the clause-centric alignment engine.
+ */
+export interface ClauseCentricAlignmentResult {
+    auditSummary: ClauseAuditSummary
+    clauseNarratives: ClauseNarrative[]
+    executiveSummary: string
+    focusCategories: string[]
+    generatedAt: string
+}
+
+
+// ============================================================================
+// SECTION 7: CLAUSE-CENTRIC AI NARRATIVE — PER CLAUSE-RULE PAIR
+// ============================================================================
+
+interface ClauseNarrativeContext {
+    clauseName: string
+    clauseNumber: string | null
+    clauseText: string | null
+    clausePosition: number | null
+    clausePositionLabel: string | null
+    clarenceAssessment: string | null
+    clarenceSummary: string | null
+    clarenceFairness: string | null
+
+    ruleName: string
+    ruleRationale: string | null
+    ruleIdealPosition: number
+    ruleMinimumPosition: number
+    idealPositionLabel: string | null
+    minimumPositionLabel: string | null
+    ruleIsDealBreaker: boolean
+    ruleIsNonNegotiable: boolean
+
+    score: number
+    status: string
+    detail: string
+    matchMethod: string
+    matchConfidence: number
+}
+
+function buildClauseNarrativeContext(result: ClauseAuditResult): ClauseNarrativeContext {
+    return {
+        clauseName: result.clauseName,
+        clauseNumber: result.clauseNumber,
+        clauseText: result.clauseText,
+        clausePosition: result.clausePosition,
+        clausePositionLabel: result.clausePositionLabel,
+        clarenceAssessment: result.clarenceAssessment,
+        clarenceSummary: result.clarenceSummary,
+        clarenceFairness: result.clarenceFairness,
+
+        ruleName: result.ruleClauseName,
+        ruleRationale: result.ruleRationale,
+        ruleIdealPosition: result.ruleIdealPosition,
+        ruleMinimumPosition: result.ruleMinimumPosition,
+        idealPositionLabel: result.idealPositionLabel,
+        minimumPositionLabel: result.minimumPositionLabel,
+        ruleIsDealBreaker: result.ruleIsDealBreaker,
+        ruleIsNonNegotiable: result.ruleIsNonNegotiable,
+
+        score: result.score,
+        status: result.status,
+        detail: result.detail,
+        matchMethod: result.matchMethod,
+        matchConfidence: result.matchConfidence,
+    }
+}
+
+async function generateClauseNarrative(
+    ctx: ClauseNarrativeContext,
+    client: Anthropic,
+    perspective: PlaybookPerspective
+): Promise<{ alignmentAssessment: string; gapAnalysis: string; recommendation: string; riskLevel: 'low' | 'medium' | 'high' | 'critical' }> {
+    const perspectiveLabel = perspective === 'provider' ? 'provider' : 'customer'
+
+    const systemPrompt = `You are a senior contract risk analyst assessing how a specific contract clause aligns with a specific playbook rule. You are writing from the ${perspectiveLabel} perspective.
+
+Your output must be precise, professional, and actionable. Write as if this will be read by General Counsel reviewing each clause individually.
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+    "alignmentAssessment": "2-3 sentences. How does this clause relate to the playbook rule? What does the clause say vs what the rule requires? Be specific about positions.",
+    "gapAnalysis": "2-3 sentences. Where do they differ? Quantify the gap in position terms if possible. If aligned, state so clearly.",
+    "recommendation": "1-2 sentences. What action, if any, should be taken? Reference specific position targets.",
+    "riskLevel": "low | medium | high | critical"
+}
+
+Risk level guidance:
+- "low": Score >= 80, clause is aligned or near-aligned with the playbook
+- "medium": Score 60-79, clause partially aligns but has gaps worth noting
+- "high": Score < 60, material gap that needs remediation
+- "critical": Score < 60 AND the rule is a deal-breaker or non-negotiable`
+
+    const clauseSection = ctx.clauseText
+        ? `\nClause Text (excerpt):\n"${ctx.clauseText.substring(0, 800)}${ctx.clauseText.length > 800 ? '...' : ''}"`
+        : ''
+
+    const clarenceSection = ctx.clarenceAssessment
+        ? `\nCLARENCE Pre-Assessment: ${ctx.clarenceAssessment}${ctx.clarenceSummary ? `\nSummary: ${ctx.clarenceSummary}` : ''}${ctx.clarenceFairness ? `\nFairness: ${ctx.clarenceFairness}` : ''}`
+        : ''
+
+    const userPrompt = `Assess this clause against its matched playbook rule:
+
+CLAUSE: ${ctx.clauseName}${ctx.clauseNumber ? ` (${ctx.clauseNumber})` : ''}
+Clause Position: ${ctx.clausePositionLabel || (ctx.clausePosition != null ? `${ctx.clausePosition}/100` : 'Not assessed')}${clauseSection}${clarenceSection}
+
+PLAYBOOK RULE: ${ctx.ruleName}
+Ideal Position: ${ctx.idealPositionLabel || `${ctx.ruleIdealPosition}/100`}
+Minimum Acceptable: ${ctx.minimumPositionLabel || `${ctx.ruleMinimumPosition}/100`}
+Deal Breaker: ${ctx.ruleIsDealBreaker ? 'YES' : 'No'}
+Non-Negotiable: ${ctx.ruleIsNonNegotiable ? 'YES' : 'No'}
+Rule Rationale: ${ctx.ruleRationale || 'Not specified'}
+
+SCORING RESULT: ${ctx.status} — ${ctx.score}%
+Detail: ${ctx.detail}
+Match Method: ${ctx.matchMethod} (confidence: ${ctx.matchConfidence}%)`
+
+    try {
+        const response = await client.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 500,
+            temperature: 0,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+        })
+
+        const textBlock = response.content.find(b => b.type === 'text')
+        if (!textBlock || textBlock.type !== 'text') {
+            return fallbackClauseNarrative(ctx)
+        }
+
+        const parsed = JSON.parse(textBlock.text)
+        return {
+            alignmentAssessment: parsed.alignmentAssessment || 'Assessment pending.',
+            gapAnalysis: parsed.gapAnalysis || 'Analysis pending.',
+            recommendation: parsed.recommendation || 'Review recommended.',
+            riskLevel: ['low', 'medium', 'high', 'critical'].includes(parsed.riskLevel) ? parsed.riskLevel : inferRiskLevel(ctx),
+        }
+    } catch (error) {
+        console.error(`[AlignmentEngine] Clause narrative failed for ${ctx.clauseName}:`, error)
+        return fallbackClauseNarrative(ctx)
+    }
+}
+
+function inferRiskLevel(ctx: ClauseNarrativeContext): 'low' | 'medium' | 'high' | 'critical' {
+    if (ctx.score < 60 && (ctx.ruleIsDealBreaker || ctx.ruleIsNonNegotiable)) return 'critical'
+    if (ctx.score < 60) return 'high'
+    if (ctx.score < 80) return 'medium'
+    return 'low'
+}
+
+function fallbackClauseNarrative(ctx: ClauseNarrativeContext): {
+    alignmentAssessment: string
+    gapAnalysis: string
+    recommendation: string
+    riskLevel: 'low' | 'medium' | 'high' | 'critical'
+} {
+    const riskLevel = inferRiskLevel(ctx)
+
+    let alignmentAssessment = `The "${ctx.clauseName}" clause `
+    if (ctx.clausePosition != null) {
+        alignmentAssessment += `is assessed at position ${ctx.clausePositionLabel || ctx.clausePosition + '/100'}. `
+        alignmentAssessment += `The playbook requires an ideal position of ${ctx.idealPositionLabel || ctx.ruleIdealPosition + '/100'} with a minimum of ${ctx.minimumPositionLabel || ctx.ruleMinimumPosition + '/100'}.`
+    } else {
+        alignmentAssessment += `has not yet been position-assessed by CLARENCE. The playbook requires an ideal position of ${ctx.idealPositionLabel || ctx.ruleIdealPosition + '/100'}.`
+    }
+
+    let gapAnalysis: string
+    if (ctx.score >= 80) {
+        gapAnalysis = `This clause is aligned with the playbook rule. The clause position falls within the acceptable range defined by the playbook.`
+    } else if (ctx.score >= 60) {
+        gapAnalysis = `There is a partial gap between the clause position and the playbook target. The clause meets the minimum threshold but falls short of the ideal position.`
+    } else {
+        gapAnalysis = `There is a material gap between the clause and the playbook rule. The clause position falls below the minimum acceptable threshold of ${ctx.minimumPositionLabel || ctx.ruleMinimumPosition + '/100'}.`
+    }
+
+    let recommendation: string
+    if (ctx.score >= 80) {
+        recommendation = 'No immediate action required. Continue monitoring during negotiation.'
+    } else if (ctx.ruleIsDealBreaker) {
+        recommendation = `DEAL BREAKER — this clause must be renegotiated to at least position ${ctx.minimumPositionLabel || ctx.ruleMinimumPosition + '/100'} before proceeding.`
+    } else if (ctx.score < 60) {
+        recommendation = `Renegotiate this clause to bring it to at least the minimum position of ${ctx.minimumPositionLabel || ctx.ruleMinimumPosition + '/100'}.`
+    } else {
+        recommendation = `Consider negotiating this clause closer to the ideal position of ${ctx.idealPositionLabel || ctx.ruleIdealPosition + '/100'}.`
+    }
+
+    return { alignmentAssessment, gapAnalysis, recommendation, riskLevel }
+}
+
+
+// ============================================================================
+// SECTION 8: CLAUSE-CENTRIC EXECUTIVE SUMMARY
+// ============================================================================
+
+async function generateClauseCentricExecutiveSummary(
+    auditSummary: ClauseAuditSummary,
+    clauseNarratives: ClauseNarrative[],
+    auditName: string,
+    client: Anthropic,
+    perspective: PlaybookPerspective
+): Promise<string> {
+    const perspectiveLabel = perspective === 'provider' ? 'provider' : 'customer'
+
+    const criticalItems = clauseNarratives.filter(n => n.riskLevel === 'critical')
+    const highItems = clauseNarratives.filter(n => n.riskLevel === 'high')
+
+    const systemPrompt = `You are a senior contract risk analyst writing the executive summary for a clause-by-clause contract alignment report. This is for the ${perspectiveLabel} reviewing how individual contract clauses align with their negotiation playbook.
+
+Write a concise 4-6 sentence executive summary suitable for General Counsel. Cover: overall alignment posture, number of clauses assessed vs rules, critical/high risk items, and recommended priority actions.
+
+Return ONLY the summary text — no JSON, no markdown formatting, no headers.`
+
+    const clauseHighlights = clauseNarratives
+        .filter(n => n.riskLevel === 'critical' || n.riskLevel === 'high')
+        .slice(0, 6)
+        .map(n => {
+            const result = auditSummary.clauseResults.find(r => r.clauseId === n.clauseId)
+            return `${result?.clauseName || 'Unknown'} (${n.riskLevel}, ${n.score}%): ${n.gapAnalysis}`
+        })
+        .join('\n')
+
+    const userPrompt = `Report: ${auditName}
+Overall Score: ${auditSummary.overallScore}%
+Clauses Assessed: ${auditSummary.clausesAssessed} of ${auditSummary.totalClauses} clauses matched to ${auditSummary.totalRules} rules
+Aligned: ${auditSummary.alignedCount} | Partially Aligned: ${auditSummary.partialCount} | Material Gaps: ${auditSummary.materialGapCount}
+Red Line Breaches: ${auditSummary.redLineBreaches}
+Unmatched Clauses: ${auditSummary.unmatchedClauses.length} | Unmatched Rules: ${auditSummary.unmatchedRules.length}
+
+Critical/High Risk Clauses:
+${clauseHighlights || 'None identified.'}`
+
+    try {
+        const response = await client.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 400,
+            temperature: 0,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+        })
+
+        const textBlock = response.content.find(b => b.type === 'text')
+        if (!textBlock || textBlock.type !== 'text') {
+            return fallbackClauseCentricExecutiveSummary(auditSummary, criticalItems.length, highItems.length)
+        }
+        return textBlock.text.trim()
+    } catch (error) {
+        console.error('[AlignmentEngine] Clause-centric executive summary failed:', error)
+        return fallbackClauseCentricExecutiveSummary(auditSummary, criticalItems.length, highItems.length)
+    }
+}
+
+function fallbackClauseCentricExecutiveSummary(
+    summary: ClauseAuditSummary,
+    criticalCount: number,
+    highCount: number
+): string {
+    let text = `This contract template scores ${summary.overallScore}% overall alignment against the playbook. `
+    text += `${summary.clausesAssessed} clauses were matched and assessed against ${summary.totalRules} playbook rules. `
+    text += `Of these, ${summary.alignedCount} are aligned, ${summary.partialCount} are partially aligned, and ${summary.materialGapCount} represent material gaps. `
+    if (summary.redLineBreaches > 0) {
+        text += `${summary.redLineBreaches} red line breach${summary.redLineBreaches > 1 ? 'es were' : ' was'} detected, requiring immediate attention. `
+    }
+    if (criticalCount > 0 || highCount > 0) {
+        text += `Priority remediation is needed for ${criticalCount} critical and ${highCount} high-risk clause${criticalCount + highCount > 1 ? 's' : ''}. `
+    }
+    if (summary.unmatchedRules.length > 0) {
+        text += `${summary.unmatchedRules.length} playbook rule${summary.unmatchedRules.length > 1 ? 's have' : ' has'} no matching clause in the template — these represent potential coverage gaps.`
+    }
+    return text
+}
+
+
+// ============================================================================
+// SECTION 9: MAIN ENGINE — RUN CLAUSE-CENTRIC ALIGNMENT AUDIT
+// ============================================================================
+
+export async function runClauseCentricAlignmentAudit(
+    clauses: AuditClause[],
+    rules: PlaybookRule[],
+    focusCategories: string[],
+    perspective: PlaybookPerspective,
+    auditName: string,
+    existingMappings?: { playbook_rule_id: string; template_clause_id: string; match_method: string; match_confidence: number; match_reason: string | null }[],
+    options?: { skipAI?: boolean }
+): Promise<ClauseCentricAlignmentResult> {
+    // Step 1: Filter rules to focus categories
+    const focusSet = new Set(focusCategories)
+    const filteredRules = focusSet.size > 0
+        ? rules.filter(r => focusSet.has(normaliseCategory(r.category)))
+        : rules
+
+    // Step 2: Run the clause-centric compliance engine
+    const auditSummary = runClauseCentricAudit(clauses, filteredRules, existingMappings, perspective)
+
+    // Step 3: Generate per-clause AI narratives
+    const clauseNarratives: ClauseNarrative[] = []
+
+    if (options?.skipAI) {
+        // Static fallback mode
+        for (const result of auditSummary.clauseResults) {
+            const ctx = buildClauseNarrativeContext(result)
+            const fallback = fallbackClauseNarrative(ctx)
+            clauseNarratives.push({
+                clauseId: result.clauseId,
+                ruleId: result.ruleId,
+                tier: getAlignmentTier(result.score),
+                score: result.score,
+                ...fallback,
+            })
+        }
+
+        return {
+            auditSummary,
+            clauseNarratives,
+            executiveSummary: fallbackClauseCentricExecutiveSummary(
+                auditSummary,
+                clauseNarratives.filter(n => n.riskLevel === 'critical').length,
+                clauseNarratives.filter(n => n.riskLevel === 'high').length
+            ),
+            focusCategories,
+            generatedAt: new Date().toISOString(),
+        }
+    }
+
+    // Step 4: AI-powered narratives
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+        console.warn('[AlignmentEngine] No ANTHROPIC_API_KEY — using fallback clause narratives')
+        return runClauseCentricAlignmentAudit(clauses, rules, focusCategories, perspective, auditName, existingMappings, { skipAI: true })
+    }
+
+    const client = new Anthropic({ apiKey })
+
+    // Generate narratives in batches of 3 to respect rate limits
+    const BATCH_SIZE = 3
+    for (let i = 0; i < auditSummary.clauseResults.length; i += BATCH_SIZE) {
+        const batch = auditSummary.clauseResults.slice(i, i + BATCH_SIZE)
+        const batchResults = await Promise.all(
+            batch.map(async (result) => {
+                const ctx = buildClauseNarrativeContext(result)
+                const narrative = await generateClauseNarrative(ctx, client, perspective)
+                return {
+                    clauseId: result.clauseId,
+                    ruleId: result.ruleId,
+                    tier: getAlignmentTier(result.score),
+                    score: result.score,
+                    ...narrative,
+                } as ClauseNarrative
+            })
+        )
+        clauseNarratives.push(...batchResults)
+    }
+
+    // Step 5: Executive summary
+    const executiveSummary = await generateClauseCentricExecutiveSummary(
+        auditSummary, clauseNarratives, auditName, client, perspective
+    )
+
+    return {
+        auditSummary,
+        clauseNarratives,
+        executiveSummary,
+        focusCategories,
         generatedAt: new Date().toISOString(),
     }
 }

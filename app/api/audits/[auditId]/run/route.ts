@@ -1,12 +1,22 @@
 // ============================================================================
 // FILE: app/api/audits/[auditId]/run/route.ts
-// PURPOSE: Runs an alignment audit — calculates compliance + generates AI narratives
+// PURPOSE: Runs an alignment audit — clause-centric compliance + AI narratives
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { runAlignmentAudit, type AlignmentReportResult } from '@/lib/alignment-engine'
-import { normaliseCategory, type PlaybookRule, type ContractClause } from '@/lib/playbook-compliance'
+import {
+    runAlignmentAudit,
+    runClauseCentricAlignmentAudit,
+    type AlignmentReportResult,
+    type ClauseCentricAlignmentResult,
+} from '@/lib/alignment-engine'
+import {
+    normaliseCategory,
+    type PlaybookRule,
+    type ContractClause,
+    type AuditClause,
+} from '@/lib/playbook-compliance'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normaliseClauseRow(raw: Record<string, any>): ContractClause {
@@ -19,6 +29,24 @@ function normaliseClauseRow(raw: Record<string, any>): ContractClause {
         respondent_position: raw.default_provider_position_override ?? null,
         customer_position: raw.default_customer_position_override ?? null,
         is_header: false,
+    }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normaliseAuditClauseRow(raw: Record<string, any>): AuditClause {
+    return {
+        clause_id: raw.template_clause_id || raw.id || '',
+        clause_number: raw.clause_number || null,
+        clause_name: raw.clause_name || 'Untitled',
+        category: raw.category_name || raw.category || 'Other',
+        content: raw.default_text || null,
+        clarence_position: raw.clarence_position ?? null,
+        clarence_assessment: raw.clarence_assessment || null,
+        clarence_summary: raw.clarence_summary || null,
+        clarence_fairness: raw.clarence_fairness || null,
+        range_mapping: raw.range_mapping || null,
+        is_header: raw.is_header || false,
+        display_order: raw.display_order ?? null,
     }
 }
 
@@ -84,15 +112,11 @@ export async function POST(
             return NextResponse.json({ error: 'No active playbook rules found' }, { status: 400 })
         }
 
-        // 5. Filter rules to focus categories
+        // 5. Focus categories
         const focusCategories: string[] = audit.focus_categories || []
-        const focusSet = new Set(focusCategories)
         const allRules = rulesData as PlaybookRule[]
-        const filteredRules = focusSet.size > 0
-            ? allRules.filter(r => focusSet.has(normaliseCategory(r.category)))
-            : allRules
 
-        // 6. Load template clauses
+        // 6. Load template clauses (full data for clause-centric audit)
         const { data: clausesData, error: clausesError } = await supabase
             .from('template_clauses')
             .select('*')
@@ -110,26 +134,92 @@ export async function POST(
             return NextResponse.json({ error: 'No template clauses found' }, { status: 400 })
         }
 
-        const clauses: ContractClause[] = clausesData.map(normaliseClauseRow)
+        // 7. Load existing clause-rule mappings from playbook_rule_clause_map
+        const { data: existingMappings } = await supabase
+            .from('playbook_rule_clause_map')
+            .select('playbook_rule_id, template_clause_id, match_method, match_confidence, match_reason')
+            .eq('template_id', audit.template_id)
+            .eq('playbook_id', audit.playbook_id)
+            .eq('status', 'active')
 
-        // 7. Run the alignment engine (with AI narratives)
-        console.log(`[Audit Run] Starting audit ${auditId}: ${filteredRules.length} rules, ${clauses.length} clauses, ${focusCategories.length} focus categories`)
+        // 8. If no mappings exist, try to generate them via the RPC function
+        let mappingsToUse = existingMappings || []
+        if (mappingsToUse.length === 0) {
+            console.log(`[Audit Run] No existing mappings — invoking map_playbook_rules_to_template_clauses RPC`)
+            try {
+                const { data: rpcResult } = await supabase.rpc('map_playbook_rules_to_template_clauses', {
+                    p_template_id: audit.template_id,
+                    p_playbook_id: audit.playbook_id,
+                })
+                if (rpcResult && Array.isArray(rpcResult)) {
+                    mappingsToUse = rpcResult
+                } else {
+                    // Re-fetch from table in case the RPC inserted them
+                    const { data: freshMappings } = await supabase
+                        .from('playbook_rule_clause_map')
+                        .select('playbook_rule_id, template_clause_id, match_method, match_confidence, match_reason')
+                        .eq('template_id', audit.template_id)
+                        .eq('playbook_id', audit.playbook_id)
+                        .eq('status', 'active')
+                    mappingsToUse = freshMappings || []
+                }
+            } catch (rpcError) {
+                console.warn('[Audit Run] RPC mapping failed, falling back to dynamic matching:', rpcError)
+                // Dynamic matching will happen inside runClauseCentricAudit
+            }
+        }
 
-        let result: AlignmentReportResult
+        // 9. Build AuditClause array (rich clause data) and legacy ContractClause array
+        const auditClauses: AuditClause[] = clausesData.map(normaliseAuditClauseRow)
+        const legacyClauses: ContractClause[] = clausesData.map(normaliseClauseRow)
+
+        // 10. Run the clause-centric alignment engine
+        console.log(`[Audit Run] Starting clause-centric audit ${auditId}: ${allRules.length} rules, ${auditClauses.length} clauses, ${mappingsToUse.length} pre-existing mappings`)
+
+        let clauseCentricResult: ClauseCentricAlignmentResult
         try {
-            result = await runAlignmentAudit(
-                filteredRules,
-                clauses,
+            clauseCentricResult = await runClauseCentricAlignmentAudit(
+                auditClauses,
+                allRules,
                 focusCategories,
                 perspective,
-                audit.audit_name
+                audit.audit_name,
+                mappingsToUse.length > 0 ? mappingsToUse : undefined
             )
         } catch (engineError) {
-            console.error('[Audit Run] Engine error, falling back to static:', engineError)
-            // Fallback to static-only if AI fails
-            result = await runAlignmentAudit(
+            console.error('[Audit Run] Clause-centric engine error, falling back to static:', engineError)
+            clauseCentricResult = await runClauseCentricAlignmentAudit(
+                auditClauses,
+                allRules,
+                focusCategories,
+                perspective,
+                audit.audit_name,
+                mappingsToUse.length > 0 ? mappingsToUse : undefined,
+                { skipAI: true }
+            )
+        }
+
+        // 11. Also run the legacy category-based engine (for backward compatibility)
+        const focusSet = new Set(focusCategories)
+        const filteredRules = focusSet.size > 0
+            ? allRules.filter(r => focusSet.has(normaliseCategory(r.category)))
+            : allRules
+
+        let legacyResult: AlignmentReportResult
+        try {
+            legacyResult = await runAlignmentAudit(
                 filteredRules,
-                clauses,
+                legacyClauses,
+                focusCategories,
+                perspective,
+                audit.audit_name,
+                { skipAI: true } // Skip AI for legacy — clause-centric has the narratives
+            )
+        } catch {
+            // Legacy failure is non-critical
+            legacyResult = await runAlignmentAudit(
+                filteredRules,
+                legacyClauses,
                 focusCategories,
                 perspective,
                 audit.audit_name,
@@ -137,15 +227,26 @@ export async function POST(
             )
         }
 
-        console.log(`[Audit Run] Complete: score=${result.compliance.overallScore}%, ${result.narratives.length} narratives generated`)
+        const { auditSummary } = clauseCentricResult
 
-        // 8. Save results
+        console.log(`[Audit Run] Complete: clauseScore=${auditSummary.overallScore}%, ${auditSummary.clausesAssessed} clauses assessed, ${clauseCentricResult.clauseNarratives.length} narratives`)
+
+        // 12. Save results — store both clause-centric and legacy for transition
+        const combinedResults = {
+            // New clause-centric data (primary)
+            clauseCentric: clauseCentricResult,
+            // Legacy category data (backward compat)
+            legacy: legacyResult,
+            // Use clause-centric score as the canonical score
+            overallScore: auditSummary.overallScore,
+        }
+
         const { error: updateError } = await supabase
             .from('alignment_audits')
             .update({
                 status: 'complete',
-                overall_score: result.compliance.overallScore,
-                results: result as unknown as Record<string, unknown>,
+                overall_score: auditSummary.overallScore,
+                results: combinedResults as unknown as Record<string, unknown>,
                 completed_at: new Date().toISOString(),
             })
             .eq('audit_id', auditId)
@@ -158,12 +259,17 @@ export async function POST(
         return NextResponse.json({
             success: true,
             auditId,
-            overallScore: result.compliance.overallScore,
-            categoriesAssessed: result.narratives.length,
-            alignedCount: result.alignedCount,
-            partialCount: result.partialCount,
-            materialGapCount: result.materialGapCount,
-            executiveSummary: result.executiveSummary,
+            overallScore: auditSummary.overallScore,
+            clausesAssessed: auditSummary.clausesAssessed,
+            totalClauses: auditSummary.totalClauses,
+            totalRules: auditSummary.totalRules,
+            alignedCount: auditSummary.alignedCount,
+            partialCount: auditSummary.partialCount,
+            materialGapCount: auditSummary.materialGapCount,
+            redLineBreaches: auditSummary.redLineBreaches,
+            unmatchedClauses: auditSummary.unmatchedClauses.length,
+            unmatchedRules: auditSummary.unmatchedRules.length,
+            executiveSummary: clauseCentricResult.executiveSummary,
         })
 
     } catch (error) {
