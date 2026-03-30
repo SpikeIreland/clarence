@@ -4,7 +4,10 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 // GET /api/audits/:auditId — Fetch a single audit with enriched data
 export async function GET(
@@ -14,7 +17,7 @@ export async function GET(
     const { auditId } = await params
 
     try {
-        const supabase = createClient()
+        const supabase = createClient(supabaseUrl, supabaseKey)
 
         const { data: audit, error } = await supabase
             .from('alignment_audits')
@@ -64,7 +67,7 @@ export async function PATCH(
 
     try {
         const body = await request.json()
-        const supabase = createClient()
+        const supabase = createClient(supabaseUrl, supabaseKey)
 
         const updateData: Record<string, unknown> = {}
 
@@ -101,7 +104,7 @@ export async function DELETE(
     const { auditId } = await params
 
     try {
-        const supabase = createClient()
+        const supabase = createClient(supabaseUrl, supabaseKey)
 
         const { error } = await supabase
             .from('alignment_audits')
