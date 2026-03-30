@@ -168,7 +168,7 @@ function TabNavigation({ activeTab, onTabChange, peoplePendingCount }: TabNaviga
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
         { id: 'people',    label: 'People',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
         { id: 'datamap',   label: 'Data Map',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-        { id: 'audit',     label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
+        { id: 'audit',     label: 'Audit & Reports', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
     ]
 
     return (
@@ -2456,6 +2456,530 @@ function PeopleTab({ companyUsers, trainingUsers, isLoading, isCurrentUserAdmin,
 }
 
 // ============================================================================
+// SECTION 7B: ALIGNMENT AUDITS & REPORTS TAB
+// ============================================================================
+
+interface AlignmentAudit {
+    audit_id: string
+    company_id: string
+    playbook_id: string
+    template_id: string
+    audit_name: string
+    focus_categories: string[]
+    status: 'pending' | 'running' | 'complete' | 'failed'
+    overall_score: number | null
+    results: Record<string, unknown> | null
+    error_message: string | null
+    created_by: string | null
+    created_at: string
+    started_at: string | null
+    completed_at: string | null
+    // Joined fields
+    playbook_name?: string
+    template_name?: string
+}
+
+interface AuditAndReportsTabProps {
+    companyId: string
+    playbooks: Playbook[]
+    templates: CompanyTemplate[]
+}
+
+function AuditAndReportsTab({ companyId, playbooks, templates }: AuditAndReportsTabProps) {
+    const router = useRouter()
+    const [subTab, setSubTab] = useState<'reports' | 'activity'>('reports')
+    const [audits, setAudits] = useState<AlignmentAudit[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [showNewAudit, setShowNewAudit] = useState(false)
+
+    // New audit form state
+    const [auditName, setAuditName] = useState('')
+    const [selectedPlaybookId, setSelectedPlaybookId] = useState<string>('')
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+    const [availableCategories, setAvailableCategories] = useState<{ key: string; name: string; ruleCount: number }[]>([])
+    const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
+    const [loadingCategories, setLoadingCategories] = useState(false)
+    const [isCreating, setIsCreating] = useState(false)
+    const [createError, setCreateError] = useState<string | null>(null)
+
+    // Load audits
+    const loadAudits = useCallback(async () => {
+        if (!companyId) { setIsLoading(false); return }
+        setIsLoading(true)
+        const supabase = createClient()
+        const { data } = await supabase
+            .from('alignment_audits')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false })
+            .limit(50)
+
+        if (data && data.length > 0) {
+            // Enrich with playbook/template names
+            const playbookIds = [...new Set(data.map((a: Record<string, unknown>) => a.playbook_id as string))]
+            const templateIds = [...new Set(data.map((a: Record<string, unknown>) => a.template_id as string))]
+
+            const { data: pbNames } = await supabase
+                .from('company_playbooks')
+                .select('playbook_id, playbook_name')
+                .in('playbook_id', playbookIds)
+            const { data: tmplNames } = await supabase
+                .from('contract_templates')
+                .select('template_id, template_name')
+                .in('template_id', templateIds)
+
+            const pbMap = new Map((pbNames || []).map((p: Record<string, unknown>) => [p.playbook_id as string, p.playbook_name as string]))
+            const tmplMap = new Map((tmplNames || []).map((t: Record<string, unknown>) => [t.template_id as string, t.template_name as string]))
+
+            setAudits(data.map((a: Record<string, unknown>) => ({
+                ...a,
+                playbook_name: pbMap.get(a.playbook_id as string) || 'Unknown Playbook',
+                template_name: tmplMap.get(a.template_id as string) || 'Unknown Template',
+            } as AlignmentAudit)))
+        } else {
+            setAudits([])
+        }
+        setIsLoading(false)
+    }, [companyId])
+
+    useEffect(() => { loadAudits() }, [loadAudits])
+
+    // Load categories when playbook is selected
+    useEffect(() => {
+        if (!selectedPlaybookId) {
+            setAvailableCategories([])
+            setSelectedCategories(new Set())
+            return
+        }
+        const loadCats = async () => {
+            setLoadingCategories(true)
+            const supabase = createClient()
+            const { data: rules } = await supabase
+                .from('playbook_rules')
+                .select('category')
+                .eq('playbook_id', selectedPlaybookId)
+                .eq('is_active', true)
+
+            if (rules) {
+                const catMap = new Map<string, number>()
+                for (const r of rules) {
+                    const norm = normaliseCategory(r.category)
+                    catMap.set(norm, (catMap.get(norm) || 0) + 1)
+                }
+                const cats = Array.from(catMap.entries())
+                    .map(([key, count]) => ({
+                        key,
+                        name: getCategoryDisplayName(key),
+                        ruleCount: count,
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                setAvailableCategories(cats)
+                // Select all by default
+                setSelectedCategories(new Set(cats.map(c => c.key)))
+            }
+            setLoadingCategories(false)
+        }
+        loadCats()
+    }, [selectedPlaybookId])
+
+    // Auto-generate audit name
+    useEffect(() => {
+        if (selectedPlaybookId && selectedTemplateId) {
+            const pb = playbooks.find(p => p.playbookId === selectedPlaybookId)
+            const tmpl = templates.find(t => t.templateId === selectedTemplateId)
+            if (pb && tmpl) {
+                setAuditName(`${tmpl.templateName} vs ${pb.playbookName}`)
+            }
+        }
+    }, [selectedPlaybookId, selectedTemplateId, playbooks, templates])
+
+    const toggleCategory = (key: string) => {
+        setSelectedCategories(prev => {
+            const next = new Set(prev)
+            if (next.has(key)) next.delete(key)
+            else next.add(key)
+            return next
+        })
+    }
+
+    const selectAllCategories = () => setSelectedCategories(new Set(availableCategories.map(c => c.key)))
+    const deselectAllCategories = () => setSelectedCategories(new Set())
+
+    const handleCreateAudit = async () => {
+        if (!selectedPlaybookId || !selectedTemplateId || !auditName.trim() || selectedCategories.size === 0) {
+            setCreateError('Please fill in all fields and select at least one category.')
+            return
+        }
+        setIsCreating(true)
+        setCreateError(null)
+
+        try {
+            const supabase = createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+
+            const { data, error } = await supabase
+                .from('alignment_audits')
+                .insert({
+                    company_id: companyId,
+                    playbook_id: selectedPlaybookId,
+                    template_id: selectedTemplateId,
+                    audit_name: auditName.trim(),
+                    focus_categories: Array.from(selectedCategories),
+                    status: 'pending',
+                    created_by: user?.id || null,
+                })
+                .select()
+                .single()
+
+            if (error) throw error
+
+            // Reset form and refresh
+            setShowNewAudit(false)
+            setAuditName('')
+            setSelectedPlaybookId('')
+            setSelectedTemplateId('')
+            setSelectedCategories(new Set())
+            await loadAudits()
+
+            // Navigate to the audit run page (Phase 2 will add this)
+            if (data?.audit_id) {
+                router.push(`/auth/company-admin/audit/${data.audit_id}`)
+            }
+        } catch (err) {
+            setCreateError(err instanceof Error ? err.message : 'Failed to create audit')
+        } finally {
+            setIsCreating(false)
+        }
+    }
+
+    const handleDeleteAudit = async (auditId: string) => {
+        const supabase = createClient()
+        await supabase.from('alignment_audits').delete().eq('audit_id', auditId)
+        await loadAudits()
+    }
+
+    const formatDate = (dateStr: string) => {
+        const d = new Date(dateStr)
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+
+    const getStatusBadge = (status: string, score: number | null) => {
+        switch (status) {
+            case 'complete':
+                return (
+                    <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Complete</span>
+                        {score != null && (
+                            <span className={`text-sm font-bold font-mono ${score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                {score}%
+                            </span>
+                        )}
+                    </div>
+                )
+            case 'running':
+                return (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                        <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        Running
+                    </span>
+                )
+            case 'failed':
+                return <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-red-50 text-red-700 border border-red-200">Failed</span>
+            default:
+                return <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-50 text-slate-600 border border-slate-200">Pending</span>
+        }
+    }
+
+    // Active playbooks only
+    const activePlaybooks = playbooks.filter(p => p.status === 'parsed' || p.status === 'active' || p.status === 'review_required')
+    // Active templates only
+    const activeTemplates = templates.filter(t => t.isActive && t.status === 'ready')
+
+    return (
+        <div>
+            {/* Sub-tab navigation */}
+            <div className="flex items-center gap-1 px-6 pt-4 pb-0">
+                <button
+                    onClick={() => setSubTab('reports')}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${subTab === 'reports' ? 'bg-white text-indigo-700 border border-b-0 border-slate-200 -mb-px relative z-10' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    Alignment Reports
+                </button>
+                <button
+                    onClick={() => setSubTab('activity')}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${subTab === 'activity' ? 'bg-white text-indigo-700 border border-b-0 border-slate-200 -mb-px relative z-10' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    Activity Log
+                </button>
+            </div>
+
+            {subTab === 'activity' ? (
+                <AuditLogTab companyId={companyId} />
+            ) : (
+                <div className="p-6">
+                    {/* Header with New Audit button */}
+                    <div className="flex items-center justify-between mb-5">
+                        <div>
+                            <h3 className="text-lg font-semibold text-slate-800">Alignment Reports</h3>
+                            <p className="text-sm text-slate-500 mt-1">
+                                Cross-check contract templates against your playbook rules to generate alignment reports.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setShowNewAudit(!showNewAudit)}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            New Alignment Audit
+                        </button>
+                    </div>
+
+                    {/* New Audit Configuration Panel */}
+                    {showNewAudit && (
+                        <div className="bg-white rounded-lg border-2 border-indigo-200 p-5 mb-6 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <h4 className="text-sm font-semibold text-slate-800">Configure Alignment Audit</h4>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                {/* Playbook selector */}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Playbook</label>
+                                    <select
+                                        value={selectedPlaybookId}
+                                        onChange={(e) => setSelectedPlaybookId(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                                    >
+                                        <option value="">Select a playbook...</option>
+                                        {activePlaybooks.map(pb => (
+                                            <option key={pb.playbookId} value={pb.playbookId}>
+                                                {pb.playbookName} ({pb.rulesExtracted} rules)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Template selector */}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Contract Template</label>
+                                    <select
+                                        value={selectedTemplateId}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                                    >
+                                        <option value="">Select a template...</option>
+                                        {activeTemplates.map(t => (
+                                            <option key={t.templateId} value={t.templateId}>
+                                                {t.templateName} ({t.clauseCount} clauses)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Audit name */}
+                            <div className="mb-4">
+                                <label className="block text-xs font-medium text-slate-600 mb-1.5">Report Name</label>
+                                <input
+                                    type="text"
+                                    value={auditName}
+                                    onChange={(e) => setAuditName(e.target.value)}
+                                    placeholder="e.g. Client 1 MSA vs CapGemini Playbook"
+                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:outline-none"
+                                />
+                            </div>
+
+                            {/* Category selection */}
+                            {selectedPlaybookId && (
+                                <div className="mb-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-xs font-medium text-slate-600">
+                                            Focus Categories
+                                            <span className="text-slate-400 font-normal ml-1">
+                                                ({selectedCategories.size} of {availableCategories.length} selected)
+                                            </span>
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={selectAllCategories} className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium">Select All</button>
+                                            <span className="text-slate-300">|</span>
+                                            <button onClick={deselectAllCategories} className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium">Clear</button>
+                                        </div>
+                                    </div>
+
+                                    {loadingCategories ? (
+                                        <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
+                                            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                            Loading categories...
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                            {availableCategories.map(cat => (
+                                                <button
+                                                    key={cat.key}
+                                                    onClick={() => toggleCategory(cat.key)}
+                                                    className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-xs transition-all ${
+                                                        selectedCategories.has(cat.key)
+                                                            ? 'bg-indigo-50 border-indigo-300 text-indigo-800 ring-1 ring-indigo-200'
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                                    }`}
+                                                >
+                                                    <span className="font-medium truncate">{cat.name}</span>
+                                                    <span className={`ml-1.5 flex-shrink-0 text-[10px] font-mono ${
+                                                        selectedCategories.has(cat.key) ? 'text-indigo-500' : 'text-slate-400'
+                                                    }`}>
+                                                        {cat.ruleCount}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Error message */}
+                            {createError && (
+                                <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                                    {createError}
+                                </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                                <button
+                                    onClick={() => { setShowNewAudit(false); setCreateError(null) }}
+                                    className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleCreateAudit}
+                                    disabled={isCreating || !selectedPlaybookId || !selectedTemplateId || !auditName.trim() || selectedCategories.size === 0}
+                                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                                >
+                                    {isCreating ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
+                                            Run Alignment Audit
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Audit list */}
+                    {isLoading ? (
+                        <div className="text-center py-12">
+                            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                        </div>
+                    ) : audits.length === 0 ? (
+                        <div className="text-center py-16">
+                            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-700 mb-1">No Alignment Reports Yet</h3>
+                            <p className="text-sm text-slate-500 max-w-md mx-auto mb-4">
+                                Create your first alignment audit to compare a contract template against your playbook and generate a detailed compliance report.
+                            </p>
+                            <button
+                                onClick={() => setShowNewAudit(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Create First Audit
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {audits.map(audit => (
+                                <div
+                                    key={audit.audit_id}
+                                    className="flex items-center gap-4 px-4 py-3.5 bg-white rounded-lg border border-slate-200 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer group"
+                                    onClick={() => router.push(`/auth/company-admin/audit/${audit.audit_id}`)}
+                                >
+                                    {/* Score ring or status */}
+                                    <div className="flex-shrink-0">
+                                        {audit.status === 'complete' && audit.overall_score != null ? (
+                                            <div className={`w-11 h-11 rounded-full flex items-center justify-center font-bold font-mono text-sm border-2 ${
+                                                audit.overall_score >= 80 ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                                                : audit.overall_score >= 60 ? 'border-amber-300 text-amber-700 bg-amber-50'
+                                                : 'border-red-300 text-red-700 bg-red-50'
+                                            }`}>
+                                                {audit.overall_score}%
+                                            </div>
+                                        ) : (
+                                            <div className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-100 border border-slate-200">
+                                                {audit.status === 'running' ? (
+                                                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                                ) : audit.status === 'failed' ? (
+                                                    <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                                                ) : (
+                                                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Audit details */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 transition-colors truncate">
+                                                {audit.audit_name}
+                                            </span>
+                                            {getStatusBadge(audit.status, audit.overall_score)}
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                                            <span>{audit.playbook_name}</span>
+                                            <span className="text-slate-300">vs</span>
+                                            <span>{audit.template_name}</span>
+                                            <span className="text-slate-300">·</span>
+                                            <span>{audit.focus_categories?.length || 0} categories</span>
+                                            <span className="text-slate-300">·</span>
+                                            <span>{formatDate(audit.created_at)}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                if (confirm('Delete this alignment audit?')) handleDeleteAudit(audit.audit_id)
+                                            }}
+                                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                            title="Delete audit"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </button>
+                                        <svg className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================================
 // SECTION 8: AUDIT LOG TAB COMPONENT
 // ============================================================================
 
@@ -3300,7 +3824,7 @@ function CompanyAdminContent() {
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
         { id: 'people',    label: 'People',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
         { id: 'datamap',   label: 'Data Map',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-        { id: 'audit',     label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
+        { id: 'audit',     label: 'Audit & Reports', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
     ]
 
     return (
@@ -3371,7 +3895,7 @@ function CompanyAdminContent() {
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                                 {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} playbooks={playbooks} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                                 {activeTab === 'people' && <PeopleTab companyUsers={companyUsers} trainingUsers={trainingUsers} isLoading={usersLoading || trainingLoading} isCurrentUserAdmin={isAdmin} onAddPerson={handleAddPerson} onUpdatePerson={handleUpdatePerson} onRemoveSystemUser={handleRemoveCompanyUser} onRemoveTrainingUser={handleRemoveTrainingUser} onSendSystemInvite={handleSendCompanyInvite} onSendTrainingInvite={handleSendTrainingInvite} onUpdateRole={handleUpdateRole} onRefresh={() => { if (userInfo?.companyId) { loadCompanyUsers(userInfo.companyId); loadTrainingUsers(userInfo.companyId) } }} />}
-                                {activeTab === 'audit' && <AuditLogTab companyId={userInfo?.companyId || ''} />}
+                                {activeTab === 'audit' && <AuditAndReportsTab companyId={userInfo?.companyId || ''} playbooks={playbooks} templates={companyTemplates} />}
                             </div>
                         )}
                     </div>
