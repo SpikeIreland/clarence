@@ -629,6 +629,43 @@ function QuickContractStudioContent() {
         clarence_summary: string | null; clarence_assessment: string | null;
     } | null>(null)
     const [scheduleClauseLoading, setScheduleClauseLoading] = useState(false)
+
+    // ---- SCHEDULE DETECTION POLLING ----
+    // Poll for schedules while detection is still in progress (pending/processing)
+    useEffect(() => {
+        if (!scheduleDetectionStatus || scheduleDetectionStatus === 'complete' || scheduleDetectionStatus === 'failed') return
+        if (!resolvedContractId && !contractId) return
+
+        const actualId = resolvedContractId || contractId
+        let cancelled = false
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/contracts/${actualId}/schedules`)
+                if (res.ok && !cancelled) {
+                    const data = await res.json()
+                    const newSchedules = data.schedules || []
+                    const newStatus = data.detectionStatus || null
+
+                    setDetectedSchedules(newSchedules)
+                    setScheduleDetectionStatus(newStatus)
+
+                    // Stop polling once detection is complete or failed
+                    if (newStatus === 'complete' || newStatus === 'failed') {
+                        clearInterval(pollInterval)
+                    }
+                }
+            } catch {
+                // Non-critical — will retry on next interval
+            }
+        }, 5000)
+
+        return () => {
+            cancelled = true
+            clearInterval(pollInterval)
+        }
+    }, [scheduleDetectionStatus, resolvedContractId, contractId])
+
     // ---- BULK SELECT STATE ----
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
     const [bulkAgreeInProgress, setBulkAgreeInProgress] = useState(false)
@@ -5028,6 +5065,7 @@ INSTRUCTIONS:
                             contractId={resolvedContractId}
                             contractTypeKey={contract.contractTypeKey || ''}
                             initialSchedules={detectedSchedules as any}
+                            detectionStatus={scheduleDetectionStatus}
                             partyRole={getPartyRole()}
                             userId={userInfo?.userId}
                             onScheduleSelect={async (schedule) => {

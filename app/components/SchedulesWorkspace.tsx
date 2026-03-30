@@ -60,6 +60,8 @@ interface SchedulesWorkspaceProps {
   partyRole?: PartyRole
   /** Current user's ID — needed for flag attribution */
   userId?: string
+  /** Detection status from uploaded_contracts — drives processing spinner */
+  detectionStatus?: string | null
 }
 
 export default function SchedulesWorkspace({
@@ -70,6 +72,7 @@ export default function SchedulesWorkspace({
   onScheduleSelect,
   partyRole,
   userId,
+  detectionStatus,
 }: SchedulesWorkspaceProps) {
   const [schedules, setSchedules] = useState<DetectedScheduleLocal[]>(initialSchedules || [])
   const [schedulesLoading, setSchedulesLoading] = useState(false)
@@ -298,17 +301,36 @@ export default function SchedulesWorkspace({
 
       {/* Schedule List */}
       <div className="flex-1 overflow-y-auto">
-        {schedulesLoading ? (
+        {schedulesLoading || (detectionStatus && detectionStatus !== 'complete' && detectionStatus !== 'failed' && expectations.length === 0) ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
             <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-xs text-slate-500">Loading schedules...</p>
+            <p className="text-xs text-slate-500">
+              {detectionStatus === 'processing' || detectionStatus === 'pending'
+                ? 'Detecting schedules — this may take a moment...'
+                : 'Loading schedules...'}
+            </p>
+            {(detectionStatus === 'processing' || detectionStatus === 'pending') && (
+              <p className="text-[10px] text-slate-400 mt-1">CLARENCE is analysing the document for schedules</p>
+            )}
           </div>
         ) : expectations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <svg className="w-10 h-10 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <p className="text-xs text-slate-500">No schedules expected for this contract type.</p>
+            {detectionStatus === 'failed' ? (
+              <>
+                <svg className="w-10 h-10 text-red-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <p className="text-xs text-red-500">Schedule detection encountered an error.</p>
+                <p className="text-[10px] text-slate-400 mt-1">Try re-uploading the document or contact support.</p>
+              </>
+            ) : (
+              <>
+                <svg className="w-10 h-10 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-xs text-slate-500">No schedules expected for this contract type.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="p-3 space-y-1.5">
