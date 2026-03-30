@@ -1017,7 +1017,18 @@ export async function GET(
         const playbookName = playbook?.playbook_name || 'Unknown Playbook'
         const templateName = template?.template_name || 'Unknown Template'
         const perspective = playbook?.playbook_perspective || 'customer'
-        const report = audit.results as AlignmentReportResult
+        // Handle both old format (AlignmentReportResult directly) and new combined format
+        let report: AlignmentReportResult
+        const rawResults = audit.results as Record<string, unknown>
+        if (rawResults.legacy && typeof rawResults.legacy === 'object') {
+            // New combined format — extract legacy data
+            report = rawResults.legacy as AlignmentReportResult
+        } else if (rawResults.compliance && rawResults.narratives) {
+            // Old format — results IS the AlignmentReportResult
+            report = rawResults as unknown as AlignmentReportResult
+        } else {
+            return NextResponse.json({ error: 'Audit results format not recognised' }, { status: 500 })
+        }
 
         // Safe filename
         const safeName = audit.audit_name.replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_')
