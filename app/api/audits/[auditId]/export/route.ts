@@ -892,7 +892,7 @@ export async function GET(
             return new NextResponse(new Uint8Array(buffer), {
                 headers: {
                     'Content-Type': 'application/pdf',
-                    'Content-Disposition': `attachment; filename="${safeName}.pdf"`,
+                    'Content-Disposition': `inline; filename="${safeName}.pdf"`,
                 },
             })
         }
