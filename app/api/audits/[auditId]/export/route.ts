@@ -14,9 +14,11 @@ import {
 import type {
     AlignmentReportResult,
     CategoryNarrative,
+    ClauseCentricAlignmentResult,
+    ClauseNarrative,
 } from '@/lib/alignment-engine'
 import { getTierLabel } from '@/lib/alignment-engine'
-import type { ComplianceResult, CategoryResult, ScoredRule } from '@/lib/playbook-compliance'
+import type { ComplianceResult, CategoryResult, ScoredRule, ClauseAuditResult, ClauseAuditSummary } from '@/lib/playbook-compliance'
 import { getCategoryDisplayName } from '@/lib/playbook-compliance'
 
 // ============================================================================
@@ -106,9 +108,19 @@ function fmtDate(iso: string): string {
 // DOCX BUILDER
 // ============================================================================
 
-function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName: string, templateName: string, perspective: string): Document {
+function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName: string, templateName: string, perspective: string, clauseCentric: ClauseCentricAlignmentResult | null = null): Document {
     const compliance = report.compliance
     const narrativeMap = new Map(report.narratives.map(n => [n.normalisedKey, n]))
+
+    // When clause-centric data is available, use its scores and summary
+    const ccSummary = clauseCentric?.auditSummary || null
+    const ccNarratives = clauseCentric?.clauseNarratives || []
+    const ccNarrativeMap = new Map(ccNarratives.map(n => [n.clauseId, n]))
+    const overallScore = ccSummary?.overallScore ?? compliance.overallScore
+    const executiveSummary = clauseCentric?.executiveSummary || report.executiveSummary
+    const alignedCount = ccSummary?.alignedCount ?? report.alignedCount
+    const partialCount = ccSummary?.partialCount ?? report.partialCount
+    const gapCount = ccSummary?.materialGapCount ?? report.materialGapCount
 
     // Numbering config for bullet lists
     const numbering = {
@@ -148,8 +160,8 @@ function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName:
             spacing: { after: 600 },
             children: [
                 new TextRun({ text: `Overall Alignment: `, size: 24, color: COLORS.medium, font: 'Arial' }),
-                new TextRun({ text: `${compliance.overallScore}%`, size: 36, bold: true, color: scoreColor(compliance.overallScore), font: 'Arial' }),
-                new TextRun({ text: `  (${tierFromScore(compliance.overallScore)})`, size: 24, color: scoreColor(compliance.overallScore), font: 'Arial' }),
+                new TextRun({ text: `${overallScore}%`, size: 36, bold: true, color: scoreColor(overallScore), font: 'Arial' }),
+                new TextRun({ text: `  (${tierFromScore(overallScore)})`, size: 24, color: scoreColor(overallScore), font: 'Arial' }),
             ],
         }),
         // Divider line
@@ -190,8 +202,12 @@ function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName:
             children: [
                 new TextRun({ text: 'Focus Categories: ', size: 20, color: COLORS.light, font: 'Arial' }),
                 new TextRun({ text: `${report.focusCategories.length}`, size: 20, color: COLORS.dark, font: 'Arial' }),
-                new TextRun({ text: `  |  Rules Assessed: `, size: 20, color: COLORS.light, font: 'Arial' }),
-                new TextRun({ text: `${report.totalRulesInScope}`, size: 20, color: COLORS.dark, font: 'Arial' }),
+                new TextRun({ text: `  |  Rules: `, size: 20, color: COLORS.light, font: 'Arial' }),
+                new TextRun({ text: `${ccSummary?.totalRules ?? report.totalRulesInScope}`, size: 20, color: COLORS.dark, font: 'Arial' }),
+                ...(ccSummary ? [
+                    new TextRun({ text: `  |  Clauses Assessed: `, size: 20, color: COLORS.light, font: 'Arial' }),
+                    new TextRun({ text: `${ccSummary.clausesAssessed}`, size: 20, color: COLORS.dark, font: 'Arial' }),
+                ] : []),
             ],
         }),
         new Paragraph({
@@ -215,17 +231,17 @@ function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName:
         new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 200, after: 200 }, children: [new TextRun({ text: 'Executive Summary', font: 'Arial' })] }),
     ]
 
-    if (report.executiveSummary) {
+    if (executiveSummary) {
         summaryChildren.push(new Paragraph({
             spacing: { after: 200 },
-            children: [new TextRun({ text: report.executiveSummary, size: 22, color: COLORS.dark, font: 'Arial' })],
+            children: [new TextRun({ text: executiveSummary, size: 22, color: COLORS.dark, font: 'Arial' })],
         }))
     }
 
     // Alignment snapshot table
-    const aligned = report.alignedCount
-    const partial = report.partialCount
-    const gap = report.materialGapCount
+    const aligned = alignedCount
+    const partial = partialCount
+    const gap = gapCount
     const colW = Math.floor(CONTENT_WIDTH / 3)
 
     summaryChildren.push(
@@ -427,6 +443,166 @@ function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName:
         categoryChildren.push(new Paragraph({ spacing: { before: 200, after: 200 }, children: [] }))
     }
 
+    // ── Clause-by-Clause Analysis Section (when clause-centric data available) ──
+    const clauseChildren: (Paragraph | Table)[] = []
+    if (ccSummary && ccSummary.clauseResults.length > 0) {
+        clauseChildren.push(
+            new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 200, after: 200 }, children: [new TextRun({ text: 'Clause-by-Clause Analysis', font: 'Arial' })] }),
+        )
+
+        // Sort worst first
+        const sortedClauses = [...ccSummary.clauseResults].sort((a, b) => a.score - b.score)
+        const clauseColWidths = [3200, 2000, 1200, 1200, 1760]
+
+        for (const result of sortedClauses) {
+            const narrative = ccNarrativeMap.get(result.clauseId)
+            const clr = scoreColor(result.score)
+            const bg = scoreBg(result.score)
+
+            // Clause header row
+            const headerColWidths = [6000, 3360]
+            clauseChildren.push(
+                new Table({
+                    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+                    columnWidths: headerColWidths,
+                    rows: [
+                        new TableRow({
+                            children: [
+                                new TableCell({
+                                    borders: noBorders,
+                                    width: { size: headerColWidths[0], type: WidthType.DXA },
+                                    shading: { fill: bg, type: ShadingType.CLEAR },
+                                    margins: { top: 100, bottom: 100, left: 200, right: 100 },
+                                    children: [new Paragraph({
+                                        children: [
+                                            ...(result.clauseNumber ? [new TextRun({ text: `${result.clauseNumber}  `, size: 18, color: COLORS.light, font: 'Arial' })] : []),
+                                            new TextRun({ text: result.clauseName, size: 24, bold: true, color: COLORS.dark, font: 'Arial' }),
+                                            new TextRun({ text: `  \u2014  ${tierFromScore(result.score)}`, size: 20, color: clr, font: 'Arial' }),
+                                        ],
+                                    })],
+                                }),
+                                new TableCell({
+                                    borders: noBorders,
+                                    width: { size: headerColWidths[1], type: WidthType.DXA },
+                                    shading: { fill: bg, type: ShadingType.CLEAR },
+                                    margins: { top: 100, bottom: 100, left: 100, right: 200 },
+                                    children: [new Paragraph({
+                                        alignment: AlignmentType.RIGHT,
+                                        children: [
+                                            new TextRun({ text: `${result.score}%`, size: 28, bold: true, color: clr, font: 'Arial' }),
+                                            ...(narrative ? [new TextRun({ text: `  ${narrative.riskLevel.toUpperCase()} RISK`, size: 14, bold: true, color: narrative.riskLevel === 'critical' || narrative.riskLevel === 'high' ? COLORS.danger : narrative.riskLevel === 'medium' ? COLORS.warning : COLORS.success, font: 'Arial' })] : []),
+                                        ],
+                                    })],
+                                }),
+                            ],
+                        }),
+                    ],
+                }),
+            )
+
+            // Matched rule info
+            clauseChildren.push(
+                new Paragraph({
+                    spacing: { before: 60, after: 60 },
+                    children: [
+                        new TextRun({ text: 'Matched Playbook Rule: ', size: 18, bold: true, color: COLORS.medium, font: 'Arial' }),
+                        new TextRun({ text: result.ruleClauseName, size: 18, color: COLORS.dark, font: 'Arial' }),
+                        new TextRun({ text: `  (${result.matchMethod}, ${result.matchConfidence}% confidence)`, size: 16, color: COLORS.light, font: 'Arial' }),
+                    ],
+                }),
+            )
+
+            // Position comparison table
+            clauseChildren.push(
+                new Table({
+                    width: { size: CONTENT_WIDTH, type: WidthType.DXA },
+                    columnWidths: clauseColWidths,
+                    rows: [
+                        new TableRow({
+                            children: [
+                                makeHeaderCell('Metric', clauseColWidths[0]),
+                                makeHeaderCell('Template', clauseColWidths[1]),
+                                makeHeaderCell('Ideal', clauseColWidths[2]),
+                                makeHeaderCell('Minimum', clauseColWidths[3]),
+                                makeHeaderCell('Status', clauseColWidths[4]),
+                            ],
+                        }),
+                        new TableRow({
+                            children: [
+                                makeBodyCell('Position', clauseColWidths[0]),
+                                makeBodyCellColored(
+                                    result.clausePositionLabel || (result.clausePosition != null ? `${result.clausePosition}/100` : 'Not assessed'),
+                                    clauseColWidths[1],
+                                    result.clausePosition != null ? clr : COLORS.light,
+                                ),
+                                makeBodyCell(result.idealPositionLabel || `${result.ruleIdealPosition}/100`, clauseColWidths[2]),
+                                makeBodyCell(result.minimumPositionLabel || `${result.ruleMinimumPosition}/100`, clauseColWidths[3]),
+                                makeBodyCellColored(
+                                    result.status === 'pass' ? 'Aligned' : result.status === 'fail' || result.status === 'breach' ? 'Misaligned' : result.status === 'warning' || result.status === 'acceptable' ? 'Partial' : 'No data',
+                                    clauseColWidths[4],
+                                    result.status === 'pass' ? COLORS.success : result.status === 'fail' || result.status === 'breach' ? COLORS.danger : result.status === 'warning' || result.status === 'acceptable' ? COLORS.warning : COLORS.light,
+                                ),
+                            ],
+                        }),
+                    ],
+                }),
+            )
+
+            // Flags
+            if (result.ruleIsDealBreaker || result.ruleIsNonNegotiable) {
+                clauseChildren.push(new Paragraph({
+                    spacing: { before: 60 },
+                    children: [
+                        ...(result.ruleIsDealBreaker ? [new TextRun({ text: '\u26A0 DEAL BREAKER  ', size: 18, bold: true, color: COLORS.danger, font: 'Arial' })] : []),
+                        ...(result.ruleIsNonNegotiable ? [new TextRun({ text: 'NON-NEGOTIABLE', size: 18, bold: true, color: COLORS.warning, font: 'Arial' })] : []),
+                    ],
+                }))
+            }
+
+            // AI narrative
+            if (narrative) {
+                clauseChildren.push(
+                    new Paragraph({ spacing: { before: 100, after: 60 }, children: [new TextRun({ text: 'Alignment Assessment', size: 18, bold: true, color: COLORS.medium, font: 'Arial' })] }),
+                    new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: narrative.alignmentAssessment, size: 20, color: COLORS.dark, font: 'Arial' })] }),
+                    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: 'Gap Analysis', size: 18, bold: true, color: COLORS.medium, font: 'Arial' })] }),
+                    new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: narrative.gapAnalysis, size: 20, color: COLORS.dark, font: 'Arial' })] }),
+                    new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: 'Recommendation', size: 18, bold: true, color: COLORS.medium, font: 'Arial' })] }),
+                    new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: narrative.recommendation, size: 20, bold: true, color: COLORS.dark, font: 'Arial' })] }),
+                )
+            }
+
+            // Rule rationale (if available)
+            if (result.ruleRationale) {
+                clauseChildren.push(
+                    new Paragraph({ spacing: { before: 60, after: 60 }, children: [new TextRun({ text: 'Playbook Rationale', size: 18, bold: true, color: COLORS.medium, font: 'Arial' })] }),
+                    new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: result.ruleRationale, size: 20, color: COLORS.dark, font: 'Arial' })] }),
+                )
+            }
+
+            // Spacer between clauses
+            clauseChildren.push(new Paragraph({ spacing: { before: 200, after: 200 }, children: [] }))
+        }
+
+        // Unmatched rules
+        if (ccSummary.unmatchedRules.length > 0) {
+            clauseChildren.push(
+                new Paragraph({ spacing: { before: 200, after: 100 }, children: [new TextRun({ text: 'Unmatched Playbook Rules', size: 24, bold: true, color: COLORS.warning, font: 'Arial' })] }),
+                new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: 'The following playbook rules have no matching clause in the template — these represent potential coverage gaps.', size: 20, color: COLORS.medium, font: 'Arial' })] }),
+            )
+            for (const rule of ccSummary.unmatchedRules) {
+                clauseChildren.push(new Paragraph({
+                    spacing: { after: 40 },
+                    children: [
+                        new TextRun({ text: '\u2022  ', size: 20, color: COLORS.warning, font: 'Arial' }),
+                        new TextRun({ text: rule.clause_name, size: 20, bold: true, color: COLORS.dark, font: 'Arial' }),
+                        new TextRun({ text: ` (${getCategoryDisplayName(rule.category)})`, size: 18, color: COLORS.light, font: 'Arial' }),
+                        ...(rule.is_deal_breaker ? [new TextRun({ text: '  DEAL BREAKER', size: 16, bold: true, color: COLORS.danger, font: 'Arial' })] : []),
+                    ],
+                }))
+            }
+        }
+    }
+
     // ── Red Lines Section ──
     const redLineChildren: (Paragraph | Table)[] = []
     if (compliance.redLines.length > 0) {
@@ -540,7 +716,7 @@ function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName:
                 },
                 children: summaryChildren,
             },
-            // Category Analysis
+            // Clause Analysis (preferred) or Category Analysis (legacy fallback)
             {
                 properties: {
                     page: {
@@ -568,7 +744,7 @@ function buildDocx(audit: AuditRow, report: AlignmentReportResult, playbookName:
                         })],
                     }),
                 },
-                children: categoryChildren,
+                children: clauseChildren.length > 0 ? clauseChildren : categoryChildren,
             },
             // Red Lines (if any)
             ...(redLineChildren.length > 0 ? [{
@@ -648,7 +824,7 @@ function makeBodyCellColored(text: string, width: number, color: string): TableC
 // PDF BUILDER (using pdfkit)
 // ============================================================================
 
-async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbookName: string, templateName: string, perspective: string): Promise<Buffer> {
+async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbookName: string, templateName: string, perspective: string, clauseCentric: ClauseCentricAlignmentResult | null = null): Promise<Buffer> {
     // Dynamic import for pdfkit (CommonJS module)
     const PDFDocument = (await import('pdfkit')).default
 
@@ -673,6 +849,16 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         const narrativeMap = new Map(report.narratives.map(n => [n.normalisedKey, n]))
         const pageW = 612 - 144 // letter width minus margins
 
+        // Clause-centric overrides
+        const pdfCcSummary = clauseCentric?.auditSummary || null
+        const pdfCcNarratives = clauseCentric?.clauseNarratives || []
+        const pdfCcNarrativeMap = new Map(pdfCcNarratives.map(n => [n.clauseId, n]))
+        const pdfOverallScore = pdfCcSummary?.overallScore ?? compliance.overallScore
+        const pdfExecSummary = clauseCentric?.executiveSummary || report.executiveSummary
+        const pdfAligned = pdfCcSummary?.alignedCount ?? report.alignedCount
+        const pdfPartial = pdfCcSummary?.partialCount ?? report.partialCount
+        const pdfGap = pdfCcSummary?.materialGapCount ?? report.materialGapCount
+
         // ── Cover Page ──
         doc.moveDown(6)
         doc.font('Helvetica-Bold').fontSize(26).fillColor('#4338CA')
@@ -683,11 +869,11 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.moveDown(1)
 
         // Score
-        const sColor = compliance.overallScore >= 80 ? '#059669' : compliance.overallScore >= 60 ? '#D97706' : '#DC2626'
+        const sColor = pdfOverallScore >= 80 ? '#059669' : pdfOverallScore >= 60 ? '#D97706' : '#DC2626'
         doc.font('Helvetica-Bold').fontSize(36).fillColor(sColor)
-            .text(`${compliance.overallScore}%`, { align: 'center' })
+            .text(`${pdfOverallScore}%`, { align: 'center' })
         doc.font('Helvetica').fontSize(12).fillColor(sColor)
-            .text(tierFromScore(compliance.overallScore), { align: 'center' })
+            .text(tierFromScore(pdfOverallScore), { align: 'center' })
         doc.moveDown(2)
 
         // Metadata
@@ -695,7 +881,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.text(`Template: ${templateName}`, { align: 'center' })
         doc.text(`Playbook: ${playbookName}`, { align: 'center' })
         doc.text(`Perspective: ${perspective.charAt(0).toUpperCase() + perspective.slice(1)}`, { align: 'center' })
-        doc.text(`Categories: ${report.focusCategories.length}  |  Rules: ${report.totalRulesInScope}`, { align: 'center' })
+        doc.text(`Categories: ${report.focusCategories.length}  |  Rules: ${pdfCcSummary?.totalRules ?? report.totalRulesInScope}${pdfCcSummary ? `  |  Clauses: ${pdfCcSummary.clausesAssessed}` : ''}`, { align: 'center' })
         doc.text(`Date: ${audit.completed_at ? fmtDate(audit.completed_at) : fmtDate(audit.created_at)}`, { align: 'center' })
 
         doc.moveDown(6)
@@ -707,9 +893,9 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
             .text('Executive Summary')
         doc.moveDown(0.5)
-        if (report.executiveSummary) {
+        if (pdfExecSummary) {
             doc.font('Helvetica').fontSize(11).fillColor('#1E293B')
-                .text(report.executiveSummary, { lineGap: 3 })
+                .text(pdfExecSummary, { lineGap: 3 })
         }
         doc.moveDown(1)
 
@@ -724,7 +910,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         // Aligned box
         doc.roundedRect(72, boxY, boxW, boxH, 4).fill('#ECFDF5')
         doc.font('Helvetica-Bold').fontSize(22).fillColor('#059669')
-            .text(`${report.alignedCount}`, 72, boxY + 8, { width: boxW, align: 'center' })
+            .text(`${pdfAligned}`, 72, boxY + 8, { width: boxW, align: 'center' })
         doc.font('Helvetica').fontSize(8).fillColor('#059669')
             .text('Aligned (\u226580%)', 72, boxY + 36, { width: boxW, align: 'center' })
 
@@ -732,7 +918,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         const box2X = 72 + boxW + 12
         doc.roundedRect(box2X, boxY, boxW, boxH, 4).fill('#FFFBEB')
         doc.font('Helvetica-Bold').fontSize(22).fillColor('#D97706')
-            .text(`${report.partialCount}`, box2X, boxY + 8, { width: boxW, align: 'center' })
+            .text(`${pdfPartial}`, box2X, boxY + 8, { width: boxW, align: 'center' })
         doc.font('Helvetica').fontSize(8).fillColor('#D97706')
             .text('Partial (60\u201379%)', box2X, boxY + 36, { width: boxW, align: 'center' })
 
@@ -740,7 +926,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         const box3X = box2X + boxW + 12
         doc.roundedRect(box3X, boxY, boxW, boxH, 4).fill('#FEF2F2')
         doc.font('Helvetica-Bold').fontSize(22).fillColor('#DC2626')
-            .text(`${report.materialGapCount}`, box3X, boxY + 8, { width: boxW, align: 'center' })
+            .text(`${pdfGap}`, box3X, boxY + 8, { width: boxW, align: 'center' })
         doc.font('Helvetica').fontSize(8).fillColor('#DC2626')
             .text('Material Gap (<60%)', box3X, boxY + 36, { width: boxW, align: 'center' })
 
@@ -809,10 +995,98 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             d.x = 72
         }
 
-        // ── Category Analysis ──
+        // ── Clause-by-Clause Analysis (when available) or Category Analysis ──
         doc.addPage()
-        doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
-            .text('Category Analysis')
+
+        if (pdfCcSummary && pdfCcSummary.clauseResults.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
+                .text('Clause-by-Clause Analysis')
+            doc.moveDown(0.5)
+
+            const sortedPdfClauses = [...pdfCcSummary.clauseResults].sort((a, b) => a.score - b.score)
+
+            for (const result of sortedPdfClauses) {
+                const ccNarrative = pdfCcNarrativeMap.get(result.clauseId)
+                const clr = result.score >= 80 ? '#059669' : result.score >= 60 ? '#D97706' : '#DC2626'
+                const bgClr = result.score >= 80 ? '#ECFDF5' : result.score >= 60 ? '#FFFBEB' : '#FEF2F2'
+
+                if (doc.y > 520) doc.addPage()
+
+                // Clause header with score badge
+                const cardY = doc.y
+                doc.font('Helvetica-Bold').fontSize(12).fillColor('#1E293B')
+                    .text(`${result.clauseNumber ? result.clauseNumber + '  ' : ''}${result.clauseName}`, 72, cardY, { width: pageW - 100 })
+
+                // Score badge
+                const badgeText = `${result.score}% ${tierFromScore(result.score)}`
+                doc.font('Helvetica-Bold').fontSize(9)
+                const badgeW = doc.widthOfString(badgeText) + 16
+                const badgeX = 72 + pageW - badgeW
+                doc.roundedRect(badgeX, cardY + 1, badgeW, 14, 7).fill(bgClr)
+                doc.font('Helvetica-Bold').fontSize(9).fillColor(clr)
+                    .text(badgeText, badgeX + 8, cardY + 2, { width: badgeW - 16 })
+
+                doc.y = cardY + 18
+                doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
+                    .text(`Matched to: ${result.ruleClauseName}  (${result.matchMethod}, ${result.matchConfidence}% confidence)`)
+
+                // Flags
+                if (result.ruleIsDealBreaker || result.ruleIsNonNegotiable) {
+                    doc.font('Helvetica-Bold').fontSize(7).fillColor('#DC2626')
+                    if (result.ruleIsDealBreaker) doc.text('\u26A0 DEAL BREAKER', { continued: result.ruleIsNonNegotiable })
+                    if (result.ruleIsNonNegotiable) doc.text(`${result.ruleIsDealBreaker ? '  |  ' : ''}NON-NEGOTIABLE`)
+                }
+
+                doc.moveDown(0.3)
+
+                // Position comparison line
+                doc.font('Helvetica').fontSize(9).fillColor('#475569')
+                    .text(`Template: ${result.clausePositionLabel || (result.clausePosition != null ? result.clausePosition + '/100' : 'Not assessed')}  |  Ideal: ${result.idealPositionLabel || result.ruleIdealPosition + '/100'}  |  Minimum: ${result.minimumPositionLabel || result.ruleMinimumPosition + '/100'}`)
+                doc.moveDown(0.3)
+
+                // AI narrative
+                if (ccNarrative) {
+                    const riskClr = ccNarrative.riskLevel === 'critical' || ccNarrative.riskLevel === 'high' ? '#DC2626' : ccNarrative.riskLevel === 'medium' ? '#D97706' : '#059669'
+                    doc.font('Helvetica-Bold').fontSize(7).fillColor(riskClr)
+                        .text(`${ccNarrative.riskLevel.toUpperCase()} RISK`)
+                    doc.moveDown(0.2)
+
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Assessment')
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.alignmentAssessment, { lineGap: 1 })
+                    doc.moveDown(0.2)
+
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Gap Analysis')
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.gapAnalysis, { lineGap: 1 })
+                    doc.moveDown(0.2)
+
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Recommendation')
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.recommendation, { lineGap: 1 })
+                }
+
+                // Separator
+                doc.moveDown(0.6)
+                doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#CBD5E1').lineWidth(0.75).stroke()
+                doc.moveDown(0.6)
+            }
+
+            // Unmatched rules
+            if (pdfCcSummary.unmatchedRules.length > 0) {
+                if (doc.y > 560) doc.addPage()
+                doc.font('Helvetica-Bold').fontSize(13).fillColor('#D97706')
+                    .text('Unmatched Playbook Rules')
+                doc.moveDown(0.3)
+                doc.font('Helvetica').fontSize(9).fillColor('#475569')
+                    .text('These playbook rules have no matching clause in the template:')
+                doc.moveDown(0.3)
+                for (const rule of pdfCcSummary.unmatchedRules) {
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B')
+                        .text(`\u2022  ${rule.clause_name} (${getCategoryDisplayName(rule.category)})${rule.is_deal_breaker ? ' — DEAL BREAKER' : ''}`, { indent: 12 })
+                }
+            }
+        } else {
+            // Legacy category analysis
+            doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
+                .text('Category Analysis')
         doc.moveDown(0.3)
 
         // Legend for position bars
@@ -938,6 +1212,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#CBD5E1').lineWidth(0.75).stroke()
             doc.moveDown(0.8)
         }
+        } // end else (legacy category analysis)
 
         // ── Red Lines ──
         if (compliance.redLines.length > 0) {
@@ -1019,10 +1294,14 @@ export async function GET(
         const perspective = playbook?.playbook_perspective || 'customer'
         // Handle both old format (AlignmentReportResult directly) and new combined format
         let report: AlignmentReportResult
+        let clauseCentric: ClauseCentricAlignmentResult | null = null
         const rawResults = audit.results as Record<string, unknown>
         if (rawResults.legacy && typeof rawResults.legacy === 'object') {
-            // New combined format — extract legacy data
+            // New combined format — extract both
             report = rawResults.legacy as AlignmentReportResult
+            if (rawResults.clauseCentric && typeof rawResults.clauseCentric === 'object') {
+                clauseCentric = rawResults.clauseCentric as ClauseCentricAlignmentResult
+            }
         } else if (rawResults.compliance && rawResults.narratives) {
             // Old format — results IS the AlignmentReportResult
             report = rawResults as unknown as AlignmentReportResult
@@ -1034,7 +1313,7 @@ export async function GET(
         const safeName = audit.audit_name.replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_')
 
         if (format === 'docx') {
-            const doc = buildDocx(audit as AuditRow, report, playbookName, templateName, perspective)
+            const doc = buildDocx(audit as AuditRow, report, playbookName, templateName, perspective, clauseCentric)
             const buffer = await Packer.toBuffer(doc)
 
             return new NextResponse(new Uint8Array(buffer), {
@@ -1044,7 +1323,7 @@ export async function GET(
                 },
             })
         } else {
-            const buffer = await buildPdf(audit as AuditRow, report, playbookName, templateName, perspective)
+            const buffer = await buildPdf(audit as AuditRow, report, playbookName, templateName, perspective, clauseCentric)
 
             return new NextResponse(new Uint8Array(buffer), {
                 headers: {
