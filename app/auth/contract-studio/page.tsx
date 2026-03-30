@@ -8868,7 +8868,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <SchedulesWorkspace
                             contractId={uploadedContractId}
                             contractTypeKey={session.contractTypeKey || ''}
-                            partyRole={userInfo?.partyRole === 'initiator' ? 'initiator' : 'respondent'}
+                            partyRole={userInfo?.role === 'customer' ? 'initiator' : 'respondent'}
                             userId={userInfo?.userId}
                         />
                     )}
