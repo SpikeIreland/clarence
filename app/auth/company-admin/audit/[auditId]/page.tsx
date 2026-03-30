@@ -1,6 +1,6 @@
 'use client'
-import React, { useState, useEffect, useMemo, Suspense } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
     RadarChart, Radar, PolarGrid, PolarAngleAxis,
@@ -483,10 +483,29 @@ function AuditReportLoading() {
 // MAIN CONTENT
 // ============================================================================
 
+// ============================================================================
+// REPORT TAB TYPE
+// ============================================================================
+
+type ReportTab = 'summary' | 'categories' | 'redlines' | 'flexibility'
+
+// ============================================================================
+// CATEGORY SORT OPTIONS
+// ============================================================================
+
+type CategorySort = 'score_asc' | 'score_desc' | 'alpha' | 'rules_desc'
+type TierFilter = 'all' | 'aligned' | 'partially_aligned' | 'material_gap'
+
+// ============================================================================
+// MAIN CONTENT
+// ============================================================================
+
 function AuditReportContent() {
     const router = useRouter()
     const params = useParams()
+    const searchParams = useSearchParams()
     const auditId = params.auditId as string
+    const autorun = searchParams.get('autorun') === 'true'
 
     const [loading, setLoading] = useState(true)
     const [audit, setAudit] = useState<AuditData | null>(null)
@@ -496,11 +515,72 @@ function AuditReportContent() {
     const [runProgress, setRunProgress] = useState<string>('')
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
+    // Phase 3 enhancements
+    const [activeTab, setActiveTab] = useState<ReportTab>('summary')
+    const [categorySort, setCategorySort] = useState<CategorySort>('score_asc')
+    const [tierFilter, setTierFilter] = useState<TierFilter>('all')
+    const autorunTriggered = useRef(false)
+
+    // Run audit via server-side API (with AI narrative generation)
+    const handleRunAudit = useCallback(async () => {
+        if (!audit) return
+        setIsRunning(true)
+        setRunProgress('Initialising alignment analysis...')
+
+        try {
+            // Progressive status updates
+            const progressSteps = [
+                { delay: 800, msg: 'Loading playbook rules and template clauses...' },
+                { delay: 2500, msg: 'Running compliance engine across focus categories...' },
+                { delay: 5000, msg: 'Generating AI risk narratives (batching categories)...' },
+                { delay: 9000, msg: 'Building executive summary...' },
+                { delay: 13000, msg: 'Finalising report and saving results...' },
+            ]
+
+            const timers: NodeJS.Timeout[] = []
+            progressSteps.forEach(step => {
+                timers.push(setTimeout(() => setRunProgress(step.msg), step.delay))
+            })
+
+            const res = await fetch(`/api/audits/${auditId}/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            })
+
+            // Clear pending timers
+            timers.forEach(t => clearTimeout(t))
+
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error || 'Audit run failed')
+            }
+
+            setRunProgress('Loading results...')
+
+            // Reload the full audit to get saved results
+            const auditRes = await fetch(`/api/audits/${auditId}`)
+            if (auditRes.ok) {
+                const updatedAudit: AuditData = await auditRes.json()
+                setAudit(updatedAudit)
+                if (updatedAudit.results) {
+                    setReportResult(updatedAudit.results)
+                }
+            }
+
+            setRunProgress('')
+        } catch (err) {
+            console.error('Error running audit:', err)
+            setRunProgress('')
+            setAudit(prev => prev ? { ...prev, status: 'failed', error_message: err instanceof Error ? err.message : 'Unknown error' } : null)
+        } finally {
+            setIsRunning(false)
+        }
+    }, [audit, auditId])
+
     // Load audit data
     useEffect(() => {
         const init = async () => {
             try {
-                // Fetch audit record
                 const res = await fetch(`/api/audits/${auditId}`)
                 if (!res.ok) { router.push('/auth/company-admin?tab=audit'); return }
                 const auditData: AuditData = await res.json()
@@ -509,7 +589,6 @@ function AuditReportContent() {
                 // If results already computed, use them
                 if (auditData.status === 'complete' && auditData.results) {
                     setReportResult(auditData.results)
-                    // Also load template clauses for alignment cards
                     const supabase = createClient()
                     const { data: clausesData } = await supabase
                         .from('template_clauses')
@@ -539,46 +618,13 @@ function AuditReportContent() {
         init()
     }, [auditId, router])
 
-    // Run audit via server-side API (with AI narrative generation)
-    const handleRunAudit = async () => {
-        if (!audit) return
-        setIsRunning(true)
-        setRunProgress('Starting alignment analysis...')
-
-        try {
-            setRunProgress('Running compliance engine and generating AI narratives...')
-
-            const res = await fetch(`/api/audits/${auditId}/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            })
-
-            if (!res.ok) {
-                const err = await res.json()
-                throw new Error(err.error || 'Audit run failed')
-            }
-
-            setRunProgress('Loading results...')
-
-            // Reload the full audit to get saved results
-            const auditRes = await fetch(`/api/audits/${auditId}`)
-            if (auditRes.ok) {
-                const updatedAudit: AuditData = await auditRes.json()
-                setAudit(updatedAudit)
-                if (updatedAudit.results) {
-                    setReportResult(updatedAudit.results)
-                }
-            }
-
-            setRunProgress('')
-        } catch (err) {
-            console.error('Error running audit:', err)
-            setRunProgress('')
-            setAudit(prev => prev ? { ...prev, status: 'failed', error_message: err instanceof Error ? err.message : 'Unknown error' } : null)
-        } finally {
-            setIsRunning(false)
+    // Auto-run when arriving from Control Centre with ?autorun=true
+    useEffect(() => {
+        if (autorun && audit && audit.status === 'pending' && !autorunTriggered.current && !isRunning && !loading) {
+            autorunTriggered.current = true
+            handleRunAudit()
         }
-    }
+    }, [autorun, audit, isRunning, loading, handleRunAudit])
 
     const toggleCategory = (key: string) => {
         setExpandedCategories(prev => {
@@ -589,12 +635,55 @@ function AuditReportContent() {
         })
     }
 
+    const toggleAllCategories = () => {
+        if (!compliance) return
+        const allKeys = compliance.categories.map(c => c.normalisedKey)
+        const allExpanded = allKeys.every(k => expandedCategories.has(k))
+        if (allExpanded) {
+            setExpandedCategories(new Set())
+        } else {
+            setExpandedCategories(new Set(allKeys))
+        }
+    }
+
     if (loading) return <AuditReportLoading />
     if (!audit) return null
 
     const compliance = reportResult?.compliance || null
     const narratives = reportResult?.narratives || []
     const narrativeMap = new Map(narratives.map(n => [n.normalisedKey, n]))
+
+    // Sort & filter categories
+    const sortedFilteredCategories = useMemo(() => {
+        if (!compliance) return []
+        let cats = [...compliance.categories]
+
+        // Filter by tier
+        if (tierFilter === 'aligned') cats = cats.filter(c => c.score >= 80)
+        else if (tierFilter === 'partially_aligned') cats = cats.filter(c => c.score >= 60 && c.score < 80)
+        else if (tierFilter === 'material_gap') cats = cats.filter(c => c.score < 60)
+
+        // Sort
+        switch (categorySort) {
+            case 'score_asc': cats.sort((a, b) => a.score - b.score); break
+            case 'score_desc': cats.sort((a, b) => b.score - a.score); break
+            case 'alpha': cats.sort((a, b) => a.name.localeCompare(b.name)); break
+            case 'rules_desc': cats.sort((a, b) => b.rulesTotal - a.rulesTotal); break
+        }
+        return cats
+    }, [compliance, categorySort, tierFilter])
+
+    // Tab counts for badges
+    const redLineCount = compliance?.redLines?.length || 0
+    const flexCount = compliance?.flexibility?.length || 0
+
+    // Report metadata
+    const completedDate = audit.completed_at ? new Date(audit.completed_at) : null
+    const createdDate = new Date(audit.created_at)
+
+    // Helper: format date nicely
+    const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    const fmtTime = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -631,29 +720,33 @@ function AuditReportContent() {
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {audit.status === 'pending' && (
+                            {audit.status === 'pending' && !autorun && !isRunning && (
                                 <button
                                     onClick={handleRunAudit}
-                                    disabled={isRunning}
-                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                                 >
-                                    {isRunning ? (
-                                        <>
-                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            {runProgress || 'Running...'}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                            Run Alignment Audit
-                                        </>
-                                    )}
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    Run Alignment Audit
                                 </button>
                             )}
                             {audit.status === 'complete' && (
-                                <span className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
-                                    Report Complete
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
+                                        Report Complete
+                                    </span>
+                                    <button
+                                        onClick={() => {
+                                            setAudit(prev => prev ? { ...prev, status: 'pending' } : null)
+                                            setReportResult(null)
+                                            setTimeout(() => handleRunAudit(), 100)
+                                        }}
+                                        disabled={isRunning}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 disabled:opacity-50 transition-colors"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                        Re-analyse
+                                    </button>
+                                </div>
                             )}
                             {audit.status === 'failed' && (
                                 <div className="flex items-center gap-2">
@@ -671,12 +764,43 @@ function AuditReportContent() {
                             )}
                         </div>
                     </div>
+
+                    {/* Tab navigation — only when report is complete */}
+                    {audit.status === 'complete' && compliance && (
+                        <div className="flex items-center gap-1 mt-3 -mb-px">
+                            {([
+                                { key: 'summary' as ReportTab, label: 'Summary', count: null },
+                                { key: 'categories' as ReportTab, label: 'Categories', count: compliance.categories.length },
+                                { key: 'redlines' as ReportTab, label: 'Red Lines', count: redLineCount },
+                                { key: 'flexibility' as ReportTab, label: 'Flexibility', count: flexCount },
+                            ]).map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                                        activeTab === tab.key
+                                            ? 'border-indigo-600 text-indigo-600'
+                                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                    }`}
+                                >
+                                    {tab.label}
+                                    {tab.count != null && tab.count > 0 && (
+                                        <span className={`ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full ${
+                                            activeTab === tab.key ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            {tab.count}
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Content area */}
             <div className="max-w-6xl mx-auto px-4 py-5">
-                {audit.status === 'pending' && !compliance ? (
+                {(audit.status === 'pending' && !compliance && !isRunning) ? (
                     /* Pending state — prompt to run */
                     <div className="text-center py-16">
                         <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -692,17 +816,8 @@ function AuditReportContent() {
                             disabled={isRunning}
                             className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-md"
                         >
-                            {isRunning ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    {runProgress || 'Running...'}
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                    Run Alignment Audit
-                                </>
-                            )}
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            Run Alignment Audit
                         </button>
                         {audit.error_message && (
                             <div className="mt-4 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 max-w-md mx-auto">
@@ -710,114 +825,247 @@ function AuditReportContent() {
                             </div>
                         )}
                     </div>
+                ) : isRunning || (audit.status === 'pending' && !compliance) ? (
+                    /* Running state — progressive updates */
+                    <div className="text-center py-16">
+                        <div className="w-16 h-16 relative mx-auto mb-6">
+                            <div className="absolute inset-0 border-4 border-indigo-100 rounded-full" />
+                            <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                            <div className="absolute inset-2 border-4 border-purple-100 rounded-full" />
+                            <div className="absolute inset-2 border-4 border-purple-400 border-b-transparent rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+                        </div>
+                        <h2 className="text-lg font-semibold text-slate-700 mb-2">Analysing Contract Alignment</h2>
+                        <div className="flex items-center justify-center gap-2 mb-3">
+                            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                            <p className="text-sm text-indigo-600 font-medium">{runProgress || 'Initialising...'}</p>
+                        </div>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                            The AI engine is comparing {audit.focus_categories?.length || 0} categories across your playbook and template,
+                            generating risk narratives and remediation recommendations.
+                        </p>
+                    </div>
                 ) : compliance ? (
                     <>
-                        {/* Executive Summary (AI-generated) */}
-                        {reportResult?.executiveSummary && (
-                            <ExecutiveSummaryBanner summary={reportResult.executiveSummary} />
-                        )}
+                        {/* ==================== SUMMARY TAB ==================== */}
+                        {activeTab === 'summary' && (
+                            <>
+                                {/* Report Metadata Header */}
+                                <div className="bg-white rounded-lg border border-slate-200 p-4 mb-5">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Template</div>
+                                            <div className="text-sm font-medium text-slate-700 mt-0.5">{audit.template_name}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5">{audit.contract_type}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Playbook</div>
+                                            <div className="text-sm font-medium text-slate-700 mt-0.5">{audit.playbook_name}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5 capitalize">{audit.playbook_perspective} perspective</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Created</div>
+                                            <div className="text-sm font-medium text-slate-700 mt-0.5">{fmtDate(createdDate)}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5">{fmtTime(createdDate)}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Completed</div>
+                                            <div className="text-sm font-medium text-slate-700 mt-0.5">{completedDate ? fmtDate(completedDate) : '—'}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5">{completedDate ? fmtTime(completedDate) : ''}</div>
+                                        </div>
+                                    </div>
+                                </div>
 
-                        {/* Snapshot Panel — radar + three-tier counts */}
-                        <SnapshotPanel compliance={compliance} />
+                                {/* Executive Summary (AI-generated) */}
+                                {reportResult?.executiveSummary && (
+                                    <ExecutiveSummaryBanner summary={reportResult.executiveSummary} />
+                                )}
 
-                        {/* Category-by-category breakdown with narratives */}
-                        <div className="space-y-2">
-                            {compliance.categories.map(cat => {
-                                const isOpen = expandedCategories.has(cat.normalisedKey)
-                                const barColor = cat.score >= 80 ? 'bg-emerald-500' : cat.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                                const barTrack = cat.score >= 80 ? 'bg-emerald-100' : cat.score >= 60 ? 'bg-amber-100' : 'bg-red-100'
-                                const narrative = narrativeMap.get(cat.normalisedKey)
+                                {/* Snapshot Panel — radar + three-tier counts */}
+                                <SnapshotPanel compliance={compliance} />
 
-                                return (
-                                    <div key={cat.normalisedKey} className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                                        <button
-                                            onClick={() => toggleCategory(cat.normalisedKey)}
-                                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
-                                        >
-                                            <ScoreRing score={cat.score} size={40} strokeWidth={3.5} />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-semibold text-slate-800">{cat.name}</span>
-                                                    <AlignmentTierBadge score={cat.score} />
-                                                </div>
-                                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                                    {cat.rulesPassed} aligned · {cat.rulesWarning} partial · {cat.rulesFailed} misaligned of {cat.rulesTotal} rules
-                                                </div>
-                                            </div>
-                                            <div className="w-28 flex-shrink-0">
-                                                <div className={`w-full h-1.5 rounded-full ${barTrack} overflow-hidden`}>
-                                                    <div className={`h-full rounded-full ${barColor} transition-all duration-700`}
-                                                        style={{ width: `${cat.score}%` }} />
-                                                </div>
-                                            </div>
-                                            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                                                className={`text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}>
-                                                <polyline points="6 9 12 15 18 9" />
-                                            </svg>
-                                        </button>
-
-                                        {isOpen && (
-                                            <div className="border-t border-slate-100 px-4 py-3 bg-slate-50/50">
-                                                {/* AI Narrative Panel */}
-                                                {narrative && (
-                                                    <div className="mb-3">
-                                                        <CategoryNarrativePanel narrative={narrative} />
-                                                    </div>
-                                                )}
-
-                                                {/* Rule-by-rule cards */}
-                                                {cat.rules.map(scored => (
-                                                    <AlignmentCard key={scored.rule.rule_id} scored={scored} templateClauses={templateClauses} />
+                                {/* Unmatched categories — shown on summary */}
+                                {compliance.unmatchedCategories.length > 0 && (
+                                    <div className="mt-5">
+                                        <h3 className="text-sm font-semibold text-slate-800 mb-3">Uncovered Categories</h3>
+                                        <div className="bg-white rounded-lg border border-amber-200 p-4">
+                                            <p className="text-xs text-slate-500 mb-3">
+                                                Playbook categories with no matching template clauses — these rules cannot be assessed.
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {compliance.unmatchedCategories.map(cat => (
+                                                    <span key={cat} className="px-2.5 py-1 text-xs font-medium bg-amber-50 text-amber-700 rounded-full border border-amber-200">
+                                                        {getCategoryDisplayName(cat)}
+                                                    </span>
                                                 ))}
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
-                                )
-                            })}
-                        </div>
-
-                        {/* Red Lines section if any */}
-                        {compliance.redLines.length > 0 && (
-                            <div className="mt-6">
-                                <h3 className="text-sm font-semibold text-slate-800 mb-3">Red Lines &amp; Deal Breakers</h3>
-                                <div className="bg-white rounded-lg border border-slate-200 p-4">
-                                    <RedLinesTab redLines={compliance.redLines} />
-                                </div>
-                            </div>
+                                )}
+                            </>
                         )}
 
-                        {/* Flexibility section */}
-                        {compliance.flexibility.length > 0 && (
-                            <div className="mt-6">
-                                <h3 className="text-sm font-semibold text-slate-800 mb-3">Negotiation Flexibility</h3>
-                                <div className="bg-white rounded-lg border border-slate-200 p-4">
-                                    <FlexibilityTab flexibility={compliance.flexibility} />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Unmatched categories */}
-                        {compliance.unmatchedCategories.length > 0 && (
-                            <div className="mt-6">
-                                <h3 className="text-sm font-semibold text-slate-800 mb-3">Uncovered Categories</h3>
-                                <div className="bg-white rounded-lg border border-amber-200 p-4">
-                                    <p className="text-xs text-slate-500 mb-3">
-                                        Playbook categories with no matching template clauses — these rules cannot be assessed.
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {compliance.unmatchedCategories.map(cat => (
-                                            <span key={cat} className="px-2.5 py-1 text-xs font-medium bg-amber-50 text-amber-700 rounded-full border border-amber-200">
-                                                {getCategoryDisplayName(cat)}
-                                            </span>
+                        {/* ==================== CATEGORIES TAB ==================== */}
+                        {activeTab === 'categories' && (
+                            <>
+                                {/* Sort/filter toolbar */}
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        {/* Tier filter pills */}
+                                        {([
+                                            { key: 'all' as TierFilter, label: 'All', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+                                            { key: 'material_gap' as TierFilter, label: 'Material Gaps', color: 'bg-red-50 text-red-600 border-red-200' },
+                                            { key: 'partially_aligned' as TierFilter, label: 'Partial', color: 'bg-amber-50 text-amber-600 border-amber-200' },
+                                            { key: 'aligned' as TierFilter, label: 'Aligned', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+                                        ]).map(f => (
+                                            <button
+                                                key={f.key}
+                                                onClick={() => setTierFilter(f.key)}
+                                                className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border transition-all ${
+                                                    tierFilter === f.key
+                                                        ? f.color + ' ring-1 ring-offset-1 ring-current'
+                                                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                {f.label}
+                                            </button>
                                         ))}
                                     </div>
+                                    <div className="flex items-center gap-2">
+                                        {/* Sort dropdown */}
+                                        <select
+                                            value={categorySort}
+                                            onChange={e => setCategorySort(e.target.value as CategorySort)}
+                                            className="text-[10px] text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                        >
+                                            <option value="score_asc">Worst first</option>
+                                            <option value="score_desc">Best first</option>
+                                            <option value="alpha">Alphabetical</option>
+                                            <option value="rules_desc">Most rules</option>
+                                        </select>
+                                        {/* Expand all / collapse all */}
+                                        <button
+                                            onClick={toggleAllCategories}
+                                            className="text-[10px] text-indigo-600 font-medium hover:text-indigo-800 transition-colors px-2 py-1"
+                                        >
+                                            {compliance.categories.every(c => expandedCategories.has(c.normalisedKey))
+                                                ? 'Collapse all'
+                                                : 'Expand all'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+
+                                {/* Filtered count */}
+                                {tierFilter !== 'all' && (
+                                    <div className="text-[10px] text-slate-400 mb-3">
+                                        Showing {sortedFilteredCategories.length} of {compliance.categories.length} categories
+                                    </div>
+                                )}
+
+                                {/* Category-by-category breakdown with narratives */}
+                                <div className="space-y-2">
+                                    {sortedFilteredCategories.map(cat => {
+                                        const isOpen = expandedCategories.has(cat.normalisedKey)
+                                        const barColor = cat.score >= 80 ? 'bg-emerald-500' : cat.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                                        const barTrack = cat.score >= 80 ? 'bg-emerald-100' : cat.score >= 60 ? 'bg-amber-100' : 'bg-red-100'
+                                        const narrative = narrativeMap.get(cat.normalisedKey)
+
+                                        return (
+                                            <div key={cat.normalisedKey} className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+                                                <button
+                                                    onClick={() => toggleCategory(cat.normalisedKey)}
+                                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
+                                                >
+                                                    <ScoreRing score={cat.score} size={40} strokeWidth={3.5} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-semibold text-slate-800">{cat.name}</span>
+                                                            <AlignmentTierBadge score={cat.score} />
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400 mt-0.5">
+                                                            {cat.rulesPassed} aligned · {cat.rulesWarning} partial · {cat.rulesFailed} misaligned of {cat.rulesTotal} rules
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-28 flex-shrink-0">
+                                                        <div className={`w-full h-1.5 rounded-full ${barTrack} overflow-hidden`}>
+                                                            <div className={`h-full rounded-full ${barColor} transition-all duration-700`}
+                                                                style={{ width: `${cat.score}%` }} />
+                                                        </div>
+                                                    </div>
+                                                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                                                        className={`text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}>
+                                                        <polyline points="6 9 12 15 18 9" />
+                                                    </svg>
+                                                </button>
+
+                                                {isOpen && (
+                                                    <div className="border-t border-slate-100 px-4 py-3 bg-slate-50/50">
+                                                        {/* AI Narrative Panel */}
+                                                        {narrative && (
+                                                            <div className="mb-3">
+                                                                <CategoryNarrativePanel narrative={narrative} />
+                                                            </div>
+                                                        )}
+
+                                                        {/* Rule-by-rule cards */}
+                                                        {cat.rules.map(scored => (
+                                                            <AlignmentCard key={scored.rule.rule_id} scored={scored} templateClauses={templateClauses} />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+
+                                {sortedFilteredCategories.length === 0 && (
+                                    <div className="text-center py-10 text-sm text-slate-400">
+                                        No categories match the current filter.
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* ==================== RED LINES TAB ==================== */}
+                        {activeTab === 'redlines' && (
+                            <>
+                                {redLineCount > 0 ? (
+                                    <div className="bg-white rounded-lg border border-slate-200 p-4">
+                                        <RedLinesTab redLines={compliance.redLines} />
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-16">
+                                        <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                            <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </div>
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-1">No Red Lines Triggered</h3>
+                                        <p className="text-xs text-slate-400">No deal breakers or non-negotiable clauses were breached in this audit.</p>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* ==================== FLEXIBILITY TAB ==================== */}
+                        {activeTab === 'flexibility' && (
+                            <>
+                                {flexCount > 0 ? (
+                                    <div className="bg-white rounded-lg border border-slate-200 p-4">
+                                        <FlexibilityTab flexibility={compliance.flexibility} />
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-16">
+                                        <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                            <svg className="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                                        </div>
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-1">No Flexibility Data</h3>
+                                        <p className="text-xs text-slate-400">No negotiation flexibility ranges were identified for the focus categories.</p>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </>
                 ) : (
-                    /* Running/loading state */
+                    /* Fallback running/loading state */
                     <div className="text-center py-16">
                         <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                         <h2 className="text-lg font-semibold text-slate-700 mb-1">{runProgress || 'Processing...'}</h2>

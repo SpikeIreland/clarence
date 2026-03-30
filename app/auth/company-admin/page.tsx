@@ -2641,9 +2641,9 @@ function AuditAndReportsTab({ companyId, playbooks, templates }: AuditAndReports
             setSelectedCategories(new Set())
             await loadAudits()
 
-            // Navigate to the audit run page (Phase 2 will add this)
+            // Navigate to the audit report page and auto-run
             if (data?.audit_id) {
-                router.push(`/auth/company-admin/audit/${data.audit_id}`)
+                router.push(`/auth/company-admin/audit/${data.audit_id}?autorun=true`)
             }
         } catch (err) {
             setCreateError(err instanceof Error ? err.message : 'Failed to create audit')
