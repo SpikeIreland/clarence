@@ -1103,8 +1103,9 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                     const clauseTextStr = result.clauseText.length > 800
                         ? result.clauseText.slice(0, 800) + '...'
                         : result.clauseText
-                    // Measure height first
-                    const clauseTextH = doc.heightOfString(clauseTextStr, { width: pageW - 20, fontSize: 8.5 })
+                    // Measure height first (must set font/size before heightOfString)
+                    doc.font('Helvetica').fontSize(8.5)
+                    const clauseTextH = doc.heightOfString(clauseTextStr, { width: pageW - 20 })
                     doc.roundedRect(72, clauseTextY - 2, pageW, clauseTextH + 12, 3).fill('#F8FAFC')
                     doc.font('Helvetica').fontSize(8.5).fillColor('#334155')
                         .text(clauseTextStr, 82, clauseTextY + 4, { width: pageW - 20, lineGap: 1.5 })
