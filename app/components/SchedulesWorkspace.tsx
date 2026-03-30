@@ -54,6 +54,8 @@ interface SchedulesWorkspaceProps {
   /** Optional: pass pre-loaded schedules to skip the initial fetch */
   initialSchedules?: DetectedScheduleLocal[]
   onScheduleCountChange?: (count: number) => void
+  /** Callback when a schedule is selected — parent can use this to drive centre panel */
+  onScheduleSelect?: (schedule: DetectedScheduleLocal | null) => void
   /** Which party the current user is — needed for agreement actions */
   partyRole?: PartyRole
   /** Current user's ID — needed for flag attribution */
@@ -65,6 +67,7 @@ export default function SchedulesWorkspace({
   contractTypeKey,
   initialSchedules,
   onScheduleCountChange,
+  onScheduleSelect,
   partyRole,
   userId,
 }: SchedulesWorkspaceProps) {
@@ -220,21 +223,25 @@ export default function SchedulesWorkspace({
       setChecklistResults([])
       setChecklistScore(null)
       setScheduleClauseContent(null)
+      onScheduleSelect?.(null)
       return
     }
     setSelectedScheduleId(scheduleId)
     const schedule = schedules.find(s => s.schedule_id === scheduleId)
-    if (schedule && contractId) {
-      // Load clause content from uploaded_contract_clauses
-      fetchScheduleClauseContent(schedule)
-      if (schedule.checklist_status === 'complete') {
-        fetchChecklist(contractId, scheduleId)
-      } else {
-        setChecklistResults([])
-        setChecklistScore(null)
+    if (schedule) {
+      onScheduleSelect?.(schedule)
+      if (contractId) {
+        // Load clause content from uploaded_contract_clauses
+        fetchScheduleClauseContent(schedule)
+        if (schedule.checklist_status === 'complete') {
+          fetchChecklist(contractId, scheduleId)
+        } else {
+          setChecklistResults([])
+          setChecklistScore(null)
+        }
       }
     }
-  }, [selectedScheduleId, schedules, contractId, fetchChecklist, fetchScheduleClauseContent])
+  }, [selectedScheduleId, schedules, contractId, fetchChecklist, fetchScheduleClauseContent, onScheduleSelect])
 
   // ---- AGREEMENT HELPERS ----
   const getScheduleAgreementStatus = (schedule: DetectedScheduleLocal) => {

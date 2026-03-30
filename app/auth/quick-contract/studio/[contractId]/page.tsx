@@ -619,6 +619,16 @@ function QuickContractStudioContent() {
     // ---- SCHEDULE DETECTION STATE ----
     const [detectedSchedules, setDetectedSchedules] = useState<{ schedule_id: string; schedule_type: string; schedule_label: string; confidence_score: number; summary: string | null; status: string; checklist_status?: string | null; checklist_score?: number | null }[]>([])
     const [scheduleDetectionStatus, setScheduleDetectionStatus] = useState<string | null>(null)
+    const [selectedScheduleData, setSelectedScheduleData] = useState<{
+        schedule_id: string; schedule_type: string; schedule_label: string;
+        confidence_score: number; summary: string | null; status: string;
+    } | null>(null)
+    const [selectedScheduleClause, setSelectedScheduleClause] = useState<{
+        clause_id: string; clause_number: string; clause_name: string;
+        category: string; content: string | null; original_text: string | null;
+        clarence_summary: string | null; clarence_assessment: string | null;
+    } | null>(null)
+    const [scheduleClauseLoading, setScheduleClauseLoading] = useState(false)
     // ---- BULK SELECT STATE ----
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
     const [bulkAgreeInProgress, setBulkAgreeInProgress] = useState(false)
@@ -5020,6 +5030,31 @@ INSTRUCTIONS:
                             initialSchedules={detectedSchedules as any}
                             partyRole={getPartyRole()}
                             userId={userInfo?.userId}
+                            onScheduleSelect={async (schedule) => {
+                                if (!schedule) {
+                                    setSelectedScheduleData(null)
+                                    setSelectedScheduleClause(null)
+                                    return
+                                }
+                                setSelectedScheduleData(schedule as any)
+                                setSelectedScheduleClause(null)
+                                setScheduleClauseLoading(true)
+                                try {
+                                    const cId = resolvedContractId || contractId
+                                    const schedNumMatch = schedule.schedule_label.match(/^(Schedule\s+\d+)/i)
+                                    if (schedNumMatch && cId) {
+                                        const { data } = await supabase
+                                            .from('uploaded_contract_clauses')
+                                            .select('clause_id, clause_number, clause_name, category, content, original_text, clarence_summary, clarence_assessment')
+                                            .eq('contract_id', cId)
+                                            .ilike('clause_number', schedNumMatch[1])
+                                            .limit(1)
+                                            .single()
+                                        if (data) setSelectedScheduleClause(data as any)
+                                    }
+                                } catch { /* non-critical */ }
+                                finally { setScheduleClauseLoading(false) }
+                            }}
                         />
                     )}
 
@@ -5573,7 +5608,106 @@ INSTRUCTIONS:
                 {/* CENTER PANEL: Main Workspace */}
                 {/* ======================================================== */}
                 <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-                    {selectedClause ? (
+
+                    {/* ==================== SCHEDULE DETAIL VIEW (when Schedules tab active) ==================== */}
+                    {activeStudioTab === 'schedules' ? (
+                        selectedScheduleData ? (
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                {/* Schedule Header */}
+                                <div className="flex-shrink-0 px-6 py-4 border-b border-slate-200 bg-white">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-sm font-mono text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded">
+                                            {selectedScheduleData.schedule_label.match(/^(Schedule\s+\d+)/i)?.[1] || 'Schedule'}
+                                        </span>
+                                        <span className="px-2.5 py-0.5 rounded-full text-xs font-medium border bg-indigo-50 text-indigo-700 border-indigo-200">
+                                            {selectedScheduleData.schedule_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
+                                            {Math.round(selectedScheduleData.confidence_score * 100)}% confidence
+                                        </span>
+                                    </div>
+                                    <h2 className="text-xl font-semibold text-slate-800">
+                                        {selectedScheduleData.schedule_label.replace(/^Schedule\s+\d+\s*[-–—]\s*/i, '')}
+                                    </h2>
+                                    {selectedScheduleData.summary && (
+                                        <p className="text-sm text-slate-500 mt-2 leading-relaxed">{selectedScheduleData.summary}</p>
+                                    )}
+                                </div>
+
+                                {/* Schedule Content Body */}
+                                <div className="flex-1 overflow-y-auto px-6 py-5">
+                                    {scheduleClauseLoading && (
+                                        <div className="flex items-center justify-center py-12">
+                                            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-3" />
+                                            <span className="text-sm text-slate-500">Loading schedule content...</span>
+                                        </div>
+                                    )}
+
+                                    {!scheduleClauseLoading && selectedScheduleClause && (
+                                        <div className="space-y-6">
+                                            {/* CLARENCE Assessment */}
+                                            {(selectedScheduleClause.clarence_summary || selectedScheduleClause.clarence_assessment) && (
+                                                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border border-indigo-100">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center">
+                                                            <span className="text-[10px] font-bold text-white">C</span>
+                                                        </div>
+                                                        <span className="text-sm font-semibold text-indigo-800">CLARENCE Assessment</span>
+                                                    </div>
+                                                    {selectedScheduleClause.clarence_summary && (
+                                                        <p className="text-sm text-indigo-900 leading-relaxed mb-2">{selectedScheduleClause.clarence_summary}</p>
+                                                    )}
+                                                    {selectedScheduleClause.clarence_assessment && (
+                                                        <p className="text-sm text-indigo-700 leading-relaxed">{selectedScheduleClause.clarence_assessment}</p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Schedule Text Content */}
+                                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                                <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Schedule Content</span>
+                                                </div>
+                                                <div className="px-5 py-4">
+                                                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                                        {selectedScheduleClause.content || selectedScheduleClause.original_text || 'No content available for this schedule.'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!scheduleClauseLoading && !selectedScheduleClause && (
+                                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                                                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            <p className="text-sm text-slate-500">No parsed content available for this schedule yet.</p>
+                                            <p className="text-xs text-slate-400 mt-1">Schedule content will appear here once the document has been fully processed.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            /* No schedule selected — prompt */
+                            <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50/30">
+                                <div className="text-center">
+                                    <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </div>
+                                    <p className="text-slate-600 text-lg font-medium">Select a schedule to view details</p>
+                                    <p className="text-slate-400 text-sm mt-1">Choose a schedule from the list on the left</p>
+                                </div>
+                            </div>
+                        )
+                    ) : selectedClause ? (
                         <>
                             {/* Clause Header */}
                             <div className="flex-shrink-0 px-6 py-4 border-b border-slate-200 bg-white">
