@@ -62,7 +62,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import FeedbackButton from '@/app/components/FeedbackButton'
+// FeedbackButton is provided by AuthenticatedHeader — no separate import needed
 import AuthenticatedHeader from '@/components/AuthenticatedHeader'
 import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat-panel'
 
@@ -261,6 +261,10 @@ const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
     { value: 9, label: 'High Protection', description: 'Highly protective terms' },
     { value: 10, label: 'Maximum Protection', description: 'Most protective terms possible' }
 ]
+
+// Helper: detect schedule clauses by clause_number pattern (e.g. "Schedule 1", "Schedule 27")
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isScheduleClause = (c: Record<string, any>) => /^schedule\s+\d/i.test(c.clause_number || '')
 
 // Adapter: convert studio camelCase clauses to compliance engine snake_case format
 function toComplianceClauses(studioClauses: ContractClause[]): ComplianceClause[] {
@@ -814,10 +818,6 @@ function QuickContractStudioContent() {
                 }
 
                 // Separate schedule clauses from main body clauses
-                // Schedules have clause_number like "Schedule 1", "Schedule 2", etc.
-                const isScheduleClause = (c: { clause_number?: string }) =>
-                    /^schedule\s+\d/i.test(c.clause_number || '')
-
                 const mainBodyClauses = (clausesData || []).filter(c => !isScheduleClause(c))
                 const schedClauseCount = (clausesData || []).filter(c => isScheduleClause(c)).length
                 console.log(`[QC Studio] Separated ${mainBodyClauses.length} main body clauses and ${schedClauseCount} schedule clauses`)
@@ -3899,10 +3899,12 @@ INSTRUCTIONS:
                 }
 
                 if (clausesData && clausesData.length > 0) {
-                    console.log(`[QC Studio] Clauses arrived! Found ${clausesData.length} clauses`)
+                    // Filter out schedule clauses — they appear in the Schedules tab
+                    const mainBodyData = clausesData.filter(c => !isScheduleClause(c))
+                    console.log(`[QC Studio] Clauses arrived! Found ${clausesData.length} total, ${mainBodyData.length} main body clauses`)
 
                     // Map the clauses (matching the original mapping logic)
-                    const mappedClauses: ContractClause[] = clausesData.map(c => ({
+                    const mappedClauses: ContractClause[] = mainBodyData.map(c => ({
                         clauseId: c.clause_id,
                         positionId: c.clause_id,
                         clauseNumber: c.clause_number,
@@ -4448,7 +4450,7 @@ INSTRUCTIONS:
                     {/* RIGHT: Action Buttons (standardised sizing) */}
                     <div className="flex items-center gap-2 flex-shrink-0">
 
-                        <FeedbackButton position="header" />
+                        {/* FeedbackButton is already in AuthenticatedHeader — not duplicated here */}
 
                         {/* Save Progress Button — always visible when contract is not committed */}
                         {contract?.status !== 'committed' && (
