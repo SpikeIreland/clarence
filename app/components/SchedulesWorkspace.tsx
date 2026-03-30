@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { buildScheduleExpectations } from '@/lib/schedule-types'
 
@@ -48,6 +48,17 @@ interface ChecklistItem {
 
 type PartyRole = 'initiator' | 'respondent'
 
+// ---- Upload types ----
+type UploadMode = 'individual' | 'split'
+
+interface PendingFile {
+  file: File
+  title: string
+  extractedText: string | null
+  extracting: boolean
+  error: string | null
+}
+
 interface SchedulesWorkspaceProps {
   contractId: string | null
   contractTypeKey: string
@@ -63,6 +74,56 @@ interface SchedulesWorkspaceProps {
   /** Detection status from uploaded_contracts — drives processing spinner */
   detectionStatus?: string | null
 }
+
+// ============================================================================
+// CLIENT-SIDE TEXT EXTRACTION (reuses same approach as contracts page)
+// ============================================================================
+
+async function extractTextFromFile(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+
+  if (ext === 'txt') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error('Failed to read text file'))
+      reader.readAsText(file)
+    })
+  }
+
+  if (ext === 'pdf') {
+    const pdfjsLib = await import('pdfjs-dist')
+    if (typeof window !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+    }
+    const arrayBuffer = await file.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    let fullText = ''
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const textContent = await page.getTextContent()
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ')
+      fullText += pageText + '\n'
+    }
+    return fullText.trim()
+  }
+
+  if (ext === 'docx' || ext === 'doc') {
+    const mammoth = await import('mammoth')
+    const arrayBuffer = await file.arrayBuffer()
+    const result = await mammoth.extractRawText({ arrayBuffer })
+    return result.value.trim()
+  }
+
+  throw new Error(`Unsupported file type: .${ext}`)
+}
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
 
 export default function SchedulesWorkspace({
   contractId,
@@ -80,11 +141,20 @@ export default function SchedulesWorkspace({
   const [checklistResults, setChecklistResults] = useState<ChecklistItem[]>([])
   const [checklistScore, setChecklistScore] = useState<number | null>(null)
   const [checklistLoading, setChecklistLoading] = useState(false)
-  const [agreementLoading, setAgreementLoading] = useState<string | null>(null) // schedule_id being updated
-  const [showFlagInput, setShowFlagInput] = useState<string | null>(null) // schedule_id showing flag reason input
+  const [agreementLoading, setAgreementLoading] = useState<string | null>(null)
+  const [showFlagInput, setShowFlagInput] = useState<string | null>(null)
   const [flagReason, setFlagReason] = useState('')
   const [scheduleClauseContent, setScheduleClauseContent] = useState<ScheduleClauseData | null>(null)
   const [clauseContentLoading, setClauseContentLoading] = useState(false)
+
+  // ---- Upload state ----
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadMode, setUploadMode] = useState<UploadMode>('individual')
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ---- SELF-LOADING: Fetch schedules from API when contractId is available ----
   useEffect(() => {
@@ -164,7 +234,6 @@ export default function SchedulesWorkspace({
       })
       if (res.ok) {
         const updated = await res.json()
-        // Merge agreement fields back into local schedule state
         setSchedules(prev => prev.map(s =>
           s.schedule_id === scheduleId
             ? {
@@ -197,7 +266,6 @@ export default function SchedulesWorkspace({
     setScheduleClauseContent(null)
     try {
       const supabase = createClient()
-      // Extract schedule number from label (e.g. "Schedule 7 - Pricing" → "Schedule 7")
       const schedNumMatch = schedule.schedule_label.match(/^(Schedule\s+\d+)/i)
       if (!schedNumMatch) { setClauseContentLoading(false); return }
       const schedNum = schedNumMatch[1]
@@ -234,7 +302,6 @@ export default function SchedulesWorkspace({
     if (schedule) {
       onScheduleSelect?.(schedule)
       if (contractId) {
-        // Load clause content from uploaded_contract_clauses
         fetchScheduleClauseContent(schedule)
         if (schedule.checklist_status === 'complete') {
           fetchChecklist(contractId, scheduleId)
@@ -256,11 +323,150 @@ export default function SchedulesWorkspace({
     return 'none'
   }
 
+  // ============================================================================
+  // UPLOAD FUNCTIONS
+  // ============================================================================
+
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setUploadError(null)
+    setUploadSuccess(null)
+
+    const newPendingFiles: PendingFile[] = Array.from(files).map(f => ({
+      file: f,
+      title: f.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' '),
+      extractedText: null,
+      extracting: true,
+      error: null,
+    }))
+
+    setPendingFiles(prev => [...prev, ...newPendingFiles])
+
+    // Extract text from each file in parallel
+    for (let i = 0; i < newPendingFiles.length; i++) {
+      const pf = newPendingFiles[i]
+      try {
+        const text = await extractTextFromFile(pf.file)
+        setPendingFiles(prev => prev.map(p =>
+          p.file === pf.file ? { ...p, extractedText: text, extracting: false } : p
+        ))
+      } catch (err) {
+        setPendingFiles(prev => prev.map(p =>
+          p.file === pf.file ? {
+            ...p,
+            extracting: false,
+            error: err instanceof Error ? err.message : 'Extraction failed',
+          } : p
+        ))
+      }
+    }
+  }, [])
+
+  const updatePendingTitle = useCallback((index: number, newTitle: string) => {
+    setPendingFiles(prev => prev.map((p, i) => i === index ? { ...p, title: newTitle } : p))
+  }, [])
+
+  const removePendingFile = useCallback((index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleUploadSubmit = useCallback(async () => {
+    if (!contractId) return
+    setUploading(true)
+    setUploadError(null)
+    setUploadSuccess(null)
+
+    try {
+      const readyFiles = pendingFiles.filter(p => p.extractedText && !p.error)
+
+      if (readyFiles.length === 0) {
+        setUploadError('No files ready for upload')
+        setUploading(false)
+        return
+      }
+
+      let response: Response
+
+      if (uploadMode === 'split' && readyFiles.length === 1) {
+        // Auto-split mode: send the single document for splitting
+        response = await fetch(`/api/contracts/${contractId}/schedules/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'auto-split',
+            document_text: readyFiles[0].extractedText,
+            file_name: readyFiles[0].file.name,
+          }),
+        })
+      } else {
+        // Individual / bulk mode
+        response = await fetch(`/api/contracts/${contractId}/schedules/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'manual',
+            schedules: readyFiles.map(f => ({
+              title: f.title,
+              content: f.extractedText,
+              file_name: f.file.name,
+            })),
+          }),
+        })
+      }
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setUploadError(data.error || 'Upload failed')
+        setUploading(false)
+        return
+      }
+
+      // Refresh schedules from API
+      const refreshRes = await fetch(`/api/contracts/${contractId}/schedules`)
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json()
+        setSchedules(refreshData.schedules || [])
+        onScheduleCountChange?.(refreshData.schedules?.length || 0)
+      }
+
+      setUploadSuccess(`${data.count} schedule${data.count !== 1 ? 's' : ''} uploaded successfully`)
+      setPendingFiles([])
+
+      // Close modal after a brief delay
+      setTimeout(() => {
+        setShowUploadModal(false)
+        setUploadSuccess(null)
+        setUploadMode('individual')
+      }, 1500)
+
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }, [contractId, pendingFiles, uploadMode, onScheduleCountChange])
+
+  const openUploadModal = useCallback(() => {
+    setPendingFiles([])
+    setUploadError(null)
+    setUploadSuccess(null)
+    setUploadMode('individual')
+    setShowUploadModal(true)
+  }, [])
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
   const expectations = buildScheduleExpectations(contractTypeKey, schedules as any)
   const detectedCount = expectations.filter(e => e.detected).length
   const requiredMissing = expectations.filter(e => e.isRequired && !e.detected)
   const acceptedCount = schedules.filter(s => s.initiator_accepted && s.respondent_accepted).length
   const selectedSchedule = selectedScheduleId ? schedules.find(s => s.schedule_id === selectedScheduleId) : null
+
+  const readyFileCount = pendingFiles.filter(p => p.extractedText && !p.error).length
+  const extractingCount = pendingFiles.filter(p => p.extracting).length
 
   return (
     <div className="flex flex-col h-full">
@@ -268,9 +474,24 @@ export default function SchedulesWorkspace({
       <div className="flex-shrink-0 px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-xs font-semibold text-indigo-800">Contract Schedules</h3>
-          <span className="text-[10px] font-medium text-indigo-600">
-            {detectedCount} of {expectations.length} detected
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium text-indigo-600">
+              {detectedCount} of {expectations.length} detected
+            </span>
+            {/* ADD SCHEDULE BUTTON */}
+            {contractId && (
+              <button
+                onClick={openUploadModal}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors shadow-sm"
+                title="Upload schedules"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add
+              </button>
+            )}
+          </div>
         </div>
         {/* Agreement progress bar */}
         {detectedCount > 0 && partyRole && (
@@ -328,7 +549,18 @@ export default function SchedulesWorkspace({
                 <svg className="w-10 h-10 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="text-xs text-slate-500">No schedules expected for this contract type.</p>
+                <p className="text-xs text-slate-500">No schedules detected yet.</p>
+                {contractId && (
+                  <button
+                    onClick={openUploadModal}
+                    className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload Schedules
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -435,6 +667,204 @@ export default function SchedulesWorkspace({
         )}
 
       </div>
+
+      {/* ================================================================== */}
+      {/* UPLOAD MODAL                                                       */}
+      {/* ================================================================== */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">Upload Schedules</h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">Add schedule documents to this contract</p>
+              </div>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="p-1 rounded-md hover:bg-slate-200 transition-colors"
+              >
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Mode Selector */}
+            <div className="px-5 pt-4">
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                <button
+                  onClick={() => { setUploadMode('individual'); setPendingFiles([]); setUploadError(null) }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    uploadMode === 'individual'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Individual Files
+                </button>
+                <button
+                  onClick={() => { setUploadMode('split'); setPendingFiles([]); setUploadError(null) }}
+                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    uploadMode === 'split'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Split Document
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 px-1">
+                {uploadMode === 'individual'
+                  ? 'Upload one or more schedule files (PDF, DOCX, TXT). Each file becomes a separate schedule.'
+                  : 'Upload a single document containing multiple schedules. We\'ll detect "Schedule X" headings and split automatically.'}
+              </p>
+            </div>
+
+            {/* File Drop / Select Area */}
+            <div className="px-5 py-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.txt"
+                multiple={uploadMode === 'individual'}
+                className="hidden"
+                onChange={(e) => handleFileSelect(e.target.files)}
+              />
+
+              {pendingFiles.length === 0 ? (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-slate-300 rounded-lg py-8 px-4 flex flex-col items-center gap-2 hover:border-indigo-400 hover:bg-indigo-50/50 transition-all cursor-pointer"
+                >
+                  <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span className="text-xs text-slate-600 font-medium">
+                    Click to select {uploadMode === 'individual' ? 'files' : 'a document'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">PDF, DOCX, or TXT</span>
+                </button>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {pendingFiles.map((pf, i) => (
+                    <div
+                      key={`${pf.file.name}-${i}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${
+                        pf.error ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      {/* File icon */}
+                      <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 ${
+                        pf.error ? 'bg-red-100' : pf.extracting ? 'bg-amber-100' : 'bg-emerald-100'
+                      }`}>
+                        {pf.extracting ? (
+                          <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                        ) : pf.error ? (
+                          <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Title / details */}
+                      <div className="flex-1 min-w-0">
+                        {uploadMode === 'individual' && !pf.error ? (
+                          <input
+                            type="text"
+                            value={pf.title}
+                            onChange={(e) => updatePendingTitle(i, e.target.value)}
+                            className="w-full text-xs font-medium text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-400 focus:outline-none pb-0.5"
+                            placeholder="Schedule title..."
+                          />
+                        ) : (
+                          <span className="text-xs font-medium text-slate-800 truncate block">{pf.file.name}</span>
+                        )}
+                        <span className="text-[10px] text-slate-400">
+                          {pf.extracting
+                            ? 'Extracting text...'
+                            : pf.error
+                              ? pf.error
+                              : `${(pf.extractedText?.length || 0).toLocaleString()} characters`}
+                        </span>
+                      </div>
+
+                      {/* Remove button */}
+                      <button
+                        onClick={() => removePendingFile(i)}
+                        className="p-1 rounded hover:bg-slate-100 flex-shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add more button (individual mode) */}
+                  {uploadMode === 'individual' && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full px-3 py-2 text-xs text-indigo-600 border border-dashed border-indigo-300 rounded-lg hover:bg-indigo-50 transition-colors"
+                    >
+                      + Add more files
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Error / Success */}
+            {uploadError && (
+              <div className="mx-5 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-xs text-red-600">{uploadError}</p>
+              </div>
+            )}
+            {uploadSuccess && (
+              <div className="mx-5 mb-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <p className="text-xs text-emerald-700">{uploadSuccess}</p>
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadSubmit}
+                disabled={uploading || readyFileCount === 0 || extractingCount > 0}
+                className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  uploading || readyFileCount === 0 || extractingCount > 0
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                }`}
+              >
+                {uploading ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload {readyFileCount} Schedule{readyFileCount !== 1 ? 's' : ''}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
