@@ -2341,6 +2341,7 @@ function ContractStudioContent() {
     // Solo Prep state (Contract Studio pre-negotiation clause review)
     const [uploadedContractId, setUploadedContractId] = useState<string | null>(null)
     const [uploadedContractName, setUploadedContractName] = useState<string | null>(null)
+    const [scheduleClauseCount, setScheduleClauseCount] = useState(0)
     const isSoloPrep = sessionStatus === 'solo_prep'
 
     // Save Progress state
@@ -2749,9 +2750,19 @@ function ContractStudioContent() {
 
         console.log('[SoloPrep] Loaded', clausesData.length, 'uploaded clauses')
 
-        // Step 3: Map uploaded_contract_clauses into ContractClause interface
+        // Step 3: Separate schedule clauses from main body clauses
+        // Schedules have clause_number like "Schedule 1", "Schedule 2", etc.
+        const isScheduleClause = (c: { clause_number?: string }) =>
+            /^schedule\s+\d/i.test(c.clause_number || '')
+
+        const mainBodyClauses = clausesData.filter(c => !isScheduleClause(c))
+        const schedClauses = clausesData.filter(c => isScheduleClause(c))
+        setScheduleClauseCount(schedClauses.length)
+        console.log('[SoloPrep] Separated', mainBodyClauses.length, 'main body clauses and', schedClauses.length, 'schedule clauses')
+
+        // Step 4: Map main body clauses into ContractClause interface
         // In solo prep, positions are null — only CLARENCE assessment data is available
-        const mappedClauses: ContractClause[] = clausesData
+        const mappedClauses: ContractClause[] = mainBodyClauses
             .filter(c => !c.is_header)
             .map(c => ({
                 clauseId: c.clause_id,
@@ -8847,7 +8858,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             activeTab={activeStudioTab}
                             onTabChange={setActiveStudioTab}
                             clauseCount={clauses.length}
-                            scheduleCount={0}
+                            scheduleCount={scheduleClauseCount}
                             missingRequiredCount={0}
                         />
                     )}
@@ -8855,8 +8866,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* ==================== SCHEDULES WORKSPACE (when Schedules tab active) ==================== */}
                     {activeStudioTab === 'schedules' && session?.contractTypeKey && (
                         <SchedulesWorkspace
-                            contractId={null}
+                            contractId={uploadedContractId}
                             contractTypeKey={session.contractTypeKey || ''}
+                            partyRole={userInfo?.partyRole === 'initiator' ? 'initiator' : 'respondent'}
+                            userId={userInfo?.userId}
                         />
                     )}
 
