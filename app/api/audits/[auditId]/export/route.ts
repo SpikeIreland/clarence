@@ -746,51 +746,190 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
 
         doc.y = boxY + boxH + 20
 
+        // ── Helper: draw alignment position bar for a rule ──
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        function drawPositionBar(d: any, rule: { ideal_position: number; minimum_position: number; maximum_position: number }, templatePos: number | null, x: number, y: number, w: number) {
+            const barH = 8
+            const toX = (val: number) => x + ((val - 1) / 9) * w
+
+            // Track background (full 1-10 range)
+            d.roundedRect(x, y, w, barH, 3).fill('#F1F5F9')
+
+            // Acceptable range band
+            const rangeLeft = toX(rule.minimum_position)
+            const rangeRight = toX(rule.maximum_position)
+            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 2).fill('#EEF2FF')
+            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+
+            // Gap bar between ideal and template
+            if (templatePos != null) {
+                const idealX = toX(rule.ideal_position)
+                const templX = toX(templatePos)
+                const diff = templatePos - rule.ideal_position
+                let barColor = '#10B981' // emerald — above ideal
+                if (diff < 0 && templatePos < rule.minimum_position) {
+                    barColor = '#EF4444' // red — breach
+                } else if (diff < 0) {
+                    barColor = '#F59E0B' // amber — below ideal
+                } else if (diff === 0) {
+                    barColor = '#10B981' // exact match
+                }
+                if (diff !== 0) {
+                    const bLeft = Math.min(idealX, templX)
+                    const bWidth = Math.abs(idealX - templX)
+                    d.rect(bLeft, y + 1, bWidth, barH - 2).fillOpacity(0.6).fill(barColor)
+                    d.fillOpacity(1)
+                }
+            }
+
+            // Ideal position marker (vertical line)
+            const idealXPos = toX(rule.ideal_position)
+            d.moveTo(idealXPos, y - 2).lineTo(idealXPos, y + barH + 2)
+                .strokeColor('#7C3AED').lineWidth(1.5).stroke()
+
+            // Template position marker (diamond)
+            if (templatePos != null) {
+                const tX = toX(templatePos)
+                const tY = y + barH / 2
+                const dSize = 4
+                const diamondColor = templatePos >= rule.minimum_position ? '#059669' : '#DC2626'
+                d.save()
+                d.moveTo(tX, tY - dSize).lineTo(tX + dSize, tY).lineTo(tX, tY + dSize).lineTo(tX - dSize, tY).closePath()
+                d.fill(diamondColor)
+                d.restore()
+            }
+
+            // Scale labels (1 and 10)
+            d.font('Helvetica').fontSize(6).fillColor('#94A3B8')
+            d.text('1', x - 2, y + barH + 2, { width: 10 })
+            d.text('10', x + w - 6, y + barH + 2, { width: 14 })
+        }
+
         // ── Category Analysis ──
         doc.addPage()
         doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
             .text('Category Analysis')
-        doc.moveDown(0.5)
+        doc.moveDown(0.3)
+
+        // Legend for position bars
+        const legendY = doc.y
+        const legendX = 72
+        doc.font('Helvetica').fontSize(7).fillColor('#64748B')
+            .text('Position Bar Legend:', legendX, legendY)
+
+        const legItemY = legendY + 10
+        // Acceptable range
+        doc.roundedRect(legendX, legItemY, 20, 6, 2).fill('#EEF2FF')
+        doc.roundedRect(legendX, legItemY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+        doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+            .text('Acceptable range', legendX + 24, legItemY - 1)
+
+        // Ideal marker
+        const leg2X = legendX + 110
+        doc.moveTo(leg2X, legItemY - 1).lineTo(leg2X, legItemY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
+        doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+            .text('Ideal position', leg2X + 6, legItemY - 1)
+
+        // Template diamond
+        const leg3X = leg2X + 90
+        doc.save()
+        doc.moveTo(leg3X + 3, legItemY - 1).lineTo(leg3X + 6, legItemY + 3).lineTo(leg3X + 3, legItemY + 7).lineTo(leg3X, legItemY + 3).closePath()
+        doc.fill('#059669')
+        doc.restore()
+        doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+            .text('Template position', leg3X + 10, legItemY - 1)
+
+        doc.y = legItemY + 18
+        doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
+        doc.moveDown(0.8)
 
         const sortedCats = [...compliance.categories].sort((a, b) => a.score - b.score)
         for (const cat of sortedCats) {
             const narrative = narrativeMap.get(cat.normalisedKey)
             const clr = cat.score >= 80 ? '#059669' : cat.score >= 60 ? '#D97706' : '#DC2626'
+            const bgClr = cat.score >= 80 ? '#ECFDF5' : cat.score >= 60 ? '#FFFBEB' : '#FEF2F2'
 
-            // Check if we need a new page (at least 120pt of space)
-            if (doc.y > 620) doc.addPage()
+            // Check if we need a new page (enough space for header + bar + narrative)
+            if (doc.y > 560) doc.addPage()
 
-            // Category header
+            // Category card background
+            const cardY = doc.y
+            const cardX = 72
+
+            // Category header with tier badge
             doc.font('Helvetica-Bold').fontSize(13).fillColor('#1E293B')
-                .text(`${cat.name}`, { continued: true })
-            doc.font('Helvetica-Bold').fontSize(13).fillColor(clr)
-                .text(`  ${cat.score}%  ${tierFromScore(cat.score)}`)
+                .text(cat.name, cardX, cardY)
 
+            // Score badge on same line
+            const badgeText = `${cat.score}% ${tierFromScore(cat.score)}`
+            const badgeW = doc.widthOfString(badgeText, { font: 'Helvetica-Bold', size: 10 }) + 16
+            const badgeX = 72 + pageW - badgeW
+            doc.roundedRect(badgeX, cardY + 1, badgeW, 16, 8).fill(bgClr)
+            doc.font('Helvetica-Bold').fontSize(10).fillColor(clr)
+                .text(badgeText, badgeX + 8, cardY + 3, { width: badgeW - 16 })
+
+            doc.y = cardY + 20
             doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
                 .text(`${cat.rulesPassed} aligned \u00B7 ${cat.rulesWarning} partial \u00B7 ${cat.rulesFailed} misaligned of ${cat.rulesTotal} rules`)
-            doc.moveDown(0.3)
+            doc.moveDown(0.4)
 
+            // Position bars for each rule in this category
+            if (cat.rules && cat.rules.length > 0) {
+                doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Rule Positions')
+                doc.moveDown(0.2)
+
+                for (const scored of cat.rules) {
+                    if (doc.y > 680) { doc.addPage() }
+
+                    const ruleY = doc.y
+                    const labelW = 160
+                    const barX = cardX + labelW + 8
+                    const barW = pageW - labelW - 8
+
+                    // Rule name (truncated)
+                    const rName = scored.rule.clause_name.length > 35
+                        ? scored.rule.clause_name.slice(0, 33) + '\u2026'
+                        : scored.rule.clause_name
+
+                    // Status indicator dot
+                    const dotColor = scored.status === 'pass' ? '#059669'
+                        : (scored.status === 'fail' || scored.status === 'breach') ? '#DC2626'
+                        : (scored.status === 'warning' || scored.status === 'acceptable') ? '#D97706' : '#94A3B8'
+                    doc.circle(cardX + 4, ruleY + 4, 2.5).fill(dotColor)
+
+                    doc.font('Helvetica').fontSize(7.5).fillColor('#334155')
+                        .text(rName, cardX + 12, ruleY, { width: labelW - 12 })
+
+                    // Draw the position bar
+                    drawPositionBar(doc, scored.rule, scored.effectivePosition, barX, ruleY, barW)
+
+                    doc.y = ruleY + 18
+                }
+                doc.moveDown(0.3)
+            }
+
+            // Narrative sections
             if (narrative) {
                 doc.font('Helvetica-Bold').fontSize(9).fillColor('#475569').text('Risk Assessment')
                 doc.font('Helvetica').fontSize(10).fillColor('#1E293B').text(narrative.riskSummary, { lineGap: 2 })
-                doc.moveDown(0.2)
+                doc.moveDown(0.3)
 
                 if (narrative.keyFindings.length > 0) {
                     doc.font('Helvetica-Bold').fontSize(9).fillColor('#475569').text('Key Findings')
                     for (const f of narrative.keyFindings) {
                         doc.font('Helvetica').fontSize(10).fillColor('#1E293B').text(`\u2022  ${f}`, { indent: 12, lineGap: 1 })
                     }
-                    doc.moveDown(0.2)
+                    doc.moveDown(0.3)
                 }
 
                 doc.font('Helvetica-Bold').fontSize(9).fillColor('#475569').text('Recommended Action')
                 doc.font('Helvetica').fontSize(10).fillColor('#1E293B').text(narrative.remediation, { lineGap: 2 })
             }
 
-            doc.moveDown(0.5)
-            // Light divider
-            doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
-            doc.moveDown(0.5)
+            // Category separator — generous spacing
+            doc.moveDown(0.8)
+            doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#CBD5E1').lineWidth(0.75).stroke()
+            doc.moveDown(0.8)
         }
 
         // ── Red Lines ──
