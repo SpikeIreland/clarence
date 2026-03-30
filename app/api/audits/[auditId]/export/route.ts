@@ -862,7 +862,8 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
 
             // Score badge on same line
             const badgeText = `${cat.score}% ${tierFromScore(cat.score)}`
-            const badgeW = doc.widthOfString(badgeText, { font: 'Helvetica-Bold', size: 10 }) + 16
+            doc.font('Helvetica-Bold').fontSize(10)
+            const badgeW = doc.widthOfString(badgeText) + 16
             const badgeX = 72 + pageW - badgeW
             doc.roundedRect(badgeX, cardY + 1, badgeW, 16, 8).fill(bgClr)
             doc.font('Helvetica-Bold').fontSize(10).fillColor(clr)
