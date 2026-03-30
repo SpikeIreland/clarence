@@ -912,7 +912,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.font('Helvetica-Bold').fontSize(22).fillColor('#059669')
             .text(`${pdfAligned}`, 72, boxY + 8, { width: boxW, align: 'center' })
         doc.font('Helvetica').fontSize(8).fillColor('#059669')
-            .text('Aligned (\u226580%)', 72, boxY + 36, { width: boxW, align: 'center' })
+            .text('Aligned (>=80%)', 72, boxY + 36, { width: boxW, align: 'center' })
 
         // Partial box
         const box2X = 72 + boxW + 12
@@ -1038,7 +1038,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 if (result.ruleIsDealBreaker || result.ruleIsNonNegotiable) {
                     doc.x = 72
                     doc.font('Helvetica-Bold').fontSize(7).fillColor('#DC2626')
-                    if (result.ruleIsDealBreaker) doc.text('\u26A0 DEAL BREAKER', 72, doc.y, { width: pageW, continued: result.ruleIsNonNegotiable })
+                    if (result.ruleIsDealBreaker) doc.text('[!] DEAL BREAKER', 72, doc.y, { width: pageW, continued: result.ruleIsNonNegotiable })
                     if (result.ruleIsNonNegotiable) doc.text(`${result.ruleIsDealBreaker ? '  |  ' : ''}NON-NEGOTIABLE`)
                     doc.x = 72
                 }
@@ -1237,7 +1237,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 const rlClr = rl.status === 'breach' ? '#DC2626' : '#059669'
                 const typeLabel = rl.rule.is_deal_breaker ? 'Deal Breaker' : 'Non-Negotiable'
                 doc.font('Helvetica-Bold').fontSize(10).fillColor(rlClr)
-                    .text(`${rl.status === 'breach' ? '\u26A0' : '\u2713'}  ${rl.rule.clause_name}`, { continued: true })
+                    .text(`${rl.status === 'breach' ? '[!]' : '[OK]'}  ${rl.rule.clause_name}`, { continued: true })
                 doc.font('Helvetica').fontSize(9).fillColor('#475569')
                     .text(`  (${typeLabel})`)
                 if (rl.detail) {
