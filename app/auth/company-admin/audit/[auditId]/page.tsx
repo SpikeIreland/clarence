@@ -635,25 +635,13 @@ function AuditReportContent() {
         })
     }
 
-    const toggleAllCategories = () => {
-        if (!compliance) return
-        const allKeys = compliance.categories.map(c => c.normalisedKey)
-        const allExpanded = allKeys.every(k => expandedCategories.has(k))
-        if (allExpanded) {
-            setExpandedCategories(new Set())
-        } else {
-            setExpandedCategories(new Set(allKeys))
-        }
-    }
-
-    if (loading) return <AuditReportLoading />
-    if (!audit) return null
-
+    // Derived state — these MUST be computed before any early returns
+    // to keep React hooks (useMemo below) in a consistent call order.
     const compliance = reportResult?.compliance || null
     const narratives = reportResult?.narratives || []
     const narrativeMap = new Map(narratives.map(n => [n.normalisedKey, n]))
 
-    // Sort & filter categories
+    // Sort & filter categories (useMemo hook — must not be after conditional returns)
     const sortedFilteredCategories = useMemo(() => {
         if (!compliance) return []
         let cats = [...compliance.categories]
@@ -672,6 +660,21 @@ function AuditReportContent() {
         }
         return cats
     }, [compliance, categorySort, tierFilter])
+
+    const toggleAllCategories = () => {
+        if (!compliance) return
+        const allKeys = compliance.categories.map(c => c.normalisedKey)
+        const allExpanded = allKeys.every(k => expandedCategories.has(k))
+        if (allExpanded) {
+            setExpandedCategories(new Set())
+        } else {
+            setExpandedCategories(new Set(allKeys))
+        }
+    }
+
+    // Early returns — AFTER all hooks
+    if (loading) return <AuditReportLoading />
+    if (!audit) return null
 
     // Tab counts for badges
     const redLineCount = compliance?.redLines?.length || 0
