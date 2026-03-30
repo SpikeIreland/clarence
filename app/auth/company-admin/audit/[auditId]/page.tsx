@@ -27,11 +27,24 @@ import type {
     AlignmentReportResult,
     CategoryNarrative,
     AlignmentTier,
+    ClauseNarrative,
+    ClauseCentricAlignmentResult,
 } from '@/lib/alignment-engine'
+import type {
+    ClauseAuditResult,
+    ClauseAuditSummary,
+} from '@/lib/playbook-compliance'
 
 // ============================================================================
 // TYPES
 // ============================================================================
+
+/** Combined results shape saved by the new API route */
+interface CombinedAuditResults {
+    clauseCentric?: ClauseCentricAlignmentResult
+    legacy?: AlignmentReportResult
+    overallScore?: number
+}
 
 interface AuditData {
     audit_id: string
@@ -42,7 +55,7 @@ interface AuditData {
     focus_categories: string[]
     status: 'pending' | 'running' | 'complete' | 'failed'
     overall_score: number | null
-    results: AlignmentReportResult | null
+    results: AlignmentReportResult | CombinedAuditResults | null
     error_message: string | null
     created_at: string
     started_at: string | null
@@ -54,6 +67,30 @@ interface AuditData {
     template_name: string
     contract_type: string
     clause_count: number
+}
+
+/** Helper: extract clause-centric data from results (if available) */
+function getClauseCentricData(results: AuditData['results']): ClauseCentricAlignmentResult | null {
+    if (!results) return null
+    // New combined format
+    if ('clauseCentric' in results && results.clauseCentric) {
+        return results.clauseCentric as ClauseCentricAlignmentResult
+    }
+    return null
+}
+
+/** Helper: extract legacy compliance data from results */
+function getLegacyData(results: AuditData['results']): AlignmentReportResult | null {
+    if (!results) return null
+    // New combined format
+    if ('legacy' in results && results.legacy) {
+        return results.legacy as AlignmentReportResult
+    }
+    // Old format — the results IS the AlignmentReportResult
+    if ('compliance' in results && 'narratives' in results) {
+        return results as AlignmentReportResult
+    }
+    return null
 }
 
 interface TemplateClauseRow {
@@ -447,6 +484,321 @@ function CategoryNarrativePanel({ narrative }: { narrative: CategoryNarrative })
 }
 
 // ============================================================================
+// RISK LEVEL BADGE
+// ============================================================================
+
+function RiskLevelBadge({ level }: { level: string }) {
+    const config = {
+        critical: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300', label: 'Critical' },
+        high: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'High Risk' },
+        medium: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', label: 'Medium' },
+        low: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: 'Low Risk' },
+    }[level] || { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200', label: level }
+
+    return (
+        <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${config.bg} ${config.text} ${config.border}`}>
+            {config.label}
+        </span>
+    )
+}
+
+// ============================================================================
+// CLAUSE AUDIT CARD — Single clause-rule pair with full context
+// ============================================================================
+
+function ClauseAuditCard({
+    result,
+    narrative,
+    isExpanded,
+    onToggle,
+}: {
+    result: ClauseAuditResult
+    narrative?: ClauseNarrative
+    isExpanded: boolean
+    onToggle: () => void
+}) {
+    const scoreColor = result.score >= 80 ? 'text-emerald-600' : result.score >= 60 ? 'text-amber-600' : 'text-red-600'
+    const barTrackColor = result.score >= 80 ? 'bg-emerald-100' : result.score >= 60 ? 'bg-amber-100' : 'bg-red-100'
+    const barFillColor = result.score >= 80 ? 'bg-emerald-500' : result.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+
+    // Build a lightweight position bar inline
+    const toPercent = (val: number) => Math.min(100, Math.max(0, ((val - 1) / 9) * 100))
+    const idealPct = toPercent(result.ruleIdealPosition)
+    const minPct = toPercent(result.ruleMinimumPosition)
+    const clausePct = result.clausePosition != null ? toPercent(result.clausePosition) : null
+
+    return (
+        <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+            {/* Collapsed header row */}
+            <button
+                onClick={onToggle}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition ${isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50/50'}`}
+            >
+                {/* Status icon */}
+                <StatusIcon status={result.status} />
+
+                {/* Clause name + number */}
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        {result.clauseNumber && (
+                            <span className="text-[10px] font-mono text-slate-400">{result.clauseNumber}</span>
+                        )}
+                        <span className="text-xs font-semibold text-slate-800 truncate">{result.clauseName}</span>
+                        <AlignmentTierBadge score={result.score} />
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                        Matched to: <span className="text-slate-500 font-medium">{result.ruleClauseName}</span>
+                        <span className="ml-1.5 text-slate-300">({result.matchMethod}, {result.matchConfidence}% confidence)</span>
+                    </div>
+                </div>
+
+                {/* Badges */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {result.ruleIsDealBreaker && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded">Deal Breaker</span>}
+                    {result.ruleIsNonNegotiable && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded">Non-Negotiable</span>}
+                    {narrative && <RiskLevelBadge level={narrative.riskLevel} />}
+                </div>
+
+                {/* Score + mini bar */}
+                <div className="w-24 flex-shrink-0 text-right">
+                    <span className={`text-sm font-bold font-mono ${scoreColor}`}>{result.score}%</span>
+                    <div className={`w-full h-1.5 rounded-full ${barTrackColor} overflow-hidden mt-1`}>
+                        <div className={`h-full rounded-full ${barFillColor} transition-all duration-700`}
+                            style={{ width: `${result.score}%` }} />
+                    </div>
+                </div>
+
+                {/* Chevron */}
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    className={`text-slate-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+
+            {/* Expanded detail panel — the full snapshot */}
+            {isExpanded && (
+                <div className="border-t border-slate-100 px-4 py-4 bg-slate-50/50 space-y-4">
+                    {/* Two-column layout: Clause on left, Rule on right */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* LEFT: Clause Information */}
+                        <div className="bg-white rounded-lg border border-slate-200 p-3">
+                            <div className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                                Template Clause
+                            </div>
+                            {result.clauseText ? (
+                                <div className="text-xs text-slate-700 leading-relaxed max-h-48 overflow-y-auto">
+                                    {result.clauseText.length > 600
+                                        ? result.clauseText.substring(0, 600) + '…'
+                                        : result.clauseText}
+                                </div>
+                            ) : (
+                                <div className="text-xs text-slate-400 italic">Clause text not available</div>
+                            )}
+
+                            {/* Clause position */}
+                            <div className="mt-3 pt-2 border-t border-slate-100">
+                                <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-slate-500">CLARENCE Position</span>
+                                    <span className={`font-bold ${result.clausePosition != null ? scoreColor : 'text-slate-400'}`}>
+                                        {result.clausePositionLabel || (result.clausePosition != null ? `${result.clausePosition}/100` : 'Not assessed')}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* CLARENCE pre-assessment */}
+                            {result.clarenceAssessment && (
+                                <div className="mt-2 px-2 py-1.5 bg-indigo-50/50 border border-indigo-100 rounded text-[10px] text-indigo-700 leading-relaxed">
+                                    <span className="font-semibold">Assessment:</span> {result.clarenceAssessment}
+                                </div>
+                            )}
+                            {result.clarenceFairness && (
+                                <div className="mt-1 text-[10px] text-slate-500">
+                                    <span className="font-semibold">Fairness:</span> {result.clarenceFairness}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* RIGHT: Playbook Rule */}
+                        <div className="bg-white rounded-lg border border-slate-200 p-3">
+                            <div className="text-[10px] font-semibold text-purple-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                                Playbook Rule
+                            </div>
+                            {result.ruleRationale ? (
+                                <div className="text-xs text-slate-700 leading-relaxed max-h-36 overflow-y-auto">
+                                    {result.ruleRationale}
+                                </div>
+                            ) : (
+                                <div className="text-xs text-slate-400 italic">No rationale provided</div>
+                            )}
+
+                            {/* Rule positions */}
+                            <div className="mt-3 pt-2 border-t border-slate-100 space-y-1">
+                                <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-slate-500">Ideal Position</span>
+                                    <span className="font-bold text-purple-600">
+                                        {result.idealPositionLabel || `${result.ruleIdealPosition}/100`}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-slate-500">Minimum Acceptable</span>
+                                    <span className="font-semibold text-slate-600">
+                                        {result.minimumPositionLabel || `${result.ruleMinimumPosition}/100`}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Deal breaker / non-negotiable flags */}
+                            {(result.ruleIsDealBreaker || result.ruleIsNonNegotiable) && (
+                                <div className="mt-2 flex items-center gap-2">
+                                    {result.ruleIsDealBreaker && (
+                                        <span className="px-2 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded border border-red-200">Deal Breaker</span>
+                                    )}
+                                    {result.ruleIsNonNegotiable && (
+                                        <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 rounded border border-amber-200">Non-Negotiable</span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Position comparison bar — full width */}
+                    <div className="bg-white rounded-lg border border-slate-200 p-3">
+                        <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Position Comparison</div>
+                        <div className="relative h-10">
+                            {/* Track */}
+                            <div className="absolute top-4 left-0 right-0 h-2 bg-slate-100 rounded-full" />
+                            {/* Acceptable range */}
+                            <div className="absolute top-4 h-2 bg-blue-50 border border-blue-100 rounded-full"
+                                style={{ left: `${minPct}%`, width: `${idealPct - minPct}%` }} />
+                            {/* Ideal position marker */}
+                            <div className="absolute top-2 w-0.5 h-6 bg-purple-500 rounded-full z-10"
+                                style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }} />
+                            {/* Minimum position marker */}
+                            <div className="absolute top-3 w-0.5 h-4 bg-slate-400 rounded-full z-10"
+                                style={{ left: `${minPct}%`, transform: 'translateX(-50%)' }} />
+                            {/* Clause position diamond */}
+                            {clausePct != null && (
+                                <div className={`absolute top-2 w-4 h-4 rounded-sm border-2 border-white shadow-md z-20 ${
+                                    result.score >= 80 ? 'bg-emerald-500' : result.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                                }`}
+                                    style={{ left: `${clausePct}%`, transform: 'translateX(-50%) rotate(45deg)' }} />
+                            )}
+                        </div>
+                        {/* Legend */}
+                        <div className="flex items-center gap-4 text-[9px] text-slate-400 mt-1">
+                            <span className="flex items-center gap-1">
+                                <span className="w-3 h-0.5 bg-purple-500 inline-block rounded" /> Ideal
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-3 h-0.5 bg-slate-400 inline-block rounded" /> Minimum
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-3 h-3 bg-blue-50 inline-block rounded border border-blue-100" /> Acceptable range
+                            </span>
+                            {clausePct != null && (
+                                <span className="flex items-center gap-1">
+                                    <span className={`w-2.5 h-2.5 rounded-sm inline-block rotate-45 ${
+                                        result.score >= 80 ? 'bg-emerald-500' : result.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`} /> Template position
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* AI Assessment — from narrative */}
+                    {narrative && (
+                        <div className={`rounded-lg border p-4 ${
+                            narrative.riskLevel === 'critical' ? 'border-red-200 bg-red-50/50' :
+                            narrative.riskLevel === 'high' ? 'border-red-200 bg-red-50/30' :
+                            narrative.riskLevel === 'medium' ? 'border-amber-200 bg-amber-50/50' :
+                            'border-emerald-200 bg-emerald-50/50'
+                        }`}>
+                            <div className="space-y-3">
+                                <div>
+                                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Alignment Assessment</div>
+                                    <p className="text-xs text-slate-700 leading-relaxed">{narrative.alignmentAssessment}</p>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Gap Analysis</div>
+                                    <p className="text-xs text-slate-700 leading-relaxed">{narrative.gapAnalysis}</p>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Recommendation</div>
+                                    <p className="text-xs text-slate-700 leading-relaxed font-medium">{narrative.recommendation}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Market range context */}
+                    {result.rangeMapping && (
+                        <div className="bg-white rounded-lg border border-slate-200 p-3">
+                            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Market Range Context</div>
+                            <div className="text-xs text-slate-600">{typeof result.rangeMapping === 'string' ? result.rangeMapping : JSON.stringify(result.rangeMapping)}</div>
+                        </div>
+                    )}
+
+                    {/* Scoring detail */}
+                    <div className="flex items-center gap-3 text-[10px] text-slate-400 px-1">
+                        <span>Score: <strong className={scoreColor}>{result.score}%</strong></span>
+                        <span className="text-slate-300">|</span>
+                        <span>{result.detail}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>Category: {result.clauseCategory}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================================
+// CLAUSE SNAPSHOT PANEL — Summary stats for clause-centric view
+// ============================================================================
+
+function ClauseSnapshotPanel({ summary }: { summary: ClauseAuditSummary }) {
+    return (
+        <div className="bg-white rounded-lg border border-slate-200 p-5 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div>
+                    <div className="text-3xl font-bold text-slate-800">{summary.clausesAssessed}</div>
+                    <div className="text-[11px] text-slate-500">Clauses Assessed</div>
+                </div>
+                <div>
+                    <div className="text-3xl font-bold text-emerald-600">{summary.alignedCount}</div>
+                    <div className="text-[11px] text-slate-500">Aligned <span className="text-slate-300">(≥80%)</span></div>
+                </div>
+                <div>
+                    <div className="text-3xl font-bold text-amber-500">{summary.partialCount}</div>
+                    <div className="text-[11px] text-slate-500">Partial <span className="text-slate-300">(60–79%)</span></div>
+                </div>
+                <div>
+                    <div className="text-3xl font-bold text-red-500">{summary.materialGapCount}</div>
+                    <div className="text-[11px] text-slate-500">Material Gap <span className="text-slate-300">(&lt;60%)</span></div>
+                </div>
+                <div>
+                    <div className="text-3xl font-bold text-red-700">{summary.redLineBreaches}</div>
+                    <div className="text-[11px] text-slate-500">Red Line Breaches</div>
+                </div>
+            </div>
+            {(summary.unmatchedClauses.length > 0 || summary.unmatchedRules.length > 0) && (
+                <div className="flex items-center gap-4 text-[10px] text-slate-400 mt-3 pt-3 border-t border-slate-100">
+                    {summary.unmatchedClauses.length > 0 && (
+                        <span>{summary.unmatchedClauses.length} clause{summary.unmatchedClauses.length > 1 ? 's' : ''} with no matching rule</span>
+                    )}
+                    {summary.unmatchedRules.length > 0 && (
+                        <span>{summary.unmatchedRules.length} rule{summary.unmatchedRules.length > 1 ? 's' : ''} with no matching clause</span>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================================
 // EXECUTIVE SUMMARY BANNER
 // ============================================================================
 
@@ -487,14 +839,16 @@ function AuditReportLoading() {
 // REPORT TAB TYPE
 // ============================================================================
 
-type ReportTab = 'summary' | 'categories' | 'redlines' | 'flexibility'
+type ReportTab = 'summary' | 'clauses' | 'categories' | 'redlines' | 'flexibility'
 
 // ============================================================================
 // CATEGORY SORT OPTIONS
 // ============================================================================
 
 type CategorySort = 'score_asc' | 'score_desc' | 'alpha' | 'rules_desc'
+type ClauseSort = 'score_asc' | 'score_desc' | 'alpha' | 'clause_order' | 'risk_desc'
 type TierFilter = 'all' | 'aligned' | 'partially_aligned' | 'material_gap'
+type RiskFilter = 'all' | 'critical' | 'high' | 'medium' | 'low'
 
 // ============================================================================
 // MAIN CONTENT
@@ -520,6 +874,11 @@ function AuditReportContent() {
     const [categorySort, setCategorySort] = useState<CategorySort>('score_asc')
     const [tierFilter, setTierFilter] = useState<TierFilter>('all')
     const autorunTriggered = useRef(false)
+
+    // Phase 4 — clause-centric audit
+    const [clauseSort, setClauseSort] = useState<ClauseSort>('score_asc')
+    const [riskFilter, setRiskFilter] = useState<RiskFilter>('all')
+    const [expandedClauses, setExpandedClauses] = useState<Set<string>>(new Set())
 
     // Run audit via server-side API (with AI narrative generation)
     const handleRunAudit = useCallback(async () => {
@@ -563,7 +922,8 @@ function AuditReportContent() {
                 const updatedAudit: AuditData = await auditRes.json()
                 setAudit(updatedAudit)
                 if (updatedAudit.results) {
-                    setReportResult(updatedAudit.results)
+                    const legacy = getLegacyData(updatedAudit.results)
+                    setReportResult(legacy)
                 }
             }
 
@@ -588,7 +948,8 @@ function AuditReportContent() {
 
                 // If results already computed, use them
                 if (auditData.status === 'complete' && auditData.results) {
-                    setReportResult(auditData.results)
+                    const legacy = getLegacyData(auditData.results)
+                    setReportResult(legacy)
                     const supabase = createClient()
                     const { data: clausesData } = await supabase
                         .from('template_clauses')
@@ -641,6 +1002,12 @@ function AuditReportContent() {
     const narratives = reportResult?.narratives || []
     const narrativeMap = new Map(narratives.map(n => [n.normalisedKey, n]))
 
+    // Clause-centric derived state
+    const clauseCentricData = audit?.results ? getClauseCentricData(audit.results) : null
+    const clauseAuditSummary = clauseCentricData?.auditSummary || null
+    const clauseNarratives = clauseCentricData?.clauseNarratives || []
+    const clauseNarrativeMap = new Map(clauseNarratives.map(n => [n.clauseId, n]))
+
     // Sort & filter categories (useMemo hook — must not be after conditional returns)
     const sortedFilteredCategories = useMemo(() => {
         if (!compliance) return []
@@ -660,6 +1027,60 @@ function AuditReportContent() {
         }
         return cats
     }, [compliance, categorySort, tierFilter])
+
+    // Sort & filter clauses
+    const sortedFilteredClauses = useMemo(() => {
+        if (!clauseAuditSummary) return []
+        let results = [...clauseAuditSummary.clauseResults]
+
+        // Filter by risk level
+        if (riskFilter !== 'all') {
+            results = results.filter(r => {
+                const narrative = clauseNarrativeMap.get(r.clauseId)
+                return narrative?.riskLevel === riskFilter
+            })
+        }
+
+        // Sort
+        switch (clauseSort) {
+            case 'score_asc': results.sort((a, b) => a.score - b.score); break
+            case 'score_desc': results.sort((a, b) => b.score - a.score); break
+            case 'alpha': results.sort((a, b) => a.clauseName.localeCompare(b.clauseName)); break
+            case 'clause_order': /* already in display_order from engine */ break
+            case 'risk_desc': {
+                const riskOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+                results.sort((a, b) => {
+                    const aN = clauseNarrativeMap.get(a.clauseId)
+                    const bN = clauseNarrativeMap.get(b.clauseId)
+                    const aR = riskOrder[aN?.riskLevel as keyof typeof riskOrder] ?? 4
+                    const bR = riskOrder[bN?.riskLevel as keyof typeof riskOrder] ?? 4
+                    return aR - bR
+                })
+                break
+            }
+        }
+        return results
+    }, [clauseAuditSummary, clauseSort, riskFilter, clauseNarrativeMap])
+
+    const toggleClause = (clauseId: string) => {
+        setExpandedClauses(prev => {
+            const next = new Set(prev)
+            if (next.has(clauseId)) next.delete(clauseId)
+            else next.add(clauseId)
+            return next
+        })
+    }
+
+    const toggleAllClauses = () => {
+        if (!clauseAuditSummary) return
+        const allIds = clauseAuditSummary.clauseResults.map(r => r.clauseId)
+        const allExpanded = allIds.every(id => expandedClauses.has(id))
+        if (allExpanded) {
+            setExpandedClauses(new Set())
+        } else {
+            setExpandedClauses(new Set(allIds))
+        }
+    }
 
     const toggleAllCategories = () => {
         if (!compliance) return
@@ -701,11 +1122,14 @@ function AuditReportContent() {
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h1 className="text-lg font-bold text-slate-800">{audit.audit_name}</h1>
-                                    {audit.status === 'complete' && compliance && (
-                                        <span className={`text-lg font-bold font-mono ${compliance.overallScore >= 80 ? 'text-emerald-600' : compliance.overallScore >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                                            {compliance.overallScore}%
-                                        </span>
-                                    )}
+                                    {audit.status === 'complete' && (compliance || clauseAuditSummary) && (() => {
+                                        const score = clauseAuditSummary?.overallScore ?? compliance?.overallScore ?? 0
+                                        return (
+                                            <span className={`text-lg font-bold font-mono ${score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                {score}%
+                                            </span>
+                                        )
+                                    })()}
                                 </div>
                                 <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
                                     <span>{audit.playbook_name}</span>
@@ -713,12 +1137,19 @@ function AuditReportContent() {
                                     <span>{audit.template_name}</span>
                                     <span className="text-slate-300">·</span>
                                     <span>{audit.focus_categories?.length || 0} focus categories</span>
-                                    {reportResult && (
+                                    {clauseAuditSummary ? (
+                                        <>
+                                            <span className="text-slate-300">·</span>
+                                            <span>{clauseAuditSummary.clausesAssessed} clauses assessed</span>
+                                            <span className="text-slate-300">·</span>
+                                            <span>{clauseAuditSummary.totalRules} rules</span>
+                                        </>
+                                    ) : reportResult ? (
                                         <>
                                             <span className="text-slate-300">·</span>
                                             <span>{reportResult.totalRulesInScope} rules</span>
                                         </>
-                                    )}
+                                    ) : null}
                                 </div>
                             </div>
                         </div>
@@ -789,6 +1220,7 @@ function AuditReportContent() {
                         <div className="flex items-center gap-1 mt-3 -mb-px">
                             {([
                                 { key: 'summary' as ReportTab, label: 'Summary', count: null },
+                                ...(clauseAuditSummary ? [{ key: 'clauses' as ReportTab, label: 'Clauses', count: clauseAuditSummary.clausesAssessed }] : []),
                                 { key: 'categories' as ReportTab, label: 'Categories', count: compliance.categories.length },
                                 { key: 'redlines' as ReportTab, label: 'Red Lines', count: redLineCount },
                                 { key: 'flexibility' as ReportTab, label: 'Flexibility', count: flexCount },
@@ -894,13 +1326,17 @@ function AuditReportContent() {
                                     </div>
                                 </div>
 
-                                {/* Executive Summary (AI-generated) */}
-                                {reportResult?.executiveSummary && (
-                                    <ExecutiveSummaryBanner summary={reportResult.executiveSummary} />
+                                {/* Executive Summary — prefer clause-centric if available */}
+                                {(clauseCentricData?.executiveSummary || reportResult?.executiveSummary) && (
+                                    <ExecutiveSummaryBanner summary={clauseCentricData?.executiveSummary || reportResult!.executiveSummary} />
                                 )}
 
-                                {/* Snapshot Panel — radar + three-tier counts */}
-                                <SnapshotPanel compliance={compliance} />
+                                {/* Clause-level snapshot if available, otherwise legacy radar */}
+                                {clauseAuditSummary ? (
+                                    <ClauseSnapshotPanel summary={clauseAuditSummary} />
+                                ) : (
+                                    <SnapshotPanel compliance={compliance} />
+                                )}
 
                                 {/* Unmatched categories — shown on summary */}
                                 {compliance.unmatchedCategories.length > 0 && (
@@ -914,6 +1350,140 @@ function AuditReportContent() {
                                                 {compliance.unmatchedCategories.map(cat => (
                                                     <span key={cat} className="px-2.5 py-1 text-xs font-medium bg-amber-50 text-amber-700 rounded-full border border-amber-200">
                                                         {getCategoryDisplayName(cat)}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* ==================== CLAUSES TAB ==================== */}
+                        {activeTab === 'clauses' && clauseAuditSummary && (
+                            <>
+                                {/* Clause snapshot stats */}
+                                <ClauseSnapshotPanel summary={clauseAuditSummary} />
+
+                                {/* Executive Summary from clause-centric engine */}
+                                {clauseCentricData?.executiveSummary && (
+                                    <ExecutiveSummaryBanner summary={clauseCentricData.executiveSummary} />
+                                )}
+
+                                {/* Sort/filter toolbar */}
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        {/* Risk filter pills */}
+                                        {([
+                                            { key: 'all' as RiskFilter, label: 'All', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+                                            { key: 'critical' as RiskFilter, label: 'Critical', color: 'bg-red-100 text-red-700 border-red-300' },
+                                            { key: 'high' as RiskFilter, label: 'High', color: 'bg-red-50 text-red-600 border-red-200' },
+                                            { key: 'medium' as RiskFilter, label: 'Medium', color: 'bg-amber-50 text-amber-600 border-amber-200' },
+                                            { key: 'low' as RiskFilter, label: 'Low', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+                                        ]).map(f => (
+                                            <button
+                                                key={f.key}
+                                                onClick={() => setRiskFilter(f.key)}
+                                                className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border transition-all ${
+                                                    riskFilter === f.key
+                                                        ? f.color + ' ring-1 ring-offset-1 ring-current'
+                                                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                {f.label}
+                                                {f.key !== 'all' && (
+                                                    <span className="ml-1 opacity-60">
+                                                        {clauseNarratives.filter(n => n.riskLevel === f.key).length}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={clauseSort}
+                                            onChange={e => setClauseSort(e.target.value as ClauseSort)}
+                                            className="text-[10px] text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                        >
+                                            <option value="score_asc">Worst first</option>
+                                            <option value="score_desc">Best first</option>
+                                            <option value="risk_desc">Highest risk first</option>
+                                            <option value="alpha">Alphabetical</option>
+                                            <option value="clause_order">Clause order</option>
+                                        </select>
+                                        <button
+                                            onClick={toggleAllClauses}
+                                            className="text-[10px] text-indigo-600 font-medium hover:text-indigo-800 transition-colors px-2 py-1"
+                                        >
+                                            {clauseAuditSummary.clauseResults.every(r => expandedClauses.has(r.clauseId))
+                                                ? 'Collapse all'
+                                                : 'Expand all'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Filter count */}
+                                {riskFilter !== 'all' && (
+                                    <div className="text-[10px] text-slate-400 mb-3">
+                                        Showing {sortedFilteredClauses.length} of {clauseAuditSummary.clausesAssessed} clauses
+                                    </div>
+                                )}
+
+                                {/* Clause-by-clause cards */}
+                                <div className="space-y-2">
+                                    {sortedFilteredClauses.map(result => (
+                                        <ClauseAuditCard
+                                            key={result.clauseId}
+                                            result={result}
+                                            narrative={clauseNarrativeMap.get(result.clauseId)}
+                                            isExpanded={expandedClauses.has(result.clauseId)}
+                                            onToggle={() => toggleClause(result.clauseId)}
+                                        />
+                                    ))}
+                                </div>
+
+                                {sortedFilteredClauses.length === 0 && (
+                                    <div className="text-center py-10 text-sm text-slate-400">
+                                        No clauses match the current filter.
+                                    </div>
+                                )}
+
+                                {/* Unmatched rules — rules with no corresponding clause */}
+                                {clauseAuditSummary.unmatchedRules.length > 0 && (
+                                    <div className="mt-6">
+                                        <h3 className="text-sm font-semibold text-slate-800 mb-3">Unmatched Playbook Rules</h3>
+                                        <div className="bg-white rounded-lg border border-amber-200 p-4">
+                                            <p className="text-xs text-slate-500 mb-3">
+                                                These playbook rules have no matching clause in the template — potential coverage gaps.
+                                            </p>
+                                            <div className="space-y-1.5">
+                                                {clauseAuditSummary.unmatchedRules.map(rule => (
+                                                    <div key={rule.rule_id} className="flex items-center gap-2 text-xs">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                                                        <span className="text-slate-700 font-medium">{rule.clause_name}</span>
+                                                        <span className="text-slate-400">({getCategoryDisplayName(normaliseCategory(rule.category))})</span>
+                                                        {rule.is_deal_breaker && (
+                                                            <span className="px-1.5 py-0.5 text-[8px] font-bold bg-red-100 text-red-700 rounded">Deal Breaker</span>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Unmatched clauses — clauses with no corresponding rule */}
+                                {clauseAuditSummary.unmatchedClauses.length > 0 && (
+                                    <div className="mt-4">
+                                        <h3 className="text-sm font-semibold text-slate-800 mb-3">Unmatched Template Clauses</h3>
+                                        <div className="bg-white rounded-lg border border-slate-200 p-4">
+                                            <p className="text-xs text-slate-500 mb-3">
+                                                These template clauses have no corresponding playbook rule — not assessed.
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {clauseAuditSummary.unmatchedClauses.map(clause => (
+                                                    <span key={clause.clause_id} className="px-2.5 py-1 text-xs font-medium bg-slate-50 text-slate-600 rounded-full border border-slate-200">
+                                                        {clause.clause_name}
                                                     </span>
                                                 ))}
                                             </div>
