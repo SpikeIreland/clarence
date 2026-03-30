@@ -864,13 +864,13 @@ export async function GET(
 
         // Get playbook and template names
         const [{ data: playbook }, { data: template }] = await Promise.all([
-            supabase.from('playbooks').select('playbook_name, perspective').eq('playbook_id', audit.playbook_id).single(),
+            supabase.from('company_playbooks').select('playbook_name, playbook_perspective').eq('playbook_id', audit.playbook_id).single(),
             supabase.from('contract_templates').select('template_name').eq('template_id', audit.template_id).single(),
         ])
 
         const playbookName = playbook?.playbook_name || 'Unknown Playbook'
         const templateName = template?.template_name || 'Unknown Template'
-        const perspective = playbook?.perspective || 'customer'
+        const perspective = playbook?.playbook_perspective || 'customer'
         const report = audit.results as AlignmentReportResult
 
         // Safe filename
@@ -897,7 +897,9 @@ export async function GET(
             })
         }
     } catch (err) {
-        console.error('Export error:', err)
-        return NextResponse.json({ error: 'Export failed' }, { status: 500 })
+        const message = err instanceof Error ? err.message : String(err)
+        const stack = err instanceof Error ? err.stack : undefined
+        console.error('Export error:', message, stack)
+        return NextResponse.json({ error: 'Export failed', detail: message }, { status: 500 })
     }
 }
