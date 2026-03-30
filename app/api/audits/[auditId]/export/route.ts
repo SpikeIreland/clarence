@@ -933,20 +933,21 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.x = 72
         doc.y = boxY + boxH + 20
 
-        // ── Helper: draw alignment position bar for a rule ──
+        // ── Helper: draw alignment position bar ──
+        // Supports ideal, minimum, maximum, fallback, and template positions
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        function drawPositionBar(d: any, rule: { ideal_position: number; minimum_position: number; maximum_position: number }, templatePos: number | null, x: number, y: number, w: number) {
-            const barH = 8
+        function drawPositionBar(d: any, rule: { ideal_position: number; minimum_position: number; maximum_position: number; fallback_position?: number }, templatePos: number | null, x: number, y: number, w: number) {
+            const barH = 10
             const toX = (val: number) => x + ((val - 1) / 9) * w
 
             // Track background (full 1-10 range)
-            d.roundedRect(x, y, w, barH, 3).fill('#F1F5F9')
+            d.roundedRect(x, y, w, barH, 4).fill('#F1F5F9')
 
-            // Acceptable range band
+            // Acceptable range band (min to max)
             const rangeLeft = toX(rule.minimum_position)
             const rangeRight = toX(rule.maximum_position)
-            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 2).fill('#EEF2FF')
-            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 3).fill('#EEF2FF')
+            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 3).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
 
             // Gap bar between ideal and template
             if (templatePos != null) {
@@ -969,7 +970,17 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 }
             }
 
-            // Ideal position marker (vertical line)
+            // Fallback position marker (dashed vertical line, grey)
+            if (rule.fallback_position && rule.fallback_position !== rule.ideal_position) {
+                const fbX = toX(rule.fallback_position)
+                d.save()
+                d.moveTo(fbX, y - 2).lineTo(fbX, y + barH + 2)
+                    .strokeColor('#94A3B8').lineWidth(1).dash(2, { space: 2 }).stroke()
+                d.undash()
+                d.restore()
+            }
+
+            // Ideal position marker (solid purple vertical line)
             const idealXPos = toX(rule.ideal_position)
             d.moveTo(idealXPos, y - 2).lineTo(idealXPos, y + barH + 2)
                 .strokeColor('#7C3AED').lineWidth(1.5).stroke()
@@ -978,7 +989,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             if (templatePos != null) {
                 const tX = toX(templatePos)
                 const tY = y + barH / 2
-                const dSize = 4
+                const dSize = 5
                 const diamondColor = templatePos >= rule.minimum_position ? '#059669' : '#DC2626'
                 d.save()
                 d.moveTo(tX, tY - dSize).lineTo(tX + dSize, tY).lineTo(tX, tY + dSize).lineTo(tX - dSize, tY).closePath()
@@ -986,14 +997,16 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 d.restore()
             }
 
-            // Scale labels (1 and 10) — use lineBreak:false to prevent
-            // pdfkit from updating the internal text-flow cursor position
+            // Scale labels
             d.font('Helvetica').fontSize(6).fillColor('#94A3B8')
             d.text('1', x - 2, y + barH + 2, { width: 10, lineBreak: false })
             d.text('10', x + w - 6, y + barH + 2, { width: 14, lineBreak: false })
-            // Reset text cursor to left margin so subsequent text() calls
-            // don't inherit the bar's rightward x-position and narrow width
             d.x = 72
+        }
+
+        // ── Helper: ensure enough space or add page ──
+        function ensureSpace(minY: number) {
+            if (doc.y > minY) { doc.addPage(); doc.x = 72 }
         }
 
         // ── Clause-by-Clause Analysis (when available) or Category Analysis ──
@@ -1001,8 +1014,41 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
 
         if (pdfCcSummary && pdfCcSummary.clauseResults.length > 0) {
             doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
-                .text('Clause-by-Clause Analysis')
-            doc.moveDown(0.5)
+                .text('Clause-by-Clause Analysis', 72, doc.y, { width: pageW })
+            doc.moveDown(0.3)
+
+            // Position bar legend
+            const legendY = doc.y
+            doc.font('Helvetica').fontSize(7).fillColor('#64748B')
+                .text('Position Bar Key:', 72, legendY, { width: pageW })
+            const legY = legendY + 10
+            // Range band
+            doc.roundedRect(72, legY, 20, 6, 2).fill('#EEF2FF')
+            doc.roundedRect(72, legY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+            doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+                .text('Min-Max range', 96, legY - 1, { lineBreak: false })
+            // Ideal marker
+            doc.moveTo(180, legY - 1).lineTo(180, legY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
+            doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+                .text('Ideal', 186, legY - 1, { lineBreak: false })
+            // Fallback marker
+            doc.save()
+            doc.moveTo(220, legY - 1).lineTo(220, legY + 7).strokeColor('#94A3B8').lineWidth(1).dash(2, { space: 2 }).stroke()
+            doc.undash()
+            doc.restore()
+            doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+                .text('Fallback', 226, legY - 1, { lineBreak: false })
+            // Template diamond
+            doc.save()
+            doc.moveTo(270, legY - 1).lineTo(274, legY + 3).lineTo(270, legY + 7).lineTo(266, legY + 3).closePath()
+            doc.fill('#059669')
+            doc.restore()
+            doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
+                .text('Clause position', 278, legY - 1, { lineBreak: false })
+            doc.x = 72
+            doc.y = legY + 14
+            doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
+            doc.moveDown(0.6)
 
             const sortedPdfClauses = [...pdfCcSummary.clauseResults].sort((a, b) => a.score - b.score)
 
@@ -1011,88 +1057,231 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 const clr = result.score >= 80 ? '#059669' : result.score >= 60 ? '#D97706' : '#DC2626'
                 const bgClr = result.score >= 80 ? '#ECFDF5' : result.score >= 60 ? '#FFFBEB' : '#FEF2F2'
 
-                if (doc.y > 520) { doc.addPage(); doc.x = 72 }
-
-                // Clause header with score badge
+                // Each clause starts on a fresh page to give it room
+                doc.addPage()
                 doc.x = 72
-                const cardY = doc.y
-                doc.font('Helvetica-Bold').fontSize(12).fillColor('#1E293B')
-                    .text(`${result.clauseNumber ? result.clauseNumber + '  ' : ''}${result.clauseName}`, 72, cardY, { width: pageW - 100 })
 
-                // Score badge
+                // ── 1. CLAUSE HEADER with score badge ──
+                const cardY = doc.y
+                doc.font('Helvetica-Bold').fontSize(13).fillColor('#1E293B')
+                    .text(`${result.clauseNumber ? result.clauseNumber + '  ' : ''}${result.clauseName}`, 72, cardY, { width: pageW - 110 })
+
                 const badgeText = `${result.score}% ${tierFromScore(result.score)}`
                 doc.font('Helvetica-Bold').fontSize(9)
                 const badgeW = doc.widthOfString(badgeText) + 16
                 const badgeX = 72 + pageW - badgeW
-                doc.roundedRect(badgeX, cardY + 1, badgeW, 14, 7).fill(bgClr)
+                doc.roundedRect(badgeX, cardY + 1, badgeW, 16, 8).fill(bgClr)
                 doc.font('Helvetica-Bold').fontSize(9).fillColor(clr)
-                    .text(badgeText, badgeX + 8, cardY + 2, { width: badgeW - 16, lineBreak: false })
-
-                // CRITICAL: Reset cursor to left margin after badge drawing
+                    .text(badgeText, badgeX + 8, cardY + 3, { width: badgeW - 16, lineBreak: false })
                 doc.x = 72
-                doc.y = cardY + 18
+                doc.y = cardY + 20
+
+                // Category and match info
                 doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
-                    .text(`Matched to: ${result.ruleClauseName}  (${result.matchMethod}, ${result.matchConfidence}% confidence)`, 72, doc.y, { width: pageW })
+                    .text(`Category: ${result.clauseCategory}  |  Matched rule: ${result.ruleClauseName}  (${result.matchMethod}, ${result.matchConfidence}% confidence)`, 72, doc.y, { width: pageW })
 
                 // Flags
                 if (result.ruleIsDealBreaker || result.ruleIsNonNegotiable) {
                     doc.x = 72
-                    doc.font('Helvetica-Bold').fontSize(7).fillColor('#DC2626')
-                    if (result.ruleIsDealBreaker) doc.text('[!] DEAL BREAKER', 72, doc.y, { width: pageW, continued: result.ruleIsNonNegotiable })
-                    if (result.ruleIsNonNegotiable) doc.text(`${result.ruleIsDealBreaker ? '  |  ' : ''}NON-NEGOTIABLE`)
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#DC2626')
+                    const flags = [
+                        ...(result.ruleIsDealBreaker ? ['[!] DEAL BREAKER'] : []),
+                        ...(result.ruleIsNonNegotiable ? ['NON-NEGOTIABLE'] : []),
+                    ].join('  |  ')
+                    doc.text(flags, 72, doc.y, { width: pageW })
                     doc.x = 72
                 }
+                doc.moveDown(0.5)
 
-                doc.moveDown(0.3)
-
-                // Position comparison line
-                doc.x = 72
-                doc.font('Helvetica').fontSize(9).fillColor('#475569')
-                    .text(`Template: ${result.clausePositionLabel || (result.clausePosition != null ? result.clausePosition + '/100' : 'Not assessed')}  |  Ideal: ${result.idealPositionLabel || result.ruleIdealPosition + '/100'}  |  Minimum: ${result.minimumPositionLabel || result.ruleMinimumPosition + '/100'}`, 72, doc.y, { width: pageW })
-                doc.moveDown(0.3)
-
-                // AI narrative
-                if (ccNarrative) {
+                // ── 2. CLAUSE TEXT (the actual template clause) ──
+                if (result.clauseText) {
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#4338CA')
+                        .text('Template Clause Text', 72, doc.y, { width: pageW })
+                    doc.moveDown(0.2)
+                    // Light background box for clause text
+                    const clauseTextY = doc.y
+                    const clauseTextStr = result.clauseText.length > 800
+                        ? result.clauseText.slice(0, 800) + '...'
+                        : result.clauseText
+                    // Measure height first
+                    const clauseTextH = doc.heightOfString(clauseTextStr, { width: pageW - 20, fontSize: 8.5 })
+                    doc.roundedRect(72, clauseTextY - 2, pageW, clauseTextH + 12, 3).fill('#F8FAFC')
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#334155')
+                        .text(clauseTextStr, 82, clauseTextY + 4, { width: pageW - 20, lineGap: 1.5 })
                     doc.x = 72
+                    doc.y = clauseTextY + clauseTextH + 16
+                } else {
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#4338CA')
+                        .text('Template Clause Text', 72, doc.y, { width: pageW })
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#94A3B8')
+                        .text('No clause text available for this assessment.', 72, doc.y, { width: pageW })
+                    doc.moveDown(0.3)
+                }
+                doc.moveDown(0.3)
+
+                // ── 3. PLAYBOOK RULE (rationale and source quote) ──
+                doc.font('Helvetica-Bold').fontSize(9).fillColor('#4338CA')
+                    .text('Playbook Rule', 72, doc.y, { width: pageW })
+                doc.moveDown(0.2)
+
+                if (result.ruleRationale) {
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569')
+                        .text('Rationale', 72, doc.y, { width: pageW })
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B')
+                        .text(result.ruleRationale, 72, doc.y, { width: pageW, lineGap: 1 })
+                    doc.moveDown(0.2)
+                }
+                if (result.ruleSourceQuote) {
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569')
+                        .text('Source Quote', 72, doc.y, { width: pageW })
+                    doc.font('Helvetica-Oblique').fontSize(8).fillColor('#64748B')
+                        .text(`"${result.ruleSourceQuote}"`, 72, doc.y, { width: pageW, lineGap: 1 })
+                    doc.moveDown(0.2)
+                }
+                if (!result.ruleRationale && !result.ruleSourceQuote) {
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#94A3B8')
+                        .text('No rationale or source quote recorded for this rule.', 72, doc.y, { width: pageW })
+                }
+                doc.moveDown(0.4)
+
+                // ── 4. POSITION BAR VISUALISATION ──
+                ensureSpace(580)
+                doc.font('Helvetica-Bold').fontSize(9).fillColor('#4338CA')
+                    .text('Position Analysis', 72, doc.y, { width: pageW })
+                doc.moveDown(0.3)
+
+                // Position values table
+                const posLabels = [
+                    { label: 'Clause Position', value: result.clausePositionLabel || (result.clausePosition != null ? `${result.clausePosition}/10` : 'Not assessed'), color: result.clausePosition != null ? clr : '#94A3B8' },
+                    { label: 'Ideal', value: result.idealPositionLabel || `${result.ruleIdealPosition}/10`, color: '#7C3AED' },
+                    { label: 'Minimum', value: result.minimumPositionLabel || `${result.ruleMinimumPosition}/10`, color: '#475569' },
+                    { label: 'Maximum', value: `${result.ruleMaximumPosition}/10`, color: '#475569' },
+                    { label: 'Fallback', value: `${result.ruleFallbackPosition}/10`, color: '#94A3B8' },
+                ]
+                const posTableY = doc.y
+                const posColW = pageW / posLabels.length
+                for (let i = 0; i < posLabels.length; i++) {
+                    const px = 72 + i * posColW
+                    doc.font('Helvetica').fontSize(7).fillColor('#94A3B8')
+                        .text(posLabels[i].label, px, posTableY, { width: posColW, align: 'center', lineBreak: false })
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor(posLabels[i].color)
+                        .text(posLabels[i].value, px, posTableY + 10, { width: posColW, align: 'center', lineBreak: false })
+                }
+                doc.x = 72
+                doc.y = posTableY + 26
+
+                // Draw the position bar
+                const barX = 72
+                const barW = pageW
+                const barY = doc.y
+                drawPositionBar(doc, {
+                    ideal_position: result.ruleIdealPosition,
+                    minimum_position: result.ruleMinimumPosition,
+                    maximum_position: result.ruleMaximumPosition,
+                    fallback_position: result.ruleFallbackPosition,
+                }, result.clausePosition, barX, barY, barW)
+
+                doc.x = 72
+                doc.y = barY + 24
+
+                // Status label
+                const statusLabel = result.status === 'pass' ? 'ALIGNED' :
+                    result.status === 'fail' || result.status === 'breach' ? 'MISALIGNED' :
+                    result.status === 'warning' || result.status === 'acceptable' ? 'PARTIAL' : 'NO DATA'
+                const statusClr = result.status === 'pass' ? '#059669' :
+                    result.status === 'fail' || result.status === 'breach' ? '#DC2626' :
+                    result.status === 'warning' || result.status === 'acceptable' ? '#D97706' : '#94A3B8'
+                doc.font('Helvetica-Bold').fontSize(8).fillColor(statusClr)
+                    .text(`Status: ${statusLabel}  |  Score: ${result.score}/100  |  Importance: ${result.ruleImportanceLevel}/10`, 72, doc.y, { width: pageW })
+                doc.moveDown(0.5)
+
+                // ── 5. CLARENCE PRE-ASSESSMENT (if available) ──
+                if (result.clarenceAssessment || result.clarenceSummary || result.clarenceFairness) {
+                    ensureSpace(600)
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#4338CA')
+                        .text('Clarence Pre-Assessment', 72, doc.y, { width: pageW })
+                    doc.moveDown(0.2)
+                    if (result.clarenceSummary) {
+                        doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Summary', 72, doc.y, { width: pageW })
+                        doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B').text(result.clarenceSummary, 72, doc.y, { width: pageW, lineGap: 1 })
+                        doc.moveDown(0.2)
+                    }
+                    if (result.clarenceAssessment) {
+                        doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Assessment', 72, doc.y, { width: pageW })
+                        doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B').text(result.clarenceAssessment, 72, doc.y, { width: pageW, lineGap: 1 })
+                        doc.moveDown(0.2)
+                    }
+                    if (result.clarenceFairness) {
+                        doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Fairness', 72, doc.y, { width: pageW })
+                        doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B').text(result.clarenceFairness, 72, doc.y, { width: pageW, lineGap: 1 })
+                        doc.moveDown(0.2)
+                    }
+                    doc.moveDown(0.3)
+                }
+
+                // ── 6. AI NARRATIVE (Assessment, Gap Analysis, Recommendation) ──
+                if (ccNarrative) {
+                    ensureSpace(600)
                     const riskClr = ccNarrative.riskLevel === 'critical' || ccNarrative.riskLevel === 'high' ? '#DC2626' : ccNarrative.riskLevel === 'medium' ? '#D97706' : '#059669'
+
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#4338CA')
+                        .text('AI Analysis', 72, doc.y, { width: pageW })
+                    doc.x = 72
                     doc.font('Helvetica-Bold').fontSize(7).fillColor(riskClr)
-                        .text(`${ccNarrative.riskLevel.toUpperCase()} RISK`, 72, doc.y, { width: pageW })
+                        .text(`Risk Level: ${ccNarrative.riskLevel.toUpperCase()}`, 72, doc.y, { width: pageW })
                     doc.moveDown(0.2)
 
                     doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Assessment', 72, doc.y, { width: pageW })
-                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.alignmentAssessment, 72, doc.y, { width: pageW, lineGap: 1 })
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B').text(ccNarrative.alignmentAssessment, 72, doc.y, { width: pageW, lineGap: 1 })
                     doc.moveDown(0.2)
 
                     doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Gap Analysis', 72, doc.y, { width: pageW })
-                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.gapAnalysis, 72, doc.y, { width: pageW, lineGap: 1 })
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B').text(ccNarrative.gapAnalysis, 72, doc.y, { width: pageW, lineGap: 1 })
                     doc.moveDown(0.2)
 
                     doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Recommendation', 72, doc.y, { width: pageW })
-                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.recommendation, 72, doc.y, { width: pageW, lineGap: 1 })
+                    doc.font('Helvetica').fontSize(8.5).fillColor('#1E293B').text(ccNarrative.recommendation, 72, doc.y, { width: pageW, lineGap: 1 })
                     doc.x = 72
                 }
 
-                // Separator
-                doc.x = 72
-                doc.moveDown(0.6)
-                doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#CBD5E1').lineWidth(0.75).stroke()
-                doc.moveDown(0.6)
+                // No separator needed — each clause gets its own page
                 doc.x = 72
             }
 
-            // Unmatched rules
+            // ── Unmatched Rules ──
             if (pdfCcSummary.unmatchedRules.length > 0) {
-                if (doc.y > 560) doc.addPage()
+                doc.addPage()
                 doc.x = 72
-                doc.font('Helvetica-Bold').fontSize(13).fillColor('#D97706')
+                doc.font('Helvetica-Bold').fontSize(14).fillColor('#D97706')
                     .text('Unmatched Playbook Rules', 72, doc.y, { width: pageW })
                 doc.moveDown(0.3)
                 doc.font('Helvetica').fontSize(9).fillColor('#475569')
-                    .text('These playbook rules have no matching clause in the template:', 72, doc.y, { width: pageW })
-                doc.moveDown(0.3)
+                    .text('The following playbook rules have no matching clause in the template. These represent potential coverage gaps that should be reviewed.', 72, doc.y, { width: pageW, lineGap: 1 })
+                doc.moveDown(0.5)
                 for (const rule of pdfCcSummary.unmatchedRules) {
+                    if (doc.y > 680) { doc.addPage(); doc.x = 72 }
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#1E293B')
+                        .text(`\u2022  ${rule.clause_name}`, 72, doc.y, { width: pageW, indent: 12 })
+                    doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
+                        .text(`Category: ${getCategoryDisplayName(rule.category)}${rule.is_deal_breaker ? '  |  DEAL BREAKER' : ''}${rule.is_non_negotiable ? '  |  Non-Negotiable' : ''}  |  Importance: ${rule.importance_level}/10`, 84, doc.y, { width: pageW - 12 })
+                    doc.moveDown(0.3)
+                }
+            }
+
+            // ── Unmatched Clauses ──
+            if (pdfCcSummary.unmatchedClauses && pdfCcSummary.unmatchedClauses.length > 0) {
+                if (doc.y > 560) { doc.addPage(); doc.x = 72 }
+                doc.moveDown(0.5)
+                doc.font('Helvetica-Bold').fontSize(14).fillColor('#94A3B8')
+                    .text('Unmatched Template Clauses', 72, doc.y, { width: pageW })
+                doc.moveDown(0.3)
+                doc.font('Helvetica').fontSize(9).fillColor('#475569')
+                    .text('These template clauses had no matching playbook rule and were not scored.', 72, doc.y, { width: pageW })
+                doc.moveDown(0.3)
+                for (const clause of pdfCcSummary.unmatchedClauses) {
+                    if (doc.y > 680) { doc.addPage(); doc.x = 72 }
                     doc.font('Helvetica').fontSize(9).fillColor('#1E293B')
-                        .text(`\u2022  ${rule.clause_name} (${getCategoryDisplayName(rule.category)})${rule.is_deal_breaker ? ' — DEAL BREAKER' : ''}`, 72, doc.y, { width: pageW, indent: 12 })
+                        .text(`\u2022  ${clause.clause_name}`, 72, doc.y, { width: pageW, indent: 12 })
                 }
             }
         } else {
