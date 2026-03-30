@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 const N8N_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
@@ -15,7 +18,7 @@ export async function GET(
     }
 
     try {
-        const supabase = createClient()
+        const supabase = createClient(supabaseUrl, supabaseKey)
 
         // Fetch detected schedules
         const { data: schedules, error: schedError } = await supabase
