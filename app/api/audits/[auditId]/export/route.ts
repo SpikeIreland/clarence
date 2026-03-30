@@ -930,6 +930,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.font('Helvetica').fontSize(8).fillColor('#DC2626')
             .text('Material Gap (<60%)', box3X, boxY + 36, { width: boxW, align: 'center' })
 
+        doc.x = 72
         doc.y = boxY + boxH + 20
 
         // ── Helper: draw alignment position bar for a rule ──
@@ -1010,9 +1011,10 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 const clr = result.score >= 80 ? '#059669' : result.score >= 60 ? '#D97706' : '#DC2626'
                 const bgClr = result.score >= 80 ? '#ECFDF5' : result.score >= 60 ? '#FFFBEB' : '#FEF2F2'
 
-                if (doc.y > 520) doc.addPage()
+                if (doc.y > 520) { doc.addPage(); doc.x = 72 }
 
                 // Clause header with score badge
+                doc.x = 72
                 const cardY = doc.y
                 doc.font('Helvetica-Bold').fontSize(12).fillColor('#1E293B')
                     .text(`${result.clauseNumber ? result.clauseNumber + '  ' : ''}${result.clauseName}`, 72, cardY, { width: pageW - 100 })
@@ -1024,63 +1026,73 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 const badgeX = 72 + pageW - badgeW
                 doc.roundedRect(badgeX, cardY + 1, badgeW, 14, 7).fill(bgClr)
                 doc.font('Helvetica-Bold').fontSize(9).fillColor(clr)
-                    .text(badgeText, badgeX + 8, cardY + 2, { width: badgeW - 16 })
+                    .text(badgeText, badgeX + 8, cardY + 2, { width: badgeW - 16, lineBreak: false })
 
+                // CRITICAL: Reset cursor to left margin after badge drawing
+                doc.x = 72
                 doc.y = cardY + 18
                 doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
-                    .text(`Matched to: ${result.ruleClauseName}  (${result.matchMethod}, ${result.matchConfidence}% confidence)`)
+                    .text(`Matched to: ${result.ruleClauseName}  (${result.matchMethod}, ${result.matchConfidence}% confidence)`, 72, doc.y, { width: pageW })
 
                 // Flags
                 if (result.ruleIsDealBreaker || result.ruleIsNonNegotiable) {
+                    doc.x = 72
                     doc.font('Helvetica-Bold').fontSize(7).fillColor('#DC2626')
-                    if (result.ruleIsDealBreaker) doc.text('\u26A0 DEAL BREAKER', { continued: result.ruleIsNonNegotiable })
+                    if (result.ruleIsDealBreaker) doc.text('\u26A0 DEAL BREAKER', 72, doc.y, { width: pageW, continued: result.ruleIsNonNegotiable })
                     if (result.ruleIsNonNegotiable) doc.text(`${result.ruleIsDealBreaker ? '  |  ' : ''}NON-NEGOTIABLE`)
+                    doc.x = 72
                 }
 
                 doc.moveDown(0.3)
 
                 // Position comparison line
+                doc.x = 72
                 doc.font('Helvetica').fontSize(9).fillColor('#475569')
-                    .text(`Template: ${result.clausePositionLabel || (result.clausePosition != null ? result.clausePosition + '/100' : 'Not assessed')}  |  Ideal: ${result.idealPositionLabel || result.ruleIdealPosition + '/100'}  |  Minimum: ${result.minimumPositionLabel || result.ruleMinimumPosition + '/100'}`)
+                    .text(`Template: ${result.clausePositionLabel || (result.clausePosition != null ? result.clausePosition + '/100' : 'Not assessed')}  |  Ideal: ${result.idealPositionLabel || result.ruleIdealPosition + '/100'}  |  Minimum: ${result.minimumPositionLabel || result.ruleMinimumPosition + '/100'}`, 72, doc.y, { width: pageW })
                 doc.moveDown(0.3)
 
                 // AI narrative
                 if (ccNarrative) {
+                    doc.x = 72
                     const riskClr = ccNarrative.riskLevel === 'critical' || ccNarrative.riskLevel === 'high' ? '#DC2626' : ccNarrative.riskLevel === 'medium' ? '#D97706' : '#059669'
                     doc.font('Helvetica-Bold').fontSize(7).fillColor(riskClr)
-                        .text(`${ccNarrative.riskLevel.toUpperCase()} RISK`)
+                        .text(`${ccNarrative.riskLevel.toUpperCase()} RISK`, 72, doc.y, { width: pageW })
                     doc.moveDown(0.2)
 
-                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Assessment')
-                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.alignmentAssessment, { lineGap: 1 })
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Assessment', 72, doc.y, { width: pageW })
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.alignmentAssessment, 72, doc.y, { width: pageW, lineGap: 1 })
                     doc.moveDown(0.2)
 
-                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Gap Analysis')
-                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.gapAnalysis, { lineGap: 1 })
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Gap Analysis', 72, doc.y, { width: pageW })
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.gapAnalysis, 72, doc.y, { width: pageW, lineGap: 1 })
                     doc.moveDown(0.2)
 
-                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Recommendation')
-                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.recommendation, { lineGap: 1 })
+                    doc.font('Helvetica-Bold').fontSize(8).fillColor('#475569').text('Recommendation', 72, doc.y, { width: pageW })
+                    doc.font('Helvetica').fontSize(9).fillColor('#1E293B').text(ccNarrative.recommendation, 72, doc.y, { width: pageW, lineGap: 1 })
+                    doc.x = 72
                 }
 
                 // Separator
+                doc.x = 72
                 doc.moveDown(0.6)
                 doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#CBD5E1').lineWidth(0.75).stroke()
                 doc.moveDown(0.6)
+                doc.x = 72
             }
 
             // Unmatched rules
             if (pdfCcSummary.unmatchedRules.length > 0) {
                 if (doc.y > 560) doc.addPage()
+                doc.x = 72
                 doc.font('Helvetica-Bold').fontSize(13).fillColor('#D97706')
-                    .text('Unmatched Playbook Rules')
+                    .text('Unmatched Playbook Rules', 72, doc.y, { width: pageW })
                 doc.moveDown(0.3)
                 doc.font('Helvetica').fontSize(9).fillColor('#475569')
-                    .text('These playbook rules have no matching clause in the template:')
+                    .text('These playbook rules have no matching clause in the template:', 72, doc.y, { width: pageW })
                 doc.moveDown(0.3)
                 for (const rule of pdfCcSummary.unmatchedRules) {
                     doc.font('Helvetica').fontSize(9).fillColor('#1E293B')
-                        .text(`\u2022  ${rule.clause_name} (${getCategoryDisplayName(rule.category)})${rule.is_deal_breaker ? ' — DEAL BREAKER' : ''}`, { indent: 12 })
+                        .text(`\u2022  ${rule.clause_name} (${getCategoryDisplayName(rule.category)})${rule.is_deal_breaker ? ' — DEAL BREAKER' : ''}`, 72, doc.y, { width: pageW, indent: 12 })
                 }
             }
         } else {
@@ -1239,11 +1251,13 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         const pages = doc.bufferedPageRange()
         for (let i = pages.start; i < pages.start + pages.count; i++) {
             doc.switchToPage(i)
+            doc.x = 72
             doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
                 .text(
                     `Page ${i + 1}  |  Clarence Legal Platform`,
                     72, 720, { width: pageW, align: 'center' },
                 )
+            doc.x = 72
         }
 
         doc.end()
@@ -1301,10 +1315,18 @@ export async function GET(
             report = rawResults.legacy as AlignmentReportResult
             if (rawResults.clauseCentric && typeof rawResults.clauseCentric === 'object') {
                 clauseCentric = rawResults.clauseCentric as ClauseCentricAlignmentResult
+                console.log(`[Export] Extracted clause-centric data: overallScore=${clauseCentric.auditSummary?.overallScore}, clausesAssessed=${clauseCentric.auditSummary?.clausesAssessed}`)
+            } else {
+                console.log(`[Export] No clauseCentric in combined results — keys: ${Object.keys(rawResults).join(', ')}`)
+            }
+            // Also grab top-level overallScore as a cross-check
+            if (typeof rawResults.overallScore === 'number') {
+                console.log(`[Export] Top-level overallScore=${rawResults.overallScore}`)
             }
         } else if (rawResults.compliance && rawResults.narratives) {
             // Old format — results IS the AlignmentReportResult
             report = rawResults as unknown as AlignmentReportResult
+            console.log(`[Export] Old format detected — no clause-centric data`)
         } else {
             return NextResponse.json({ error: 'Audit results format not recognised' }, { status: 500 })
         }
