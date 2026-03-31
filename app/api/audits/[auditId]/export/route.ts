@@ -1010,41 +1010,46 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         }
 
         // ── Clause-by-Clause Analysis (when available) or Category Analysis ──
-        doc.addPage()
 
         if (pdfCcSummary && pdfCcSummary.clauseResults.length > 0) {
-            doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
+            // Title and legend go on the Executive Summary page (after snapshot boxes)
+            doc.moveDown(1)
+            doc.font('Helvetica-Bold').fontSize(14).fillColor('#4338CA')
                 .text('Clause-by-Clause Analysis', 72, doc.y, { width: pageW })
-            doc.moveDown(0.3)
+            doc.moveDown(0.4)
 
-            // Position bar legend
+            // Position bar legend — compact single line
             const legendY = doc.y
             doc.font('Helvetica').fontSize(7).fillColor('#64748B')
-                .text('Position Bar Key:', 72, legendY, { width: pageW })
-            const legY = legendY + 10
+                .text('Position Bar Key:', 72, legendY, { lineBreak: false })
+            const legY = legendY
+            const legStartX = 148
             // Range band
-            doc.roundedRect(72, legY, 20, 6, 2).fill('#EEF2FF')
-            doc.roundedRect(72, legY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+            doc.roundedRect(legStartX, legY, 20, 6, 2).fill('#EEF2FF')
+            doc.roundedRect(legStartX, legY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
             doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Min-Max range', 96, legY - 1, { lineBreak: false })
+                .text('Min-Max range', legStartX + 24, legY - 1, { lineBreak: false })
             // Ideal marker
-            doc.moveTo(180, legY - 1).lineTo(180, legY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
+            const leg2X = legStartX + 100
+            doc.moveTo(leg2X, legY - 1).lineTo(leg2X, legY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
             doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Ideal', 186, legY - 1, { lineBreak: false })
+                .text('Ideal', leg2X + 6, legY - 1, { lineBreak: false })
             // Fallback marker
+            const leg3X = leg2X + 48
             doc.save()
-            doc.moveTo(220, legY - 1).lineTo(220, legY + 7).strokeColor('#94A3B8').lineWidth(1).dash(2, { space: 2 }).stroke()
+            doc.moveTo(leg3X, legY - 1).lineTo(leg3X, legY + 7).strokeColor('#94A3B8').lineWidth(1).dash(2, { space: 2 }).stroke()
             doc.undash()
             doc.restore()
             doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Fallback', 226, legY - 1, { lineBreak: false })
+                .text('Fallback', leg3X + 6, legY - 1, { lineBreak: false })
             // Template diamond
+            const leg4X = leg3X + 56
             doc.save()
-            doc.moveTo(270, legY - 1).lineTo(274, legY + 3).lineTo(270, legY + 7).lineTo(266, legY + 3).closePath()
+            doc.moveTo(leg4X + 3, legY - 1).lineTo(leg4X + 6, legY + 3).lineTo(leg4X + 3, legY + 7).lineTo(leg4X, legY + 3).closePath()
             doc.fill('#059669')
             doc.restore()
             doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Clause position', 278, legY - 1, { lineBreak: false })
+                .text('Clause position', leg4X + 10, legY - 1, { lineBreak: false })
             doc.x = 72
             doc.y = legY + 14
             doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
@@ -1160,34 +1165,26 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                     .text('Position Analysis', 72, doc.y, { width: pageW })
                 doc.moveDown(0.5)
 
-                // Position values — laid out as labelled rows, not cramped columns
+                // Position values — single-column layout, label on left (75%), value on right (25%)
+                const posLabelW = Math.round(pageW * 0.72)
+                const posValueW = pageW - posLabelW
                 const posItems = [
                     { label: 'Clause Position:', value: result.clausePositionLabel || (result.clausePosition != null ? `${result.clausePosition}/10` : 'Not assessed'), color: result.clausePosition != null ? clr : '#94A3B8', bold: true },
                     { label: 'Ideal Position:', value: result.idealPositionLabel || `${result.ruleIdealPosition}/10`, color: '#7C3AED', bold: false },
                     { label: 'Minimum Acceptable:', value: result.minimumPositionLabel || `${result.ruleMinimumPosition}/10`, color: '#475569', bold: false },
-                    { label: 'Maximum:', value: `${result.ruleMaximumPosition}/10`, color: '#475569', bold: false },
-                    { label: 'Fallback:', value: `${result.ruleFallbackPosition}/10`, color: '#94A3B8', bold: false },
+                    { label: 'Maximum:', value: result.maximumPositionLabel || `${result.ruleMaximumPosition}/10`, color: '#475569', bold: false },
+                    { label: 'Fallback:', value: result.fallbackPositionLabel || `${result.ruleFallbackPosition}/10`, color: '#94A3B8', bold: false },
                 ]
 
-                // Two-column layout: labels on left, values on right
-                const labelColW = 130
-                const valueColW = pageW / 2 - labelColW
-                for (let row = 0; row < posItems.length; row++) {
-                    const col = row < 3 ? 0 : 1  // first 3 items in left column, last 2 in right
-                    const rowIdx = row < 3 ? row : row - 3
-                    const baseX = col === 0 ? 72 : 72 + pageW / 2
-                    if (row === 0) {
-                        // Store the Y for column alignment
-                        (doc as any)._posTableStartY = doc.y
-                    }
-                    const rowY = (doc as any)._posTableStartY + rowIdx * 14
+                for (const item of posItems) {
+                    const rowY = doc.y
                     doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
-                        .text(posItems[row].label, baseX, rowY, { width: labelColW, lineBreak: false })
-                    doc.font(posItems[row].bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(posItems[row].color)
-                        .text(posItems[row].value, baseX + labelColW, rowY, { width: valueColW, lineBreak: false })
+                        .text(item.label, 72, rowY, { width: posLabelW, lineBreak: false })
+                    doc.font(item.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(item.color)
+                        .text(item.value, 72 + posLabelW, rowY, { width: posValueW, align: 'right', lineBreak: false })
+                    doc.x = 72
+                    doc.y = rowY + 14
                 }
-                doc.x = 72
-                doc.y = (doc as any)._posTableStartY + 3 * 14 + 8
                 doc.moveDown(0.4)
 
                 // Draw the position bar
@@ -1317,6 +1314,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             }
         } else {
             // Legacy category analysis
+            doc.addPage()
             doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
                 .text('Category Analysis')
         doc.moveDown(0.3)

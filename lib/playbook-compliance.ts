@@ -907,6 +907,8 @@ export interface ClauseAuditResult {
     clausePositionLabel: string | null   // translated clause position (e.g. "30 days")
     idealPositionLabel: string | null    // translated ideal (e.g. "14 days")
     minimumPositionLabel: string | null  // translated minimum (e.g. "60 days")
+    maximumPositionLabel: string | null  // translated maximum (e.g. "90 days")
+    fallbackPositionLabel: string | null // translated fallback (e.g. "45 days")
 
     // CLARENCE pre-assessment
     clarenceAssessment: string | null
@@ -1073,6 +1075,8 @@ export function runClauseCentricAudit(
             : null
         const idealPositionLabel = translateRulePosition(rule, rule.ideal_position)
         const minimumPositionLabel = translateRulePosition(rule, rule.minimum_position)
+        const maximumPositionLabel = translateRulePosition(rule, rule.maximum_position)
+        const fallbackPositionLabel = translateRulePosition(rule, rule.fallback_position)
 
         clauseResults.push({
             clauseId: clause.clause_id,
@@ -1106,6 +1110,8 @@ export function runClauseCentricAudit(
             clausePositionLabel,
             idealPositionLabel,
             minimumPositionLabel,
+            maximumPositionLabel,
+            fallbackPositionLabel,
 
             clarenceAssessment: clause.clarence_assessment,
             clarenceSummary: clause.clarence_summary,
