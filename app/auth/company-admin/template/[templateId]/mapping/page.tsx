@@ -131,6 +131,32 @@ export default function MappingReviewPage() {
         category_matches: number
     } | null>(null)
 
+    // ---- Navigation guard: warn if unconfirmed mappings --------------------
+
+    const unconfirmedCount = mappings.filter(m => m.status === 'unconfirmed').length
+
+    useEffect(() => {
+        if (unconfirmedCount === 0) return
+        const handler = (e: BeforeUnloadEvent) => {
+            e.preventDefault()
+            e.returnValue = ''
+        }
+        window.addEventListener('beforeunload', handler)
+        return () => window.removeEventListener('beforeunload', handler)
+    }, [unconfirmedCount])
+
+    const navigateBack = () => {
+        if (unconfirmedCount > 0) {
+            const confirmed = window.confirm(
+                `You have ${unconfirmedCount} unconfirmed mapping${unconfirmedCount === 1 ? '' : 's'}. ` +
+                `These should be reviewed before the template can be used reliably in compliance checks.\n\n` +
+                `Leave anyway?`
+            )
+            if (!confirmed) return
+        }
+        router.push('/auth/company-admin?tab=templates')
+    }
+
     // ---- Data loading -------------------------------------------------------
 
     const loadData = useCallback(async () => {
@@ -420,7 +446,7 @@ export default function MappingReviewPage() {
 
     const totalMapped = mappings.length
     const confirmedCount = mappings.filter(m => m.status === 'confirmed').length
-    const unconfirmedCount = mappings.filter(m => m.status === 'unconfirmed').length
+    // unconfirmedCount is already defined above (used by the navigation guard)
     const remappedCount = mappings.filter(m => m.status === 'remapped').length
     const unmappedCount = unmappedClauses.length
 
@@ -465,7 +491,7 @@ export default function MappingReviewPage() {
                     <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                             <button
-                                onClick={() => router.push('/auth/company-admin?tab=templates')}
+                                onClick={navigateBack}
                                 className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 flex-shrink-0"
                                 title="Back to Templates"
                             >

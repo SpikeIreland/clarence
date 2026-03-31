@@ -89,6 +89,7 @@ interface CompanyTemplate {
     createdBy?: string
     sourceFileName?: string
     linkedPlaybookId: string | null
+    unconfirmedMappings: number
 }
 
 type AdminTab = 'insights' | 'templates' | 'playbooks' | 'people' | 'datamap' | 'audit'
@@ -1688,11 +1689,22 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                                     {template.status === 'ready' && template.clauseCount > 0 && template.linkedPlaybookId && (
                                         <button
                                             onClick={() => router.push(`/auth/company-admin/template/${template.templateId}/mapping`)}
-                                            className="px-3 py-1.5 text-sm font-medium text-violet-700 bg-violet-100 hover:bg-violet-200 rounded-lg flex items-center gap-1.5"
-                                            title="Review clause-to-rule mappings"
+                                            className={`px-3 py-1.5 text-sm font-medium rounded-lg flex items-center gap-1.5 ${
+                                                template.unconfirmedMappings > 0
+                                                    ? 'text-red-700 bg-red-100 hover:bg-red-200'
+                                                    : 'text-violet-700 bg-violet-100 hover:bg-violet-200'
+                                            }`}
+                                            title={template.unconfirmedMappings > 0
+                                                ? `${template.unconfirmedMappings} unconfirmed mapping${template.unconfirmedMappings === 1 ? '' : 's'} need review`
+                                                : 'Review clause-to-rule mappings'}
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                                             Review Mappings
+                                            {template.unconfirmedMappings > 0 && (
+                                                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-600 text-white rounded-full min-w-[18px] text-center">
+                                                    {template.unconfirmedMappings}
+                                                </span>
+                                            )}
                                         </button>
                                     )}
                                     {template.status === 'ready' && template.clauseCount > 0 && (
@@ -3259,6 +3271,23 @@ function CompanyAdminContent() {
                 throw error
             }
 
+            // Fetch unconfirmed mapping counts for templates with linked playbooks
+            const templateIds = (data || []).filter(t => t.linked_playbook_id).map(t => t.template_id)
+            let unconfirmedMap = new Map<string, number>()
+            if (templateIds.length > 0) {
+                const { data: mapCounts } = await supabase
+                    .from('playbook_rule_clause_map')
+                    .select('template_id')
+                    .in('template_id', templateIds)
+                    .eq('status', 'unconfirmed')
+                if (mapCounts) {
+                    for (const row of mapCounts) {
+                        const tid = row.template_id as string
+                        unconfirmedMap.set(tid, (unconfirmedMap.get(tid) || 0) + 1)
+                    }
+                }
+            }
+
             setCompanyTemplates((data || []).map(t => ({
                 templateId: t.template_id,
                 templateCode: t.template_code || '',
@@ -3275,6 +3304,7 @@ function CompanyAdminContent() {
                 createdAt: t.created_at,
                 sourceFileName: t.source_file_name,
                 linkedPlaybookId: t.linked_playbook_id || null,
+                unconfirmedMappings: unconfirmedMap.get(t.template_id) || 0,
             })))
         } catch (e) { console.error('Load templates error:', e); setCompanyTemplates([]) } finally { setTemplatesLoading(false) }
     }, [])

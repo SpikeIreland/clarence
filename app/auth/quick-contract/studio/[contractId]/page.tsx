@@ -543,8 +543,6 @@ function QuickContractStudioContent() {
                         if (!matchedClause) continue
 
                         fallbackMap.set(matchedClause.clauseId, {
-                            clauseId: matchedClause.clauseId,
-                            contractId: contractId || '',
                             isDisplayable: true,
                             valueType: rc.range_unit?.includes('%') ? 'percentage'
                                 : /year|month|day/i.test(rc.range_unit || '') ? 'duration'
@@ -2312,6 +2310,26 @@ function QuickContractStudioContent() {
             }
 
             console.log(`✨ ${certifiedClauses.length} pre-certified clauses ${editTemplateId ? 'updated' : 'saved'}`)
+
+            // Auto-map clauses to playbook rules if a playbook is linked
+            if (linkedPlaybookId && certifiedClauses.length > 0) {
+                try {
+                    console.log('[Template Save] Auto-mapping clauses to playbook rules...')
+                    const { data: mapResult, error: mapErr } = await supabase.rpc('map_playbook_rules_to_template_clauses', {
+                        template_id: targetTemplateId,
+                        playbook_id: linkedPlaybookId,
+                        replace_existing: false,
+                    })
+                    if (mapErr) {
+                        console.warn('[Template Save] Auto-mapping RPC error:', mapErr.message)
+                    } else {
+                        console.log('[Template Save] Auto-mapping complete:', mapResult)
+                    }
+                } catch (mapError) {
+                    console.warn('[Template Save] Auto-mapping failed:', mapError)
+                }
+            }
+
             setTemplateSaved(true)
             setSavedTemplateId(targetTemplateId)
             redirectTimeoutRef.current = setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
