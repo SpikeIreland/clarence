@@ -25,7 +25,8 @@ export async function GET(
             .from('contract_schedules')
             .select('*')
             .eq('contract_id', contractId)
-            .order('schedule_type', { ascending: true })
+            .order('display_order', { ascending: true })
+            .order('created_at', { ascending: true })
 
         if (schedError) {
             console.error('Error fetching schedules:', schedError)
@@ -53,6 +54,45 @@ export async function GET(
     } catch (error) {
         console.error('Schedule fetch error:', error)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+}
+
+// PATCH: Reorder schedules
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ contractId: string }> }
+) {
+    const { contractId } = await params
+
+    if (!contractId) {
+        return NextResponse.json({ error: 'Contract ID required' }, { status: 400 })
+    }
+
+    try {
+        const body = await request.json()
+        const { orderedIds } = body as { orderedIds: string[] }
+
+        if (!orderedIds || !Array.isArray(orderedIds) || orderedIds.length === 0) {
+            return NextResponse.json({ error: 'orderedIds array required' }, { status: 400 })
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey)
+
+        // Update display_order for each schedule
+        const updates = orderedIds.map((id, index) =>
+            supabase
+                .from('contract_schedules')
+                .update({ display_order: index + 1 })
+                .eq('schedule_id', id)
+                .eq('contract_id', contractId)
+        )
+
+        await Promise.all(updates)
+
+        return NextResponse.json({ success: true })
+    } catch (error) {
+        console.error('Schedule reorder error:', error)
+        return NextResponse.json({ error: 'Reorder failed' }, { status: 500 })
     }
 }
 

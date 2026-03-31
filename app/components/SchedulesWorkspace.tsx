@@ -147,6 +147,14 @@ export default function SchedulesWorkspace({
   const [scheduleClauseContent, setScheduleClauseContent] = useState<ScheduleClauseData | null>(null)
   const [clauseContentLoading, setClauseContentLoading] = useState(false)
 
+  // ---- Delete state ----
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // ---- Drag & drop state ----
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
   // ---- Upload state ----
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [uploadMode, setUploadMode] = useState<UploadMode>('individual')
@@ -447,6 +455,101 @@ export default function SchedulesWorkspace({
     }
   }, [contractId, pendingFiles, uploadMode, onScheduleCountChange])
 
+  // ============================================================================
+  // DELETE FUNCTION
+  // ============================================================================
+
+  const handleDeleteSchedule = useCallback(async (scheduleId: string) => {
+    if (!contractId) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/schedules/${scheduleId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        setSchedules(prev => prev.filter(s => s.schedule_id !== scheduleId))
+        onScheduleCountChange?.(schedules.length - 1)
+        if (selectedScheduleId === scheduleId) {
+          setSelectedScheduleId(null)
+          onScheduleSelect?.(null)
+        }
+      }
+    } catch {
+      // Non-critical
+    } finally {
+      setDeleting(false)
+      setDeleteConfirmId(null)
+    }
+  }, [contractId, schedules.length, selectedScheduleId, onScheduleCountChange, onScheduleSelect])
+
+  // ============================================================================
+  // DRAG & DROP FUNCTIONS
+  // ============================================================================
+
+  const handleDragStart = useCallback((e: React.DragEvent, scheduleId: string) => {
+    setDraggedId(scheduleId)
+    e.dataTransfer.effectAllowed = 'move'
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.dataTransfer.setDragImage(e.currentTarget, 0, 0)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, scheduleId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedId && scheduleId !== draggedId) {
+      setDragOverId(scheduleId)
+    }
+  }, [draggedId])
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverId(null)
+  }, [])
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    setDragOverId(null)
+
+    if (!draggedId || draggedId === targetId || !contractId) {
+      setDraggedId(null)
+      return
+    }
+
+    // Reorder in local state
+    const currentOrder = [...schedules]
+    const draggedIdx = currentOrder.findIndex(s => s.schedule_id === draggedId)
+    const targetIdx = currentOrder.findIndex(s => s.schedule_id === targetId)
+
+    if (draggedIdx === -1 || targetIdx === -1) {
+      setDraggedId(null)
+      return
+    }
+
+    const [moved] = currentOrder.splice(draggedIdx, 1)
+    currentOrder.splice(targetIdx, 0, moved)
+    setSchedules(currentOrder)
+    setDraggedId(null)
+
+    // Persist to server
+    try {
+      await fetch(`/api/contracts/${contractId}/schedules`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderedIds: currentOrder.map(s => s.schedule_id),
+        }),
+      })
+    } catch {
+      // Non-critical — local reorder still visible
+    }
+  }, [draggedId, schedules, contractId])
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null)
+    setDragOverId(null)
+  }, [])
+
   const openUploadModal = useCallback(() => {
     setPendingFiles([])
     setUploadError(null)
@@ -571,12 +674,27 @@ export default function SchedulesWorkspace({
               const isSelected = isClickable && selectedScheduleId === exp.detectedSchedule?.schedule_id
               const schedule = exp.detectedSchedule as DetectedScheduleLocal | undefined
               const agreementStatus = schedule ? getScheduleAgreementStatus(schedule) : 'none'
+              const schedId = exp.detectedSchedule?.schedule_id
+              const isDragging = draggedId === schedId
+              const isDragOver = dragOverId === schedId
 
               return (
                 <div
-                  key={exp.detectedSchedule?.schedule_id || `missing-${exp.scheduleType}`}
+                  key={schedId || `missing-${exp.scheduleType}`}
+                  draggable={!!schedId}
+                  onDragStart={schedId ? (e) => handleDragStart(e, schedId) : undefined}
+                  onDragOver={schedId ? (e) => handleDragOver(e, schedId) : undefined}
+                  onDragLeave={handleDragLeave}
+                  onDrop={schedId ? (e) => handleDrop(e, schedId) : undefined}
+                  onDragEnd={handleDragEnd}
                   onClick={isClickable ? () => handleScheduleClick(exp.detectedSchedule!.schedule_id) : undefined}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs transition-all ${
+                  className={`group flex items-center gap-1.5 pl-1 pr-3 py-2.5 rounded-lg text-xs transition-all ${
+                    isDragging
+                      ? 'opacity-40 scale-95'
+                      : isDragOver
+                        ? 'ring-2 ring-indigo-400 ring-offset-1'
+                        : ''
+                  } ${
                     isSelected
                       ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-300 shadow-sm'
                       : exp.detected
@@ -586,6 +704,26 @@ export default function SchedulesWorkspace({
                           : 'bg-slate-50 text-slate-400 border border-slate-100'
                   }`}
                 >
+                  {/* Drag Handle — only for detected schedules */}
+                  {schedId ? (
+                    <div
+                      className="flex-shrink-0 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-slate-200/60 text-slate-300 hover:text-slate-500 transition-colors"
+                      title="Drag to reorder"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="5" cy="3" r="1.5" />
+                        <circle cx="11" cy="3" r="1.5" />
+                        <circle cx="5" cy="8" r="1.5" />
+                        <circle cx="11" cy="8" r="1.5" />
+                        <circle cx="5" cy="13" r="1.5" />
+                        <circle cx="11" cy="13" r="1.5" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="w-5 flex-shrink-0" />
+                  )}
+
                   {/* Status Icon — shows agreement state for detected schedules */}
                   {exp.detected ? (
                     schedule?.flagged ? (
@@ -654,11 +792,35 @@ export default function SchedulesWorkspace({
                     </span>
                   )}
 
-                  {/* Expand Indicator */}
-                  {isClickable && (
-                    <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0 ${isSelected ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                  {/* Delete Button — replaces expand arrow */}
+                  {schedId && (
+                    deleteConfirmId === schedId ? (
+                      <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(schedId) }}
+                          disabled={deleting}
+                          className="px-1.5 py-0.5 text-[10px] font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+                        >
+                          {deleting ? '...' : 'Yes'}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null) }}
+                          className="px-1.5 py-0.5 text-[10px] font-medium text-slate-600 bg-slate-200 hover:bg-slate-300 rounded transition-colors"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(schedId) }}
+                        className="p-1 rounded hover:bg-red-100 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                        title="Delete schedule"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )
                   )}
                 </div>
               )
