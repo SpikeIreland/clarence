@@ -543,6 +543,8 @@ function QuickContractStudioContent() {
                         if (!matchedClause) continue
 
                         fallbackMap.set(matchedClause.clauseId, {
+                            clauseId: matchedClause.clauseId,
+                            contractId: contractId || '',
                             isDisplayable: true,
                             valueType: rc.range_unit?.includes('%') ? 'percentage'
                                 : /year|month|day/i.test(rc.range_unit || '') ? 'duration'
