@@ -92,7 +92,7 @@ interface CompanyTemplate {
     unconfirmedMappings: number
 }
 
-type AdminTab = 'insights' | 'templates' | 'playbooks' | 'people' | 'datamap' | 'audit'
+type AdminTab = 'insights' | 'playbooks' | 'templates' | 'people' | 'audit' | 'activity' | 'datamap'
 
 // ============================================================================
 // SECTION 2: API CONFIGURATION
@@ -164,12 +164,13 @@ interface TabNavigationProps {
 
 function TabNavigation({ activeTab, onTabChange, peoplePendingCount }: TabNavigationProps) {
     const tabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-        { id: 'insights',  label: 'Insights',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
-        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> },
-        { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: 'people',    label: 'People',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
-        { id: 'datamap',   label: 'Data Map',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-        { id: 'audit',     label: 'Actions', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+        { id: 'insights',  label: 'Insights',      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+        { id: 'playbooks', label: 'Playbooks',     icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> },
+        { id: 'templates', label: 'Templates',     icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+        { id: 'people',    label: 'People',        icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
+        { id: 'audit',     label: 'Reports',       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+        { id: 'activity',  label: 'Activity Log',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+        { id: 'datamap',   label: 'Data Map',      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
     ]
 
     return (
@@ -2558,7 +2559,7 @@ interface AuditAndReportsTabProps {
 
 function AuditAndReportsTab({ companyId, playbooks, templates }: AuditAndReportsTabProps) {
     const router = useRouter()
-    const [subTab, setSubTab] = useState<'reports' | 'activity'>('reports')
+    // Activity Log is now its own top-level tab — no sub-tab needed
     const [audits, setAudits] = useState<AlignmentAudit[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [showNewAudit, setShowNewAudit] = useState(false)
@@ -2768,25 +2769,6 @@ function AuditAndReportsTab({ companyId, playbooks, templates }: AuditAndReports
 
     return (
         <div>
-            {/* Sub-tab navigation */}
-            <div className="flex items-center gap-1 px-6 pt-4 pb-0">
-                <button
-                    onClick={() => setSubTab('reports')}
-                    className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${subTab === 'reports' ? 'bg-white text-indigo-700 border border-b-0 border-slate-200 -mb-px relative z-10' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Alignment Reports
-                </button>
-                <button
-                    onClick={() => setSubTab('activity')}
-                    className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${subTab === 'activity' ? 'bg-white text-indigo-700 border border-b-0 border-slate-200 -mb-px relative z-10' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Activity Log
-                </button>
-            </div>
-
-            {subTab === 'activity' ? (
-                <AuditLogTab companyId={companyId} />
-            ) : (
                 <div className="p-6">
                     {/* Header with New Audit button */}
                     <div className="flex items-center justify-between mb-5">
@@ -3045,7 +3027,6 @@ function AuditAndReportsTab({ companyId, playbooks, templates }: AuditAndReports
                         </div>
                     )}
                 </div>
-            )}
         </div>
     )
 }
@@ -3886,7 +3867,17 @@ function CompanyAdminContent() {
         const init = async () => {
             console.log('=== INIT COMPANY ADMIN ===')
             const user = await checkAuth(); if (!user) return
-            setUserInfo(user); setCompanyName(user.company || 'Your Company')
+            setUserInfo(user)
+            // Resolve company name: prefer user metadata, then look up from companies table
+            if (user.company) {
+                setCompanyName(user.company)
+            } else if (user.companyId) {
+                const supabase = createClient()
+                const { data: co } = await supabase.from('companies').select('company_name').eq('company_id', user.companyId).single()
+                setCompanyName(co?.company_name || 'Your Company')
+            } else {
+                setCompanyName('Your Company')
+            }
             const hasAccess = await checkAdminAccess(user.email, user.companyId); setIsAdmin(hasAccess)
             if (!hasAccess) { router.push('/auth/home'); return }
             if (user.companyId) {
@@ -3908,27 +3899,28 @@ function CompanyAdminContent() {
     const peoplePendingCount = companyUsers.filter(u => u.status === 'invited').length + trainingUsers.filter(u => u.status === 'pending').length
 
     const navTabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-        { id: 'insights',  label: 'Insights',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
-        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> },
-        { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: 'people',    label: 'People',    icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
-        { id: 'datamap',   label: 'Data Map',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-        { id: 'audit',     label: 'Actions', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+        { id: 'insights',  label: 'Insights',      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+        { id: 'playbooks', label: 'Playbooks',     icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> },
+        { id: 'templates', label: 'Templates',     icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+        { id: 'people',    label: 'People',        icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>, badge: peoplePendingCount > 0 ? peoplePendingCount : undefined },
+        { id: 'audit',     label: 'Reports',       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+        { id: 'activity',  label: 'Activity Log',  icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+        { id: 'datamap',   label: 'Data Map',      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
     ]
 
     return (
         <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
             {/* Indigo Banner */}
-            <header className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => router.push('/auth/home')} className="p-2 text-indigo-200 hover:text-white hover:bg-indigo-700 rounded-lg transition-colors">
+            <header className="bg-indigo-600 text-white px-6 py-3 flex items-center justify-between flex-shrink-0 relative">
+                <div className="flex items-center gap-4 min-w-0">
+                    <button onClick={() => router.push('/auth/home')} className="p-2 text-indigo-200 hover:text-white hover:bg-indigo-700 rounded-lg transition-colors flex-shrink-0">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     </button>
-                    <div className="h-6 w-px bg-indigo-400"></div>
-                    <div>
-                        <h1 className="text-lg font-bold text-white">Control Room</h1>
-                        <p className="text-sm text-indigo-200">{companyName}</p>
-                    </div>
+                    <div className="h-6 w-px bg-indigo-400 flex-shrink-0"></div>
+                    <p className="text-sm font-medium text-indigo-200 tracking-wide uppercase">Control Room</p>
+                </div>
+                <div className="absolute left-1/2 transform -translate-x-1/2">
+                    <h1 className="text-xl font-bold text-white tracking-wide">{companyName}</h1>
                 </div>
                 <div className="flex items-center gap-3">
                     <FeedbackButton position="header" />
@@ -3947,9 +3939,8 @@ function CompanyAdminContent() {
 
                 {/* LEFT PANEL: Navigation */}
                 <div className="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
-                    <div className="p-4 border-b border-slate-200 bg-gradient-to-b from-indigo-50 to-white">
-                        <h2 className="text-sm font-semibold text-indigo-800 uppercase tracking-wider">Control Room</h2>
-                        <p className="text-xs text-slate-500 mt-1">Manage your company settings</p>
+                    <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-b from-indigo-50 to-white">
+                        <p className="text-xs text-slate-500">Navigation</p>
                     </div>
                     <nav className="flex-1 py-2">
                         {navTabs.map((tab) => (
@@ -3979,6 +3970,10 @@ function CompanyAdminContent() {
                             <InsightsTab playbooks={playbooks} templates={companyTemplates} trainingUsers={trainingUsers} companyUsers={companyUsers} companyId={userInfo?.companyId || ''} />
                         ) : activeTab === 'datamap' ? (
                             <DataJourneyMapContainer />
+                        ) : activeTab === 'activity' ? (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                                <AuditLogTab companyId={userInfo?.companyId || ''} />
+                            </div>
                         ) : (
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                                 {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
