@@ -10,6 +10,10 @@ interface StudioTabSwitcherProps {
   clauseCount: number
   scheduleCount: number
   missingRequiredCount?: number
+  /** Number of schedules where both parties have accepted */
+  acceptedCount?: number
+  /** Number of schedules currently flagged for review */
+  flaggedCount?: number
 }
 
 export default function StudioTabSwitcher({
@@ -18,6 +22,8 @@ export default function StudioTabSwitcher({
   clauseCount,
   scheduleCount,
   missingRequiredCount = 0,
+  acceptedCount = 0,
+  flaggedCount = 0,
 }: StudioTabSwitcherProps) {
   return (
     <div className="flex border-b border-slate-200 bg-slate-50 flex-shrink-0">
@@ -58,13 +64,20 @@ export default function StudioTabSwitcher({
         Schedules
         {scheduleCount > 0 && (
           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-            activeTab === 'schedules' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+            acceptedCount === scheduleCount && scheduleCount > 0
+              ? 'bg-emerald-100 text-emerald-700'
+              : activeTab === 'schedules' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
           }`}>
-            {scheduleCount}
+            {acceptedCount > 0 ? `${acceptedCount}/${scheduleCount}` : scheduleCount}
           </span>
         )}
+        {/* Red dot for missing required schedules */}
         {missingRequiredCount > 0 && (
           <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full" />
+        )}
+        {/* Amber dot for flagged schedules (only if no red dot) */}
+        {missingRequiredCount === 0 && flaggedCount > 0 && (
+          <span className="absolute top-1.5 right-2 w-2 h-2 bg-amber-500 rounded-full" />
         )}
       </button>
     </div>

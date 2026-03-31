@@ -128,6 +128,19 @@ Rules:
 - Set "source" to "parsed" always (the frontend will use "inferred" for its own fallbacks).
 - For boolean/qualitative clauses (e.g., "right to audit: yes/no"), use value_type "boolean" and labels like "No right" (1) to "Full right" (10).
 
+CRITICAL — SCALE DIRECTION:
+The label at Position 1 MUST always be the LEAST protective for the customer (most provider-friendly).
+The label at Position 10 MUST always be the MOST protective for the customer (least provider-friendly).
+This matches the position scale definition above. NEVER invert this.
+
+Examples of CORRECT scale direction:
+- Liability Cap:        Position 1 = "50% of fees"             → Position 10 = "Unlimited"
+- Cyber Liability:      Position 1 = "Unlimited cyber liability"→ Position 10 = "No cyber liability" (customer perspective: unlimited is worst for provider, best protection for customer)
+- Payment Terms:        Position 1 = "90 days"                  → Position 10 = "7 days" (faster payment = more protective for customer)
+- Confidentiality:      Position 1 = "1 year"                   → Position 10 = "Perpetual"
+
+SELF-CHECK: The ideal_position should always point to a label that represents the playbook owner's PREFERRED outcome. If your ideal_position is 1 and the label at position 1 is the best outcome for the playbook owner, YOUR SCALE IS INVERTED.
+
 ═══════════════════════════════════════════════════
 OTHER FIELDS
 ═══════════════════════════════════════════════════

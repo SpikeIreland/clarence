@@ -482,6 +482,33 @@ function QuickContractStudioContent() {
                 mappings = data || []
             }
 
+            // Auto-create mappings if none exist and we have a template + playbook
+            if (!mappings.length && editTemplateId) {
+                try {
+                    console.log('[QC Studio] No mappings found — auto-mapping template clauses to playbook rules')
+                    const { data: rpcResult, error: rpcErr } = await supabase.rpc('map_playbook_rules_to_template_clauses', {
+                        template_id: editTemplateId,
+                        playbook_id: linkedPlaybookId,
+                        replace_existing: false,
+                    })
+                    if (rpcErr) {
+                        console.warn('[QC Studio] Auto-mapping RPC error:', rpcErr.message)
+                    } else {
+                        console.log('[QC Studio] Auto-mapping created', rpcResult, 'mappings')
+                        // Re-query mappings after auto-creation
+                        const { data: freshMappings } = await supabase
+                            .from('playbook_rule_clause_map')
+                            .select('template_clause_id, playbook_rule_id')
+                            .eq('template_id', editTemplateId)
+                            .eq('playbook_id', linkedPlaybookId)
+                            .neq('status', 'rejected')
+                        mappings = freshMappings || []
+                    }
+                } catch (err) {
+                    console.warn('[QC Studio] Auto-mapping failed:', err)
+                }
+            }
+
             if (!mappings.length) return
 
             const clauseIds = [...new Set(mappings.map(m => m.template_clause_id))]
@@ -494,10 +521,45 @@ function QuickContractStudioContent() {
             const { overlays, nameToRule } = buildRuleMaps(mappings, tClauses || [], rules || [])
             setPlaybookRuleOverlays(overlays)
             setMappedClauseToRule(nameToRule)
+
+            // Fallback: Populate rangeMappings from playbook rule range_context
+            // when clause_range_mappings are empty for this contract
+            if (rules?.length) {
+                setRangeMappings(prev => {
+                    // Only add fallbacks — don't overwrite existing range mappings from clause_range_mappings
+                    if (prev.size > 0) return prev
+
+                    const fallbackMap = new Map<string, RangeMapping>()
+                    for (const [name, rule] of nameToRule.entries()) {
+                        const rc = typeof rule.range_context === 'string'
+                            ? JSON.parse(rule.range_context || '{}')
+                            : rule.range_context
+                        if (!rc?.scale_points?.length) continue
+
+                        // Find the matching clause by name to get the clauseId
+                        const matchedClause = clauses.find(c =>
+                            c.clauseName?.toLowerCase() === name
+                        )
+                        if (!matchedClause) continue
+
+                        fallbackMap.set(matchedClause.clauseId, {
+                            isDisplayable: true,
+                            valueType: rc.range_unit?.includes('%') ? 'percentage'
+                                : /year|month|day/i.test(rc.range_unit || '') ? 'duration'
+                                : 'text',
+                            rangeUnit: rc.range_unit || 'scope',
+                            industryStandardMin: null,
+                            industryStandardMax: null,
+                            rangeData: rc as RangeMappingData,
+                        })
+                    }
+                    return fallbackMap.size > 0 ? fallbackMap : prev
+                })
+            }
         }
 
         loadRuleOverlays()
-    }, [editTemplateId, linkedPlaybookId, buildRuleMaps])
+    }, [editTemplateId, linkedPlaybookId, buildRuleMaps, clauses])
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
@@ -549,6 +611,7 @@ function QuickContractStudioContent() {
     const chatEndRef = useRef<HTMLDivElement>(null)
     const clauseMenuRef = useRef<HTMLDivElement>(null)
     const clauseListRef = useRef<HTMLDivElement>(null)
+    const workspacePanelRef = useRef<HTMLDivElement>(null)
 
     // Party Chat state (simplified - component handles its own state)
     const [partyChatOpen, setPartyChatOpen] = useState(false)
@@ -1274,10 +1337,22 @@ function QuickContractStudioContent() {
         }
     }, [chatInput, chatLoading, contractId, selectedClause])
 
-    // Auto-scroll chat
+    // Auto-scroll chat (only for NEW messages, not clause selection)
+    const prevChatLengthRef = useRef(0)
     useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        // Only scroll to bottom when a new message is added, not when switching clauses
+        if (chatMessages.length > prevChatLengthRef.current) {
+            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+        prevChatLengthRef.current = chatMessages.length
     }, [chatMessages])
+
+    // Scroll workspace panel to top when clause selection changes
+    useEffect(() => {
+        if (selectedClauseIndex !== null) {
+            workspacePanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+    }, [selectedClauseIndex])
 
     // ========================================================================
     // SECTION 4C-2: HELPER FOR POSITION LABELS
@@ -5182,7 +5257,7 @@ INSTRUCTIONS:
 
 
                     {/* ==================== CLAUSE TREE ==================== */}
-                    <div ref={clauseListRef} className="flex-1 overflow-y-auto">
+                    <div ref={clauseListRef} className="flex-1 overflow-y-auto min-h-0">
                         {/* Waiting for clauses to arrive */}
                         {clauses.length === 0 && contract && ['processing', 'certifying', 'uploading', 'pending'].includes(contract.status) && (
                             <div className="flex flex-col items-center justify-center h-full p-6 text-center">
@@ -6003,7 +6078,7 @@ INSTRUCTIONS:
                             )}
 
                             {/* Workspace Content */}
-                            <div className="flex-1 overflow-y-auto p-6 min-h-0">
+                            <div ref={workspacePanelRef} className="flex-1 overflow-y-auto p-6 min-h-0">
 
                                 {/* ==================== OVERVIEW TAB ==================== */}
                                 {activeTab === 'overview' && (

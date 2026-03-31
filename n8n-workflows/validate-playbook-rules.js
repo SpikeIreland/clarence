@@ -133,7 +133,49 @@ for (const [cat, catRules] of Object.entries(categoryGroups)) {
 }
 
 // --------------------------------------------------------------------------
-// CHECK 4: Nonsensical scale progression (position 1 label > position 10)
+// CHECK 4: Inverted scale — ideal_position points to a low-position label
+// (suggests the AI put the best outcome at position 1 instead of 10)
+// --------------------------------------------------------------------------
+for (const rule of rules) {
+  const ctx =
+    typeof rule.range_context === "string"
+      ? JSON.parse(rule.range_context || "{}")
+      : rule.range_context;
+
+  if (!ctx?.scale_points?.length || !rule.ideal_position) continue;
+
+  // If ideal_position <= 2 AND the label at position 1 contains words that
+  // suggest it's the BEST outcome (not worst), flag as inverted
+  const sorted = [...ctx.scale_points].sort((a, b) => a.position - b.position);
+  const pos1Label = (sorted[0]?.label || "").toLowerCase();
+  const pos10Label = (sorted[sorted.length - 1]?.label || "").toLowerCase();
+
+  // Heuristic: "no" or "none" or "zero" or "minimal" at position 1 with
+  // "unlimited" or "full" or "comprehensive" or "broad" at position 10
+  // AND ideal_position <= 2 suggests the scale is inverted for a provider playbook
+  const pos1LooksProtective = /\bno\b|none|zero|minimal|excluded|capped|limited|low\b|restrict/i.test(pos1Label);
+  const pos10LooksRisky = /unlimited|uncapped|full|comprehensive|broad|maximum|highest/i.test(pos10Label);
+
+  if (rule.ideal_position <= 2 && pos1LooksProtective && pos10LooksRisky) {
+    if (!rule.quality_flags.includes("likely_inverted_scale"))
+      rule.quality_flags.push("likely_inverted_scale");
+  }
+
+  // Also check the reverse: ideal_position >= 9 with position 10 looking protective
+  const highPosLooksProtective = /\bno\b|none|zero|minimal|excluded|capped|limited|low\b|restrict/i.test(pos10Label);
+  const lowPosLooksRisky = /unlimited|uncapped|full|comprehensive|broad|maximum|highest/i.test(pos1Label);
+
+  if (rule.ideal_position >= 9 && highPosLooksProtective && lowPosLooksRisky) {
+    // This pattern (ideal=high, pos10=protective, pos1=risky) can be correct
+    // for provider perspective BUT only if the perspective is provider.
+    // We flag it for review rather than auto-correct.
+    if (!rule.quality_flags.includes("scale_direction_review"))
+      rule.quality_flags.push("scale_direction_review");
+  }
+}
+
+// --------------------------------------------------------------------------
+// CHECK 5: Nonsensical scale progression (position 1 label > position 10)
 // --------------------------------------------------------------------------
 for (const rule of rules) {
   const ctx =

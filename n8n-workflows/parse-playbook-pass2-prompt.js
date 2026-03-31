@@ -151,10 +151,40 @@ RANGE CONTEXT — REQUIRED FOR EACH RULE
 RULES for scale_points:
 - EXACTLY 3 points: positions 1, 5, and 10
 - Labels must use the SAME unit as the clause (if unit is "years", all labels must be in years)
-- Values must progress monotonically (always increasing from 1 to 10)
-- For qualitative clauses (scope, rights), use descriptive labels:
-  Position 1: "Narrow/Restricted", Position 5: "Standard/Balanced", Position 10: "Broad/Comprehensive"
 - NEVER mix units within a single scale (e.g., never have "50%" AND "perpetual" in the same scale)
+
+═══════════════════════════════════════════════════
+CRITICAL — SCALE DIRECTION MUST MATCH PERSPECTIVE
+═══════════════════════════════════════════════════
+
+The scale_points labels MUST always follow the SAME direction as the position scale:
+
+${perspective === "provider"
+  ? `PROVIDER perspective → Position 1 label = WORST outcome for the provider, Position 10 label = BEST outcome for the provider.
+
+EXAMPLES (Provider perspective):
+- Liability Cap:        Position 1 = "Unlimited liability"       → Position 10 = "50% of fees"
+- Cyber Liability:      Position 1 = "Unlimited cyber liability" → Position 10 = "Capped/No cyber liability"
+- Notice Period:        Position 1 = "7 days"                    → Position 10 = "180 days"
+- Payment Terms:        Position 1 = "7 days"                    → Position 10 = "90 days"
+- Exclusion of Loss:    Position 1 = "No exclusions"             → Position 10 = "Broad exclusions"
+
+WRONG (inverted scale — DO NOT DO THIS):
+- Cyber Liability:      Position 1 = "No unlimited liability"    → Position 10 = "Unlimited cyber liability"
+  ^^^ This is WRONG because "No unlimited liability" is the BEST outcome for the provider, so it belongs at position 10, not position 1.`
+  : `CUSTOMER perspective → Position 1 label = WORST outcome for the customer, Position 10 label = BEST outcome for the customer.
+
+EXAMPLES (Customer perspective):
+- Liability Cap:        Position 1 = "50% of fees"               → Position 10 = "Unlimited liability"
+- SLA:                  Position 1 = "95% uptime"                → Position 10 = "99.99% uptime"
+- Breach Notification:  Position 1 = "No SLA"                    → Position 10 = "4 hours"
+- Audit Rights:         Position 1 = "No audit right"            → Position 10 = "Full audit access"
+
+WRONG (inverted scale — DO NOT DO THIS):
+- SLA:                  Position 1 = "99.99% uptime"             → Position 10 = "95% uptime"
+  ^^^ This is WRONG because "99.99% uptime" is the BEST outcome for the customer, so it belongs at position 10, not position 1.`}
+
+SELF-CHECK: Before outputting each rule, verify that the label at position 1 is the LEAST desirable outcome for the ${perspective === "provider" ? "provider" : "customer"}, and position 10 is the MOST desirable. If you find yourself putting the ideal outcome at position 1 with ideal_position=1, YOUR SCALE IS INVERTED — flip it.
 
 ═══════════════════════════════════════════════════
 EVERY RULE MUST HAVE UNIQUE POSITIONS
