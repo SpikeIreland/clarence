@@ -4949,7 +4949,7 @@ INSTRUCTIONS:
                         })()}
 
                         {/* CENTRE: Playbook Compliance Badge — DISABLED: re-enable after Map Clauses to Rules is ready */}
-                        {false && isInitiator && playbookCompliance && !playbookLoading && (
+                        {isInitiator && playbookCompliance && !playbookLoading && false && (
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                             <button
                                 onClick={() => setShowComplianceModal(true)}
