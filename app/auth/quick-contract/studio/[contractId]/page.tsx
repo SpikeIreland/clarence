@@ -4948,8 +4948,8 @@ INSTRUCTIONS:
                             )
                         })()}
 
-                        {/* CENTRE: Playbook Compliance Badge (absolutely centred on page) */}
-                        {isInitiator && playbookCompliance && !playbookLoading && (
+                        {/* CENTRE: Playbook Compliance Badge — DISABLED: re-enable after Map Clauses to Rules is ready */}
+                        {false && isInitiator && playbookCompliance && !playbookLoading && (
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                             <button
                                 onClick={() => setShowComplianceModal(true)}
@@ -5454,17 +5454,7 @@ INSTRUCTIONS:
                                                                         {child.clarencePosition.toFixed(1)}
                                                                     </span>
                                                                 )}
-                                                                {/* Playbook compliance dot */}
-                                                                {(() => {
-                                                                    const s = clausePlaybookStatus.get(child.clauseId)
-                                                                    if (!s) return null
-                                                                    return (
-                                                                        <span
-                                                                            className={`w-2 h-2 rounded-full flex-shrink-0 ${s === 'breach' ? 'bg-red-500' : s === 'warning' ? 'bg-amber-400' : 'bg-emerald-500'}`}
-                                                                            title={s === 'breach' ? 'Playbook breach' : s === 'warning' ? 'Below playbook ideal' : 'Playbook compliant'}
-                                                                        />
-                                                                    )
-                                                                })()}
+                                                                {/* Playbook compliance dot — DISABLED: re-enable after Map Clauses to Rules is ready */}
                                                                 {/* Agreement/Query status indicator - Dual party tracking */}
                                                                 {(() => {
                                                                     const status = getAgreementStatus(child.clauseId)
@@ -5618,17 +5608,7 @@ INSTRUCTIONS:
                                                             {parent.clarencePosition.toFixed(1)}
                                                         </span>
                                                     )}
-                                                    {/* Playbook compliance dot */}
-                                                    {(() => {
-                                                        const s = clausePlaybookStatus.get(parent.clauseId)
-                                                        if (!s) return null
-                                                        return (
-                                                            <span
-                                                                className={`w-2 h-2 rounded-full flex-shrink-0 ${s === 'breach' ? 'bg-red-500' : s === 'warning' ? 'bg-amber-400' : 'bg-emerald-500'}`}
-                                                                title={s === 'breach' ? 'Playbook breach' : s === 'warning' ? 'Below playbook ideal' : 'Playbook compliant'}
-                                                            />
-                                                        )
-                                                    })()}
+                                                    {/* Playbook compliance dot — DISABLED: re-enable after Map Clauses to Rules is ready */}
                                                     {/* Agreement/Query status indicator - Dual party tracking */}
                                                     {(() => {
                                                         const status = getAgreementStatus(parent.clauseId)
@@ -5886,8 +5866,8 @@ INSTRUCTIONS:
                                                 )}
                                             </button>
                                         ))}
-                                        {/* Playbook tab — shown when playbook rules are loaded */}
-                                        {(playbookRules.length > 0 || isTemplateMode) && (
+                                        {/* Playbook tab — DISABLED: re-enable after Map Clauses to Rules is ready */}
+                                        {false && (playbookRules.length > 0 || isTemplateMode) && (
                                             <button
                                                 onClick={() => setActiveTab('playbook')}
                                                 className={`relative px-3 py-1.5 text-sm rounded-md transition flex items-center gap-1.5 ${activeTab === 'playbook'
