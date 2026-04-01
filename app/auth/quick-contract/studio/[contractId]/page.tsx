@@ -4948,54 +4948,13 @@ INSTRUCTIONS:
                             )
                         })()}
 
-                        {/* CENTRE: Playbook Compliance Badge — DISABLED: re-enable after Map Clauses to Rules is ready */}
-                        {isInitiator && playbookCompliance && !playbookLoading && false && (
+                        {/* CENTRE: Playbook Compliance Badge — DISABLED: re-enable after Map Clauses to Rules is ready
+                        {isInitiator && playbookCompliance && !playbookLoading && (
                             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-                            <button
-                                onClick={() => setShowComplianceModal(true)}
-                                className={`flex items-center gap-2 px-3 py-1 rounded-lg border transition-colors cursor-pointer ${
-                                    playbookCompliance.redLineBreaches > 0
-                                        ? 'bg-red-50 border-red-200 hover:bg-red-100'
-                                        : playbookCompliance.overallScore >= 80
-                                            ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
-                                            : playbookCompliance.overallScore >= 60
-                                                ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                                                : 'bg-red-50 border-red-200 hover:bg-red-100'
-                                }`}
-                                title="View playbook compliance details"
-                            >
-                                {playbookCompliance.redLineBreaches > 0 ? (
-                                    <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                                        <line x1="12" y1="8" x2="12" y2="12" />
-                                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                                    </svg>
-                                ) : (
-                                    <svg className={`w-4 h-4 ${
-                                        playbookCompliance.overallScore >= 80 ? 'text-emerald-500'
-                                            : playbookCompliance.overallScore >= 60 ? 'text-amber-500'
-                                                : 'text-red-500'
-                                    }`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                                        <path d="M9 12l2 2 4-4" />
-                                    </svg>
-                                )}
-                                <span className={`text-xs font-bold font-mono ${
-                                    playbookCompliance.overallScore >= 80 ? 'text-emerald-600'
-                                        : playbookCompliance.overallScore >= 60 ? 'text-amber-600'
-                                            : 'text-red-600'
-                                }`}>
-                                    {playbookCompliance.overallScore}%
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-medium">Playbook</span>
-                                {playbookCompliance.redLineBreaches > 0 && (
-                                    <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded">
-                                        {playbookCompliance.redLineBreaches} breach{playbookCompliance.redLineBreaches !== 1 ? 'es' : ''}
-                                    </span>
-                                )}
-                            </button>
+                            ...badge JSX removed to avoid TS null-check errors on dead code...
                             </div>
                         )}
+                        */}
 
                         {/* RIGHT: Aggregate Balance Score */}
                         {aggregateBalance !== null && (() => {
