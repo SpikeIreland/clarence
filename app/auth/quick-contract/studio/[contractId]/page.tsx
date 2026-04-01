@@ -5825,30 +5825,13 @@ INSTRUCTIONS:
                                                 )}
                                             </button>
                                         ))}
-                                        {/* Playbook tab — DISABLED: re-enable after Map Clauses to Rules is ready */}
-                                        {false && (playbookRules.length > 0 || isTemplateMode) && (
-                                            <button
-                                                onClick={() => setActiveTab('playbook')}
-                                                className={`relative px-3 py-1.5 text-sm rounded-md transition flex items-center gap-1.5 ${activeTab === 'playbook'
-                                                    ? 'bg-white text-indigo-700 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                                </svg>
-                                                Playbook
-                                                {(() => {
-                                                    const clauseCat = normaliseCategory(selectedClause.category)
-                                                    const matched = playbookRules.find(r => normaliseCategory(r.category) === clauseCat)
-                                                    if (!matched || selectedClause.clarencePosition == null) return null
-                                                    const breach = selectedClause.clarencePosition < matched.fallback_position
-                                                    return (
-                                                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${breach ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                                                    )
-                                                })()}
+                                        {/* Playbook tab — DISABLED: re-enable after Map Clauses to Rules is ready
+                                        {(playbookRules.length > 0 || isTemplateMode) && (
+                                            <button onClick={() => setActiveTab('playbook')} ...>
+                                                Playbook + breach indicator dot
                                             </button>
                                         )}
+                                        */}
                                     </div>
                                 </div>
                             </div>
