@@ -3390,10 +3390,10 @@ function CompanyAdminContent() {
             // Step 5: Send extracted text to N8N webhook
             // --- Observability: Log parse workflow triggered ---
             eventLogger.started('playbook_upload', 'playbook_parse_triggered', {
-                webhookUrl: `${API_BASE}/parse-playbook`
+                webhookUrl: `${API_BASE}/slm-section-mapper`
             })
 
-            const response = await fetch(`${API_BASE}/parse-playbook`, {
+            const response = await fetch(`${API_BASE}/slm-section-mapper`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
