@@ -712,6 +712,8 @@ function PlaybookReviewContent() {
     const [showAddRuleModal, setShowAddRuleModal] = useState(false)
     const [addingRule, setAddingRule] = useState(false)
     const [showAIBanner, setShowAIBanner] = useState(false)
+    const [showReviewOnly, setShowReviewOnly] = useState(false)
+    const [showReviewTooltip, setShowReviewTooltip] = useState(false)
 
     // Auth + data loading
     useEffect(() => {
@@ -969,23 +971,36 @@ function PlaybookReviewContent() {
         setTimeout(() => setSaveAllStatus(null), 2000)
     }
 
+    // Helper: check if a rule needs review
+    const ruleNeedsReview = (r: PlaybookRule) =>
+        r.ideal_position === r.minimum_position &&
+        r.ideal_position === r.maximum_position &&
+        r.ideal_position === r.fallback_position
+
     // Filter and search
     const filteredGroups = ruleGroups
         .filter(g => !filterCategory || g.category === filterCategory)
         .map(g => ({
             ...g,
-            rules: g.rules.filter(r =>
-                !searchTerm || r.clause_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (r.clause_code && r.clause_code.toLowerCase().includes(searchTerm.toLowerCase()))
-            ),
+            rules: g.rules.filter(r => {
+                const matchesSearch = !searchTerm || r.clause_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (r.clause_code && r.clause_code.toLowerCase().includes(searchTerm.toLowerCase()))
+                const matchesReview = !showReviewOnly || ruleNeedsReview(r)
+                return matchesSearch && matchesReview
+            }),
         }))
         .filter(g => g.rules.length > 0)
 
     const dirtyCount = dirtyRules.size
     const categories = ruleGroups.map(g => ({ key: g.category, name: g.displayName, count: g.rules.length }))
-    const needsReviewCount = rules.filter(r =>
-        r.ideal_position === r.minimum_position && r.ideal_position === r.maximum_position && r.ideal_position === r.fallback_position
-    ).length
+    const needsReviewCount = rules.filter(ruleNeedsReview).length
+
+    // Review counts per category
+    const reviewCountByCategory = new Map<string, number>()
+    for (const g of ruleGroups) {
+        const count = g.rules.filter(ruleNeedsReview).length
+        if (count > 0) reviewCountByCategory.set(g.category, count)
+    }
 
     if (loading) return <PlaybookIQLoading />
     if (!playbook) return null
@@ -1025,25 +1040,57 @@ function PlaybookReviewContent() {
                                         <span>{Math.round(playbook.ai_confidence_score * 100)}% confidence</span>
                                     )}
                                     {needsReviewCount > 0 && (
-                                        <button
-                                            className="text-red-600 font-medium underline decoration-dotted hover:text-red-700 transition-colors"
-                                            title="Click to jump to first rule needing review"
-                                            onClick={() => {
-                                                const firstFlagged = rules.find(r =>
-                                                    r.ideal_position === r.minimum_position &&
-                                                    r.ideal_position === r.maximum_position &&
-                                                    r.ideal_position === r.fallback_position
-                                                )
-                                                if (!firstFlagged) return
-                                                const el = document.getElementById(`rule-${firstFlagged.rule_id}`)
-                                                if (!el) return
-                                                el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                                                el.classList.add('ring-2', 'ring-red-400', 'ring-offset-2')
-                                                setTimeout(() => el.classList.remove('ring-2', 'ring-red-400', 'ring-offset-2'), 2000)
-                                            }}
-                                        >
-                                            {needsReviewCount} need review
-                                        </button>
+                                        <div className="relative">
+                                            <button
+                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium bg-red-50 text-red-600 rounded-full border border-red-200 hover:bg-red-100 transition-colors"
+                                                onClick={() => setShowReviewTooltip(prev => !prev)}
+                                            >
+                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                                                {needsReviewCount} need review
+                                            </button>
+                                            {showReviewTooltip && (
+                                                <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-slate-200 p-3 z-50">
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <h4 className="text-xs font-bold text-slate-800">Why do these rules need review?</h4>
+                                                        <button onClick={() => setShowReviewTooltip(false)} className="text-slate-400 hover:text-slate-600">
+                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                                                        These rules have identical values for ideal, minimum, maximum, and fallback positions. This usually means the AI couldn&apos;t distinguish different negotiation stances from the source text.
+                                                    </p>
+                                                    <p className="text-[11px] text-slate-500 mt-1.5">
+                                                        Review each flagged rule and adjust the position values to reflect your actual negotiation range.
+                                                    </p>
+                                                    <div className="flex gap-2 mt-2.5">
+                                                        <button
+                                                            onClick={() => {
+                                                                setShowReviewOnly(true)
+                                                                setShowReviewTooltip(false)
+                                                            }}
+                                                            className="px-2 py-1 text-[10px] font-medium bg-red-50 text-red-600 rounded border border-red-200 hover:bg-red-100 transition-colors"
+                                                        >
+                                                            Show only flagged rules
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setShowReviewTooltip(false)
+                                                                const firstFlagged = rules.find(ruleNeedsReview)
+                                                                if (!firstFlagged) return
+                                                                const el = document.getElementById(`rule-${firstFlagged.rule_id}`)
+                                                                if (!el) return
+                                                                el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                                                el.classList.add('ring-2', 'ring-red-400', 'ring-offset-2')
+                                                                setTimeout(() => el.classList.remove('ring-2', 'ring-red-400', 'ring-offset-2'), 2000)
+                                                            }}
+                                                            className="px-2 py-1 text-[10px] font-medium bg-slate-50 text-slate-600 rounded border border-slate-200 hover:bg-slate-100 transition-colors"
+                                                        >
+                                                            Jump to first
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -1108,6 +1155,16 @@ function PlaybookReviewContent() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
+
+                    {/* Needs Review filter */}
+                    {needsReviewCount > 0 && (
+                        <button
+                            onClick={() => setShowReviewOnly(prev => !prev)}
+                            className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${showReviewOnly ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            {showReviewOnly ? `Showing ${needsReviewCount} flagged` : `Flagged (${needsReviewCount})`}
+                        </button>
+                    )}
 
                     {/* Expand/Collapse */}
                     <button
@@ -1212,10 +1269,18 @@ function PlaybookReviewContent() {
                                 </svg>
                                 <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wide">{group.displayName}</h3>
                                 <span className="text-xs text-slate-400">{group.rules.length} rule{group.rules.length !== 1 ? 's' : ''}</span>
+                                {reviewCountByCategory.has(group.category) && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded-full border border-red-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                        {reviewCountByCategory.get(group.category)} to review
+                                    </span>
+                                )}
                             </div>
-                            {group.rules.some(r => dirtyRules.has(r.rule_id)) && (
-                                <span className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded">Unsaved</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                                {group.rules.some(r => dirtyRules.has(r.rule_id)) && (
+                                    <span className="px-1.5 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded">Unsaved</span>
+                                )}
+                            </div>
                         </button>
 
                         {/* Rules */}
