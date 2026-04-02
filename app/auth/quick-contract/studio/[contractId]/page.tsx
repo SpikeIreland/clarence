@@ -3662,13 +3662,13 @@ INSTRUCTIONS:
         return playbookRules.find(r => normaliseCategory(r.category) === normaliseCategory(category ?? ''))
     }, [playbookRules, mappedClauseToRule])
 
-    // Per-clause playbook compliance status for sidebar dots
-    // Uses minimum_position as breach threshold (not fallback_position) so that
-    // template clauses within the playbook's acceptable range show amber, not red.
-    // Red = below minimum (genuine breach), Amber = below ideal but acceptable,
-    // Green = at or above ideal position.
-    const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach'>>(() => {
-        const map = new Map<string, 'compliant' | 'warning' | 'breach'>()
+    // Per-clause playbook compliance status for sidebar dots — 4-tier colour scheme:
+    //   Black  = out of market range entirely (below minimum_position)
+    //   Red    = out of company range (below fallback_position but within market)
+    //   Amber  = outside ideal but within company range (below ideal but above fallback)
+    //   Green  = at or within 0.5 of ideal position
+    const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach' | 'critical'>>(() => {
+        const map = new Map<string, 'compliant' | 'warning' | 'breach' | 'critical'>()
         if (playbookRules.length === 0) return map
         for (const clause of clauses) {
             if (!clause.clarenceCertified || clause.clarencePosition == null) continue
@@ -3676,11 +3676,13 @@ INSTRUCTIONS:
             if (!rule) continue
             const pos = clause.clarencePosition
             if (pos < rule.minimum_position) {
-                map.set(clause.clauseId, 'breach')
-            } else if (pos < rule.ideal_position) {
-                map.set(clause.clauseId, 'warning')
+                map.set(clause.clauseId, 'critical')    // Black — out of market range
+            } else if (pos < rule.fallback_position) {
+                map.set(clause.clauseId, 'breach')       // Red — out of company range
+            } else if (pos < rule.ideal_position - 0.5) {
+                map.set(clause.clauseId, 'warning')      // Amber — outside ideal zone
             } else {
-                map.set(clause.clauseId, 'compliant')
+                map.set(clause.clauseId, 'compliant')    // Green — within ideal zone
             }
         }
         return map
@@ -5414,7 +5416,18 @@ INSTRUCTIONS:
                                                                         {child.clarencePosition.toFixed(1)}
                                                                     </span>
                                                                 )}
-                                                                {/* Playbook compliance dot — DISABLED: re-enable after Map Clauses to Rules is ready */}
+                                                                {/* Playbook compliance dot — 4-tier: black/red/amber/green */}
+                                                                {playbookRules.length > 0 && clausePlaybookStatus.has(child.clauseId) && (
+                                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                                        clausePlaybookStatus.get(child.clauseId) === 'critical' ? 'bg-slate-900' :
+                                                                        clausePlaybookStatus.get(child.clauseId) === 'breach' ? 'bg-red-500' :
+                                                                        clausePlaybookStatus.get(child.clauseId) === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'
+                                                                    }`} title={
+                                                                        clausePlaybookStatus.get(child.clauseId) === 'critical' ? 'Out of market range' :
+                                                                        clausePlaybookStatus.get(child.clauseId) === 'breach' ? 'Out of company range' :
+                                                                        clausePlaybookStatus.get(child.clauseId) === 'warning' ? 'Outside ideal' : 'Within ideal'
+                                                                    } />
+                                                                )}
                                                                 {/* Agreement/Query status indicator - Dual party tracking */}
                                                                 {(() => {
                                                                     const status = getAgreementStatus(child.clauseId)
@@ -5568,7 +5581,18 @@ INSTRUCTIONS:
                                                             {parent.clarencePosition.toFixed(1)}
                                                         </span>
                                                     )}
-                                                    {/* Playbook compliance dot — DISABLED: re-enable after Map Clauses to Rules is ready */}
+                                                    {/* Playbook compliance dot — 4-tier: black/red/amber/green */}
+                                                    {playbookRules.length > 0 && clausePlaybookStatus.has(parent.clauseId) && (
+                                                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                            clausePlaybookStatus.get(parent.clauseId) === 'critical' ? 'bg-slate-900' :
+                                                            clausePlaybookStatus.get(parent.clauseId) === 'breach' ? 'bg-red-500' :
+                                                            clausePlaybookStatus.get(parent.clauseId) === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'
+                                                        }`} title={
+                                                            clausePlaybookStatus.get(parent.clauseId) === 'critical' ? 'Out of market range' :
+                                                            clausePlaybookStatus.get(parent.clauseId) === 'breach' ? 'Out of company range' :
+                                                            clausePlaybookStatus.get(parent.clauseId) === 'warning' ? 'Outside ideal' : 'Within ideal'
+                                                        } />
+                                                    )}
                                                     {/* Agreement/Query status indicator - Dual party tracking */}
                                                     {(() => {
                                                         const status = getAgreementStatus(parent.clauseId)
@@ -5826,13 +5850,33 @@ INSTRUCTIONS:
                                                 )}
                                             </button>
                                         ))}
-                                        {/* Playbook tab — DISABLED: re-enable after Map Clauses to Rules is ready
+                                        {/* Playbook tab — shown when playbook rules are loaded */}
                                         {(playbookRules.length > 0 || isTemplateMode) && (
-                                            <button onClick={() => setActiveTab('playbook')} ...>
-                                                Playbook + breach indicator dot
+                                            <button
+                                                key="playbook"
+                                                onClick={() => setActiveTab('playbook')}
+                                                className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === 'playbook'
+                                                    ? 'bg-white text-slate-800 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700'
+                                                    }`}
+                                            >
+                                                Playbook
+                                                {/* Compliance dot — worst status across all mapped clauses */}
+                                                {activeTab !== 'playbook' && (() => {
+                                                    const statuses = Array.from(clausePlaybookStatus.values())
+                                                    if (statuses.length === 0) return null
+                                                    const worst = statuses.includes('critical') ? 'critical'
+                                                        : statuses.includes('breach') ? 'breach'
+                                                        : statuses.includes('warning') ? 'warning' : 'compliant'
+                                                    const dotColor = worst === 'critical' ? 'bg-slate-900'
+                                                        : worst === 'breach' ? 'bg-red-500'
+                                                        : worst === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'
+                                                    return (
+                                                        <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ${dotColor} border border-white`} />
+                                                    )
+                                                })()}
                                             </button>
                                         )}
-                                        */}
                                     </div>
                                 </div>
                             </div>
@@ -6921,18 +6965,22 @@ INSTRUCTIONS:
                                     const fallbackPct = toPercent(matchedRule.fallback_position)
                                     const templatePct = clausePos != null ? toPercent(clausePos) : null
 
+                                    // 4-tier status: Black (out of market) → Red (out of company) → Amber (outside ideal) → Green (within ideal)
                                     let statusLabel = 'No certified position yet'
                                     let statusColor = 'bg-slate-100 text-slate-500 border-slate-200'
                                     if (clausePos != null) {
-                                        if (clausePos < matchedRule.fallback_position) {
-                                            statusLabel = 'Breach — below fallback'
+                                        if (clausePos < matchedRule.minimum_position) {
+                                            statusLabel = 'Out of market range'
+                                            statusColor = 'bg-slate-900 text-white border-slate-900'
+                                        } else if (clausePos < matchedRule.fallback_position) {
+                                            statusLabel = 'Out of company range'
                                             statusColor = 'bg-red-50 text-red-600 border-red-200'
-                                        } else if (clausePos === matchedRule.ideal_position) {
-                                            statusLabel = 'Exact match'
-                                            statusColor = 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                        } else {
-                                            statusLabel = clausePos > matchedRule.ideal_position ? 'Above ideal' : 'Below ideal'
+                                        } else if (clausePos < matchedRule.ideal_position - 0.5) {
+                                            statusLabel = 'Outside ideal'
                                             statusColor = 'bg-amber-50 text-amber-700 border-amber-200'
+                                        } else {
+                                            statusLabel = 'Within ideal'
+                                            statusColor = 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                         }
                                     }
 
@@ -6978,12 +7026,14 @@ INSTRUCTIONS:
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    {/* Clause certified position — indigo diamond */}
+                                                    {/* Clause certified position — diamond coloured by 4-tier scheme */}
                                                     {templatePct != null && (
                                                         <div className="absolute z-20"
                                                             style={{ left: `${templatePct}%`, top: '16px', transform: 'translateX(-50%) rotate(45deg)' }}>
                                                             <div className={`w-4 h-4 rounded-sm border-2 border-white shadow-md ${
-                                                                clausePos! >= matchedRule.fallback_position ? 'bg-indigo-500' : 'bg-red-500'
+                                                                clausePos! < matchedRule.minimum_position ? 'bg-slate-900' :
+                                                                clausePos! < matchedRule.fallback_position ? 'bg-red-500' :
+                                                                clausePos! < matchedRule.ideal_position - 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
                                                             }`} />
                                                         </div>
                                                     )}
@@ -7021,7 +7071,11 @@ INSTRUCTIONS:
                                                     {clausePos != null && (
                                                         <>
                                                             <span className="text-slate-300">|</span>
-                                                            <span className={clausePos >= matchedRule.fallback_position ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                                                            <span className={`font-medium ${
+                                                                clausePos < matchedRule.minimum_position ? 'text-slate-900' :
+                                                                clausePos < matchedRule.fallback_position ? 'text-red-600' :
+                                                                clausePos < matchedRule.ideal_position - 0.5 ? 'text-amber-600' : 'text-emerald-600'
+                                                            }`}>
                                                                 Clause: {clausePos}{(() => { const l = translateRulePosition(matchedRule, clausePos); return l && l !== String(clausePos) ? ` · ${l}` : '' })()}
                                                             </span>
                                                         </>
@@ -7041,19 +7095,31 @@ INSTRUCTIONS:
                                             <div className="flex items-center gap-4 text-[9px] text-slate-400 px-1 flex-wrap">
                                                 <span className="flex items-center gap-1.5">
                                                     <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded">Ideal</span>
-                                                    Company sweet spot
+                                                    Company target
                                                 </span>
                                                 <span className="flex items-center gap-1.5">
                                                     <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded">Fallback</span>
-                                                    Backstop — escalate below
+                                                    Company backstop
                                                 </span>
                                                 <span className="flex items-center gap-1.5">
                                                     <span className="inline-block w-3 h-2 rounded bg-amber-100 border border-amber-300" />
                                                     Market range
                                                 </span>
                                                 <span className="flex items-center gap-1.5">
-                                                    <span className="inline-block w-3 h-3 rounded-sm bg-indigo-500 rotate-45" />
-                                                    This clause
+                                                    <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500 rotate-45" />
+                                                    Within ideal
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="inline-block w-3 h-3 rounded-sm bg-amber-500 rotate-45" />
+                                                    Outside ideal
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="inline-block w-3 h-3 rounded-sm bg-red-500 rotate-45" />
+                                                    Out of company range
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className="inline-block w-3 h-3 rounded-sm bg-slate-900 rotate-45" />
+                                                    Out of market
                                                 </span>
                                             </div>
                                         </div>
