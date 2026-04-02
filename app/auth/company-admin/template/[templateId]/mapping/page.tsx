@@ -214,7 +214,7 @@ export default function MappingReviewPage() {
 
             // 2. Playbook metadata
             const { data: pb } = await supabase
-                .from('playbooks')
+                .from('company_playbooks')
                 .select('playbook_id, playbook_name')
                 .eq('playbook_id', playbookId)
                 .single()

@@ -7040,7 +7040,7 @@ INSTRUCTIONS:
                                                 </div>
 
                                                 {/* Scale labels — show first, midpoint, last from rule's own range_context */}
-                                                {rangeCtx && rangeCtx.scale_points.length > 0 && (
+                                                {rangeCtx && rangeCtx.scale_points?.length > 0 && (
                                                     <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
                                                         {rangeCtx.scale_points
                                                             .filter((_, i, arr) => i === 0 || i === Math.floor(arr.length / 2) || i === arr.length - 1)
@@ -7122,6 +7122,19 @@ INSTRUCTIONS:
                                                     Out of market
                                                 </span>
                                             </div>
+
+                                            {/* Review Mapping button */}
+                                            {editTemplateId && (
+                                                <button
+                                                    onClick={() => router.push(`/auth/company-admin/template/${editTemplateId}/mapping`)}
+                                                    className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                    </svg>
+                                                    Review Mapping
+                                                </button>
+                                            )}
                                         </div>
                                     )
                                 })()}
