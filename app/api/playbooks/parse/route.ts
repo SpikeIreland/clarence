@@ -1,14 +1,23 @@
 // ============================================================================
 // FILE: app/api/playbooks/parse/route.ts
-// PURPOSE: Server-side proxy for n8n SLM Section Mapper webhook
+// PURPOSE: Server-side proxy for n8n playbook parsing webhooks
 //          Avoids CORS issues from direct browser-to-n8n calls
 //          Uses fire-and-forget pattern — the frontend polls Supabase
 //          for completion, so we don't need to wait for n8n's response.
+//
+// Supports two workflows:
+//   - "slm" (default)    → SLM Section Mapper for uploaded playbook documents
+//   - "contract"         → Single-pass extraction for contract-to-playbook
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 
 const N8N_WEBHOOK_BASE = process.env.N8N_WEBHOOK_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+const WORKFLOW_ENDPOINTS: Record<string, string> = {
+    slm: '/slm-section-mapper',
+    contract: '/parse-playbook-from-contract',
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -28,8 +37,18 @@ export async function POST(request: NextRequest) {
             )
         }
 
+        // Determine which n8n workflow to call
+        const workflow = body.workflow || 'slm'
+        const endpoint = WORKFLOW_ENDPOINTS[workflow]
+        if (!endpoint) {
+            return NextResponse.json(
+                { error: `Unknown workflow: ${workflow}. Use "slm" or "contract".` },
+                { status: 400 }
+            )
+        }
+
         // Fire-and-forget: send to n8n but don't await the full response.
-        // The SLM pipeline can take several minutes for large contracts,
+        // Both pipelines can take several minutes for large documents,
         // which exceeds Cloudflare's ~100s timeout. The frontend polls
         // Supabase for status updates, so we just need to confirm the
         // webhook accepted the request.
@@ -37,7 +56,7 @@ export async function POST(request: NextRequest) {
         const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s is plenty for n8n to accept
 
         try {
-            const n8nRes = await fetch(`${N8N_WEBHOOK_BASE}/slm-section-mapper`, {
+            const n8nRes = await fetch(`${N8N_WEBHOOK_BASE}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -51,24 +70,24 @@ export async function POST(request: NextRequest) {
 
             if (!n8nRes.ok) {
                 const errText = await n8nRes.text().catch(() => '')
-                console.error('n8n slm-section-mapper error:', n8nRes.status, errText)
+                console.error(`n8n ${endpoint} error:`, n8nRes.status, errText)
                 return NextResponse.json(
                     { error: 'Failed to start playbook analysis', detail: errText },
                     { status: 502 }
                 )
             }
 
-            // If n8n responded quickly (e.g. lightweight playbooks), return the data
+            // If n8n responded quickly, return the data
             const data = await n8nRes.json().catch(() => ({}))
             return NextResponse.json({ success: true, ...data })
         } catch (abortErr: unknown) {
             clearTimeout(timeoutId)
 
             // AbortError means n8n accepted the request but is still processing.
-            // This is expected for large contracts — the webhook is running,
-            // and the frontend will pick up completion via Supabase polling.
+            // This is expected — the webhook is running, and the frontend will
+            // pick up completion via Supabase polling.
             if (abortErr instanceof Error && abortErr.name === 'AbortError') {
-                console.log(`n8n webhook accepted playbook ${body.playbook_id} — processing async`)
+                console.log(`n8n ${endpoint} accepted playbook ${body.playbook_id} — processing async`)
                 return NextResponse.json({
                     success: true,
                     async: true,

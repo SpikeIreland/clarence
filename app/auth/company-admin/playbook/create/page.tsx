@@ -309,13 +309,14 @@ function CreatePlaybookContent() {
             const playbookId = pbData.playbook.playbook_id
             update({ createdPlaybookId: playbookId, uploadStatus: 'parsing' })
 
-            // Send to server-side proxy for n8n parsing (avoids CORS)
+            // Send to server-side proxy for n8n parsing (contract single-pass workflow)
             const n8nRes = await fetch('/api/playbooks/parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     playbook_id: playbookId,
                     extracted_text: extractedText,
+                    workflow: 'contract',
                 }),
             })
             if (!n8nRes.ok) {
