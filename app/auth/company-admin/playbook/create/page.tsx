@@ -309,8 +309,8 @@ function CreatePlaybookContent() {
             const playbookId = pbData.playbook.playbook_id
             update({ createdPlaybookId: playbookId, uploadStatus: 'parsing' })
 
-            // Send to N8N for parsing
-            const n8nRes = await fetch(`${N8N_API_BASE}/slm-section-mapper`, {
+            // Send to server-side proxy for n8n parsing (avoids CORS)
+            const n8nRes = await fetch('/api/playbooks/parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -319,7 +319,7 @@ function CreatePlaybookContent() {
                 }),
             })
             if (!n8nRes.ok) {
-                console.error('N8N slm-section-mapper error:', n8nRes.status, await n8nRes.text().catch(() => ''))
+                console.error('Parse proxy error:', n8nRes.status, await n8nRes.text().catch(() => ''))
                 update({ uploadStatus: 'error', uploadError: 'Failed to start playbook analysis. Please try again.' })
                 return
             }

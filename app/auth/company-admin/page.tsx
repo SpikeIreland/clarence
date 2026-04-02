@@ -3387,13 +3387,13 @@ function CompanyAdminContent() {
 
             console.log(`Text extracted successfully: ${extractedText.length} characters`)
 
-            // Step 5: Send extracted text to N8N webhook
+            // Step 5: Send extracted text to server-side proxy for n8n (avoids CORS)
             // --- Observability: Log parse workflow triggered ---
             eventLogger.started('playbook_upload', 'playbook_parse_triggered', {
-                webhookUrl: `${API_BASE}/slm-section-mapper`
+                webhookUrl: '/api/playbooks/parse'
             })
 
-            const response = await fetch(`${API_BASE}/slm-section-mapper`, {
+            const response = await fetch('/api/playbooks/parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
