@@ -4125,8 +4125,8 @@ INSTRUCTIONS:
                         setExpandedSections(new Set(headerIds))
                     }
 
-                    // Update welcome message now that clauses have arrived
-                    const nonHeaderArrived = mappedClauses.filter(c => !c.isHeader)
+                    // Update welcome message now that clauses have arrived (exclude schedule clauses)
+                    const nonHeaderArrived = mappedClauses.filter(c => !c.isHeader && !/^schedule\s+\d/i.test(c.clauseNumber || ''))
                     const certifiedArrived = nonHeaderArrived.filter(c => c.clarenceCertified).length
                     const totalArrived = nonHeaderArrived.length
                     const contractName = contract?.contractName || 'your document'
@@ -4210,7 +4210,7 @@ INSTRUCTIONS:
             try {
                 const { data: updatedClauses, error } = await supabase
                     .from('uploaded_contract_clauses')
-                    .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
+                    .select('clause_id, clause_number, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
                     .eq('contract_id', effectiveId)
                     .order('display_order', { ascending: true })
 
@@ -4239,10 +4239,11 @@ INSTRUCTIONS:
                     }
                 }))
 
-                // Update progress
-                const certified = updatedClauses.filter(c => c.status === 'certified' && !c.is_header).length
-                const total = updatedClauses.filter(c => !c.is_header).length
-                const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
+                // Update progress (exclude schedule clauses from counts)
+                const mainBodyUpdated = updatedClauses.filter(c => !c.is_header && !isScheduleClause(c))
+                const certified = mainBodyUpdated.filter(c => c.status === 'certified').length
+                const total = mainBodyUpdated.length
+                const failed = mainBodyUpdated.filter(c => c.status === 'failed').length
                 setCertificationProgress({ certified, total, failed })
 
                 // RANGE MAPPING REFRESH: Re-fetch range mappings as they arrive
@@ -4288,8 +4289,8 @@ INSTRUCTIONS:
                     setIsPolling(false)
                     clearInterval(pollInterval)
 
-                    // Update welcome message now that all clauses are certified
-                    const nonHeaderUpdated = updatedClauses.filter(c => !c.is_header)
+                    // Update welcome message now that all clauses are certified (exclude schedule clauses)
+                    const nonHeaderUpdated = updatedClauses.filter(c => !c.is_header && !isScheduleClause(c))
                     const certifiedUpdated = nonHeaderUpdated.filter(c => c.clarence_certified).length
                     const totalUpdated = nonHeaderUpdated.length
                     setChatMessages(prev => prev.map(msg =>
