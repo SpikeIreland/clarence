@@ -143,7 +143,7 @@ export default function MappingReviewPage() {
     const [mappings, setMappings] = useState<MappingRow[]>([])
 
     // UI state
-    const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null)
+    const [selectedClauseId, setSelectedClauseId] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState('all')
     const [hoveredMapping, setHoveredMapping] = useState<number | null>(null)
@@ -220,7 +220,7 @@ export default function MappingReviewPage() {
                 .single()
             if (pb) setPlaybook(pb as PlaybookMeta)
 
-            // 3. Load ALL playbook rules (for the left column)
+            // 3. Load ALL playbook rules (for the right column)
             const { data: pbRules } = await supabase
                 .from('playbook_rules')
                 .select('rule_id, clause_code, clause_name, category, ideal_position, minimum_position, maximum_position, fallback_position, importance_level, is_deal_breaker, is_non_negotiable')
@@ -230,7 +230,7 @@ export default function MappingReviewPage() {
 
             setRules((pbRules || []) as PlaybookRule[])
 
-            // 4. Load ALL template clauses (for the right column)
+            // 4. Load ALL template clauses (for the left column)
             const { data: allClauses } = await supabase
                 .from('template_clauses')
                 .select('template_clause_id, clause_name, clause_number, category, display_order, is_header')
@@ -334,15 +334,16 @@ export default function MappingReviewPage() {
         const svgRect = svgRef.current.getBoundingClientRect()
         const paths = mappings
             .map(mapping => {
-                const ruleEl = ruleCardRefs.current[mapping.playbook_rule_id]
                 const clauseEl = clauseCardRefs.current[mapping.template_clause_id]
-                if (!ruleEl || !clauseEl) return null
-                const rr = ruleEl.getBoundingClientRect()
+                const ruleEl = ruleCardRefs.current[mapping.playbook_rule_id]
+                if (!clauseEl || !ruleEl) return null
                 const cr = clauseEl.getBoundingClientRect()
-                const x1 = rr.right - svgRect.left
-                const y1 = rr.top - svgRect.top + rr.height / 2
-                const x2 = cr.left - svgRect.left
-                const y2 = cr.top - svgRect.top + cr.height / 2
+                const rr = ruleEl.getBoundingClientRect()
+                // Clauses are on the LEFT, rules on the RIGHT
+                const x1 = cr.right - svgRect.left
+                const y1 = cr.top - svgRect.top + cr.height / 2
+                const x2 = rr.left - svgRect.left
+                const y2 = rr.top - svgRect.top + rr.height / 2
                 const cpX = (x2 - x1) * 0.4
                 return { mapping, path: `M ${x1} ${y1} C ${x1 + cpX} ${y1}, ${x2 - cpX} ${y2}, ${x2} ${y2}` }
             })
@@ -369,15 +370,15 @@ export default function MappingReviewPage() {
 
     // ---- Actions: click-to-link, confirm, reject ----------------------------
 
-    const handleRuleClick = (ruleId: string) => {
-        setSelectedRuleId(prev => prev === ruleId ? null : ruleId)
+    const handleClauseClick = (clauseId: string) => {
+        setSelectedClauseId(prev => prev === clauseId ? null : clauseId)
     }
 
-    const handleClauseClick = async (clauseId: string) => {
-        if (!selectedRuleId || !template?.linked_playbook_id) return
+    const handleRuleClick = async (ruleId: string) => {
+        if (!selectedClauseId || !template?.linked_playbook_id) return
 
-        // Check if mapping already exists between this rule and clause
-        const existing = mappings.find(m => m.playbook_rule_id === selectedRuleId && m.template_clause_id === clauseId)
+        // Check if mapping already exists between this clause and rule
+        const existing = mappings.find(m => m.template_clause_id === selectedClauseId && m.playbook_rule_id === ruleId)
         if (existing) {
             // Remove the mapping
             await rejectMapping(existing.mapping_id, false)
@@ -390,8 +391,8 @@ export default function MappingReviewPage() {
                 await supabase
                     .from('playbook_rule_clause_map')
                     .insert({
-                        playbook_rule_id: selectedRuleId,
-                        template_clause_id: clauseId,
+                        playbook_rule_id: ruleId,
+                        template_clause_id: selectedClauseId,
                         template_id: templateId,
                         playbook_id: template.linked_playbook_id,
                         match_method: 'manual',
@@ -406,7 +407,7 @@ export default function MappingReviewPage() {
                 setActionLoading(null)
             }
         }
-        setSelectedRuleId(null)
+        setSelectedClauseId(null)
         setTimeout(updatePaths, 50)
     }
 
@@ -500,7 +501,7 @@ export default function MappingReviewPage() {
                             <p className="text-xs text-slate-500 mt-0.5">
                                 Mapping workspace
                                 {playbook && <> · <span className="text-indigo-600">{playbook.playbook_name}</span></>}
-                                {' · '}Click a rule, then click a clause to link them
+                                {' · '}Click a clause, then click a rule to link them
                             </p>
                         </div>
                     </div>
@@ -509,12 +510,12 @@ export default function MappingReviewPage() {
                 {/* Stats */}
                 <div className="flex gap-3 mb-4">
                     {[
-                        { label: 'Total Rules', value: rules.length, color: 'text-slate-900' },
-                        { label: 'Mapped', value: mappedRuleIds.size, color: 'text-indigo-600' },
-                        { label: 'Unmapped', value: rules.length - mappedRuleIds.size, color: 'text-slate-500' },
+                        { label: 'Clauses', value: clauses.length, color: 'text-slate-900' },
+                        { label: 'Mapped', value: mappedClauseIds.size, color: 'text-indigo-600' },
+                        { label: 'Unmapped', value: clauses.length - mappedClauseIds.size, color: 'text-slate-500' },
                         { label: 'Confirmed', value: confirmedCount, color: 'text-emerald-600' },
                         { label: 'Unconfirmed', value: unconfirmedCount, color: unconfirmedCount > 0 ? 'text-amber-600' : 'text-slate-400' },
-                        { label: 'Mappings', value: mappings.length, color: 'text-slate-900' },
+                        { label: 'Rules', value: rules.length, color: 'text-slate-900' },
                     ].map(s => (
                         <div key={s.label} className="bg-white rounded-lg px-4 py-2 border border-slate-200 flex-1">
                             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{s.label}</div>
@@ -614,12 +615,47 @@ export default function MappingReviewPage() {
                 </svg>
 
                 <div className="flex h-full">
-                    {/* Left: Rules */}
+                    {/* Left: Clauses */}
                     <div ref={leftColRef} className="w-[45%] overflow-y-auto p-4 space-y-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">Template Clauses ({filteredClauses.length})</div>
+                        {filteredClauses.map(clause => {
+                            const isMapped = mappedClauseIds.has(clause.template_clause_id)
+                            const isSelected = selectedClauseId === clause.template_clause_id
+                            const c = getColor(clause.category)
+                            return (
+                                <div
+                                    key={clause.template_clause_id}
+                                    ref={el => { clauseCardRefs.current[clause.template_clause_id] = el }}
+                                    onClick={() => handleClauseClick(clause.template_clause_id)}
+                                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                                        isSelected ? 'ring-2 ring-indigo-500 border-indigo-400 bg-indigo-50 scale-[1.02] shadow-md' :
+                                        isMapped ? `border-slate-200 ${c.bg} hover:shadow-sm` :
+                                        'border-dashed border-slate-300 bg-white opacity-60 hover:opacity-80'
+                                    }`}
+                                >
+                                    <div className="flex items-start gap-2 mb-1.5">
+                                        <span className="inline-block bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0">
+                                            {clause.clause_number || '—'}
+                                        </span>
+                                        <h3 className="text-xs font-semibold text-slate-800 leading-tight">{clause.clause_name}</h3>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${c.badge}`}>{(clause.category || '').replace(/_/g, ' ')}</span>
+                                        {!isMapped && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">unmapped</span>}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+
+                    {/* Center gap for connector lines */}
+                    <div className="w-[10%] flex-shrink-0" />
+
+                    {/* Right: Rules */}
+                    <div ref={rightColRef} className="w-[45%] overflow-y-auto p-4 space-y-2">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">Playbook Rules ({filteredRules.length})</div>
                         {filteredRules.map(rule => {
                             const isMapped = mappedRuleIds.has(rule.rule_id)
-                            const isSelected = selectedRuleId === rule.rule_id
                             const c = getColor(rule.category)
                             return (
                                 <div
@@ -627,7 +663,8 @@ export default function MappingReviewPage() {
                                     ref={el => { ruleCardRefs.current[rule.rule_id] = el }}
                                     onClick={() => handleRuleClick(rule.rule_id)}
                                     className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                                        isSelected ? 'ring-2 ring-indigo-500 border-indigo-400 bg-indigo-50 scale-[1.02] shadow-md' :
+                                        selectedClauseId ? 'hover:ring-2 hover:ring-indigo-500 hover:shadow-md' : ''
+                                    } ${
                                         isMapped ? `border-slate-200 ${c.bg} hover:shadow-sm` :
                                         'border-dashed border-slate-300 bg-white opacity-60 hover:opacity-80'
                                     }`}
@@ -669,42 +706,6 @@ export default function MappingReviewPage() {
                             )
                         })}
                     </div>
-
-                    {/* Center gap for connector lines */}
-                    <div className="w-[10%] flex-shrink-0" />
-
-                    {/* Right: Clauses */}
-                    <div ref={rightColRef} className="w-[45%] overflow-y-auto p-4 space-y-2">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">Template Clauses ({filteredClauses.length})</div>
-                        {filteredClauses.map(clause => {
-                            const isMapped = mappedClauseIds.has(clause.template_clause_id)
-                            const c = getColor(clause.category)
-                            return (
-                                <div
-                                    key={clause.template_clause_id}
-                                    ref={el => { clauseCardRefs.current[clause.template_clause_id] = el }}
-                                    onClick={() => handleClauseClick(clause.template_clause_id)}
-                                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                                        selectedRuleId ? 'hover:ring-2 hover:ring-indigo-500 hover:shadow-md' : ''
-                                    } ${
-                                        isMapped ? `border-slate-200 ${c.bg} hover:shadow-sm` :
-                                        'border-dashed border-slate-300 bg-white opacity-60 hover:opacity-80'
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-2 mb-1.5">
-                                        <span className="inline-block bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0">
-                                            {clause.clause_number || '—'}
-                                        </span>
-                                        <h3 className="text-xs font-semibold text-slate-800 leading-tight">{clause.clause_name}</h3>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${c.badge}`}>{(clause.category || '').replace(/_/g, ' ')}</span>
-                                        {!isMapped && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">unmapped</span>}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
                 </div>
             </div>
 
@@ -732,16 +733,18 @@ export default function MappingReviewPage() {
                         return (
                             <>
                                 <div className="mb-2">
-                                    <p className="text-xs font-semibold text-slate-900 leading-snug">
-                                        {rule?.clause_name || 'Unknown rule'}
-                                    </p>
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                        <span className="text-slate-400 text-[10px]">maps to</span>
-                                        <span className="bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                    <div className="flex items-start gap-2 mb-1">
+                                        <span className="bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0">
                                             {clause?.clause_number || '—'}
                                         </span>
-                                        <span className="text-xs text-slate-700">
+                                        <p className="text-xs font-semibold text-slate-900 leading-snug">
                                             {clause?.clause_name || 'Unknown clause'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        <span className="text-slate-400 text-[10px]">maps to rule</span>
+                                        <span className="text-xs text-slate-700 font-medium">
+                                            {rule?.clause_name || 'Unknown rule'}
                                         </span>
                                     </div>
                                 </div>
@@ -791,9 +794,9 @@ export default function MappingReviewPage() {
             )}
 
             {/* Selection hint bar */}
-            {selectedRuleId && (
+            {selectedClauseId && (
                 <div className="flex-shrink-0 bg-indigo-600 text-white px-6 py-2 text-sm text-center">
-                    Rule selected: <strong>{ruleById.get(selectedRuleId)?.clause_name}</strong> — now click a clause on the right to create a mapping, or click the rule again to deselect
+                    Clause selected: <strong>{clauseById.get(selectedClauseId)?.clause_number} {clauseById.get(selectedClauseId)?.clause_name}</strong> — now click a rule on the right to link, or click the clause again to deselect
                 </div>
             )}
         </div>
