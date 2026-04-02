@@ -150,7 +150,10 @@ export default function MappingWorkspacePrototype() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [hoveredMapping, setHoveredMapping] = useState<number | null>(null)
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null)
   const [svgPaths, setSvgPaths] = useState<Array<{ mapping: typeof seedMappings[0]; path: string }>>([])
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
 
   const ruleCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const clauseCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -317,8 +320,20 @@ export default function MappingWorkspacePrototype() {
                 strokeWidth="14"
                 fill="none"
                 className="pointer-events-auto cursor-pointer"
-                onMouseEnter={() => setHoveredMapping(idx)}
-                onMouseLeave={() => setHoveredMapping(null)}
+                onMouseEnter={(e) => {
+                  if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
+                  setHoveredMapping(idx)
+                  setHoverPos({ x: e.clientX, y: e.clientY })
+                }}
+                onMouseMove={(e) => {
+                  setHoverPos({ x: e.clientX, y: e.clientY })
+                }}
+                onMouseLeave={() => {
+                  hoverTimeout.current = setTimeout(() => {
+                    setHoveredMapping(null)
+                    setHoverPos(null)
+                  }, 300)
+                }}
               />
               <path
                 d={p.path}
@@ -447,31 +462,66 @@ export default function MappingWorkspacePrototype() {
         </div>
       </div>
 
-      {/* Bottom details panel on hover */}
-      {hoveredMapping !== null && svgPaths[hoveredMapping] && (
-        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-6 py-3 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">
+      {/* Floating popover on connector hover */}
+      {hoveredMapping !== null && svgPaths[hoveredMapping] && hoverPos && (
+        <div
+          ref={popoverRef}
+          onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current) }}
+          onMouseLeave={() => {
+            hoverTimeout.current = setTimeout(() => {
+              setHoveredMapping(null)
+              setHoverPos(null)
+            }, 200)
+          }}
+          className="fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 p-3 min-w-[280px]"
+          style={{
+            left: Math.min(hoverPos.x + 12, window.innerWidth - 320),
+            top: Math.max(8, Math.min(hoverPos.y - 60, window.innerHeight - 180)),
+          }}
+        >
+          <div className="mb-2">
+            <p className="text-xs font-semibold text-slate-900 leading-snug">
               {rules.find(r => r.rule_id === svgPaths[hoveredMapping].mapping.rule_id)?.clause_name}
-              <span className="text-slate-400 mx-2">&rarr;</span>
-              <span className="bg-slate-800 text-white text-xs font-bold px-2 py-0.5 rounded mr-1">
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-slate-400 text-[10px]">maps to</span>
+              <span className="bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
                 {svgPaths[hoveredMapping].mapping.clause_number}
               </span>
-              {clauses.find(c => c.clause_number === svgPaths[hoveredMapping].mapping.clause_number)?.clause_name}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Confidence: {svgPaths[hoveredMapping].mapping.confidence}%
-              {svgPaths[hoveredMapping].mapping.is_confirmed ? ' — Confirmed' : ' — Unconfirmed'}
-            </p>
+              <span className="text-xs text-slate-700">
+                {clauses.find(c => c.clause_number === svgPaths[hoveredMapping].mapping.clause_number)?.clause_name}
+              </span>
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 mb-2.5">
+            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${svgPaths[hoveredMapping].mapping.confidence}%`,
+                  backgroundColor: getLineColor(svgPaths[hoveredMapping].mapping.confidence),
+                }}
+              />
+            </div>
+            <span className="text-[10px] font-bold" style={{ color: getLineColor(svgPaths[hoveredMapping].mapping.confidence) }}>
+              {svgPaths[hoveredMapping].mapping.confidence}%
+            </span>
+            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${
+              svgPaths[hoveredMapping].mapping.is_confirmed
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-slate-100 text-slate-500'
+            }`}>
+              {svgPaths[hoveredMapping].mapping.is_confirmed ? 'Confirmed' : 'Unconfirmed'}
+            </span>
+          </div>
+          <div className="flex gap-1.5">
             {!svgPaths[hoveredMapping].mapping.is_confirmed && (
               <button
                 onClick={() => {
                   const idx = mappings.indexOf(svgPaths[hoveredMapping].mapping)
                   if (idx >= 0) setMappings(prev => prev.map((m, i) => i === idx ? { ...m, is_confirmed: true } : m))
                 }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700"
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors flex-1 justify-center"
               >
                 <CheckIcon /> Confirm
               </button>
@@ -479,9 +529,9 @@ export default function MappingWorkspacePrototype() {
             <button
               onClick={() => {
                 const idx = mappings.indexOf(svgPaths[hoveredMapping].mapping)
-                if (idx >= 0) { setMappings(prev => prev.filter((_, i) => i !== idx)); setHoveredMapping(null) }
+                if (idx >= 0) { setMappings(prev => prev.filter((_, i) => i !== idx)); setHoveredMapping(null); setHoverPos(null) }
               }}
-              className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 transition-colors flex-1 justify-center"
             >
               <XIcon /> Reject
             </button>
