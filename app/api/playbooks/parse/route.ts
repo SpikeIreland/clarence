@@ -2,6 +2,8 @@
 // FILE: app/api/playbooks/parse/route.ts
 // PURPOSE: Server-side proxy for n8n SLM Section Mapper webhook
 //          Avoids CORS issues from direct browser-to-n8n calls
+//          Uses fire-and-forget pattern — the frontend polls Supabase
+//          for completion, so we don't need to wait for n8n's response.
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,27 +28,55 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // Forward to n8n Section Mapper webhook (server-side, no CORS)
-        const n8nRes = await fetch(`${N8N_WEBHOOK_BASE}/slm-section-mapper`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                playbook_id: body.playbook_id,
-                extracted_text: body.extracted_text,
-            }),
-        })
+        // Fire-and-forget: send to n8n but don't await the full response.
+        // The SLM pipeline can take several minutes for large contracts,
+        // which exceeds Cloudflare's ~100s timeout. The frontend polls
+        // Supabase for status updates, so we just need to confirm the
+        // webhook accepted the request.
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000) // 15s is plenty for n8n to accept
 
-        if (!n8nRes.ok) {
-            const errText = await n8nRes.text().catch(() => '')
-            console.error('n8n slm-section-mapper error:', n8nRes.status, errText)
-            return NextResponse.json(
-                { error: 'Failed to start playbook analysis', detail: errText },
-                { status: 502 }
-            )
+        try {
+            const n8nRes = await fetch(`${N8N_WEBHOOK_BASE}/slm-section-mapper`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    playbook_id: body.playbook_id,
+                    extracted_text: body.extracted_text,
+                }),
+                signal: controller.signal,
+            })
+
+            clearTimeout(timeoutId)
+
+            if (!n8nRes.ok) {
+                const errText = await n8nRes.text().catch(() => '')
+                console.error('n8n slm-section-mapper error:', n8nRes.status, errText)
+                return NextResponse.json(
+                    { error: 'Failed to start playbook analysis', detail: errText },
+                    { status: 502 }
+                )
+            }
+
+            // If n8n responded quickly (e.g. lightweight playbooks), return the data
+            const data = await n8nRes.json().catch(() => ({}))
+            return NextResponse.json({ success: true, ...data })
+        } catch (abortErr: unknown) {
+            clearTimeout(timeoutId)
+
+            // AbortError means n8n accepted the request but is still processing.
+            // This is expected for large contracts — the webhook is running,
+            // and the frontend will pick up completion via Supabase polling.
+            if (abortErr instanceof Error && abortErr.name === 'AbortError') {
+                console.log(`n8n webhook accepted playbook ${body.playbook_id} — processing async`)
+                return NextResponse.json({
+                    success: true,
+                    async: true,
+                    message: 'Playbook analysis started. Polling for completion.',
+                })
+            }
+            throw abortErr
         }
-
-        const data = await n8nRes.json().catch(() => ({}))
-        return NextResponse.json({ success: true, ...data })
     } catch (e) {
         console.error('Parse proxy error:', e)
         return NextResponse.json(
