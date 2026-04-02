@@ -3444,7 +3444,8 @@ function CompanyAdminContent() {
                     .select('status')
                     .eq('playbook_id', playbookId)
                     .single()
-                if (data && data.status !== 'parsing') {
+                const terminalStatuses = ['parsed', 'active', 'review_required', 'parse_failed']
+                if (data && terminalStatuses.includes(data.status)) {
                     clearInterval(pollInterval)
                     await loadPlaybooks(companyId)
                 }
