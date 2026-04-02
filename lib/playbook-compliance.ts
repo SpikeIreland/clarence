@@ -180,9 +180,11 @@ const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
     'definitions': 'Definitions',
     'dispute_resolution': 'Dispute Resolution',
     'general': 'General',
+    'uncategorised': 'Uncategorised',
 }
 
-export function normaliseCategory(raw: string): string {
+export function normaliseCategory(raw: string | null | undefined): string {
+    if (!raw) return 'uncategorised'
     const key = raw.toLowerCase().replace(/_/g, ' ').trim()
     return CATEGORY_MAP[key] || key.replace(/\s+/g, '_')
 }
