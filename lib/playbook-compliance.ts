@@ -36,13 +36,7 @@ export interface PlaybookRule {
     negotiation_tips: string | null
     range_context: PlaybookRangeContext | null
     source_quote: string | null
-    source_context: {
-        section_ref?: string
-        section_name?: string
-        parent_context?: string
-    } | null
     quality_flags: string[] | null
-    review_accepted: boolean
     display_order?: number
     updated_at?: string | null
     schedule_type?: string | null      // null = main body rule, non-null = schedule-specific rule
@@ -180,11 +174,9 @@ const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
     'definitions': 'Definitions',
     'dispute_resolution': 'Dispute Resolution',
     'general': 'General',
-    'uncategorised': 'Uncategorised',
 }
 
-export function normaliseCategory(raw: string | null | undefined): string {
-    if (!raw) return 'uncategorised'
+export function normaliseCategory(raw: string): string {
     const key = raw.toLowerCase().replace(/_/g, ' ').trim()
     return CATEGORY_MAP[key] || key.replace(/\s+/g, '_')
 }

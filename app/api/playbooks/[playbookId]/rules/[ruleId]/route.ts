@@ -27,10 +27,6 @@ const ALLOWED_FIELDS = [
     'requires_approval_below',
     'quality_flags',
     'source_quote',
-    'source_context',
-    'review_accepted',
-    'is_active',
-    'clause_name',
     'schedule_type',
 ] as const
 

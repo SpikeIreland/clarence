@@ -469,7 +469,7 @@ function AddRuleModal({ categoryOptions, onAdd, onClose, saving }: {
 // RULE CARD
 // ============================================================================
 
-function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, saving, onDelete, onAcceptReview, acceptingReview }: {
+function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, saving, onDelete }: {
     rule: PlaybookRule
     isDirty: boolean
     onFieldChange: (field: string, value: unknown) => void
@@ -477,8 +477,6 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
     onSave: () => void
     saving: boolean
     onDelete: () => void
-    onAcceptReview: () => void
-    acceptingReview: boolean
 }) {
     const [editingField, setEditingField] = useState<string | null>(null)
     const [showSource, setShowSource] = useState(false)
@@ -518,21 +516,8 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                             {rule.clause_name}
                         </h4>
                     )}
-                    {allSamePosition && !rule.review_accepted && (
-                        <span className="inline-flex items-center gap-1.5 flex-shrink-0">
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200">Needs Review</span>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onAcceptReview() }}
-                                disabled={acceptingReview}
-                                className="px-1.5 py-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-600 rounded border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
-                                title="Accept this rule as-is — clears the review flag"
-                            >
-                                {acceptingReview ? '...' : 'Accept'}
-                            </button>
-                        </span>
-                    )}
-                    {allSamePosition && rule.review_accepted && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-600 rounded border border-emerald-200 flex-shrink-0">Accepted</span>
+                    {allSamePosition && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200 flex-shrink-0">Needs Review</span>
                     )}
                 </div>
                 <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
@@ -686,25 +671,7 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                         Source extract
                     </button>
                     {showSource && (
-                        <div className="mt-1.5 space-y-1.5">
-                            {/* Source context: section ref, name, parent */}
-                            {rule.source_context && (rule.source_context.section_ref || rule.source_context.section_name) && (
-                                <div className="px-3 py-1.5 bg-indigo-50/50 border-l-2 border-indigo-300 rounded-r">
-                                    <div className="flex items-center gap-2 text-[10px] text-indigo-600 font-medium">
-                                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                        {rule.source_context.section_ref && (
-                                            <span className="px-1 py-0.5 bg-indigo-100 rounded font-mono">{rule.source_context.section_ref}</span>
-                                        )}
-                                        {rule.source_context.section_name && (
-                                            <span>{rule.source_context.section_name}</span>
-                                        )}
-                                    </div>
-                                    {rule.source_context.parent_context && (
-                                        <p className="mt-1 text-[10px] text-slate-500 pl-5">{rule.source_context.parent_context}</p>
-                                    )}
-                                </div>
-                            )}
-                            {/* Verbatim source quote */}
+                        <div className="mt-1.5">
                             {rule.source_quote ? (
                                 <div className="px-3 py-2 bg-slate-50 border-l-2 border-indigo-200 rounded-r text-[11px] text-slate-600 italic leading-relaxed">
                                     &ldquo;{rule.source_quote}&rdquo;
@@ -1004,32 +971,11 @@ function PlaybookReviewContent() {
         setTimeout(() => setSaveAllStatus(null), 2000)
     }
 
-    // Helper: check if a rule needs review (identical positions AND not yet accepted)
+    // Helper: check if a rule needs review
     const ruleNeedsReview = (r: PlaybookRule) =>
         r.ideal_position === r.minimum_position &&
         r.ideal_position === r.maximum_position &&
-        r.ideal_position === r.fallback_position &&
-        !r.review_accepted
-
-    // Accept a flagged rule as-is
-    const [acceptingRules, setAcceptingRules] = useState<Set<string>>(new Set())
-    const handleAcceptReview = async (ruleId: string) => {
-        setAcceptingRules(prev => new Set(prev).add(ruleId))
-        try {
-            const res = await fetch(`/api/playbooks/${playbookId}/rules/${ruleId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ review_accepted: true }),
-            })
-            if (res.ok) {
-                setRules(prev => prev.map(r => r.rule_id === ruleId ? { ...r, review_accepted: true } : r))
-            }
-        } catch (e) {
-            console.error('Accept review error:', e)
-        } finally {
-            setAcceptingRules(prev => { const next = new Set(prev); next.delete(ruleId); return next })
-        }
-    }
+        r.ideal_position === r.fallback_position
 
     // Filter and search
     const filteredGroups = ruleGroups
@@ -1350,8 +1296,6 @@ function PlaybookReviewContent() {
                                         onSave={() => saveRule(rule.rule_id)}
                                         saving={savingRules.has(rule.rule_id)}
                                         onDelete={() => handleDeleteRule(rule.rule_id)}
-                                        onAcceptReview={() => handleAcceptReview(rule.rule_id)}
-                                        acceptingReview={acceptingRules.has(rule.rule_id)}
                                     />
                                 ))}
                             </div>

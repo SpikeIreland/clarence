@@ -930,7 +930,7 @@ interface TemplatesTabProps {
     isLoading: boolean
     userInfo: UserInfo | null
     playbooks: Playbook[]
-    onUpload: (file: File, templateName: string, contractType: string) => Promise<string>
+    onUpload: (file: File, templateName: string, contractType: string, linkedPlaybookId?: string) => Promise<string>
     onDelete: (templateId: string) => Promise<void>
     onToggleActive: (templateId: string, isActive: boolean) => Promise<void>
     onRefresh: () => void
@@ -1360,6 +1360,10 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
             setUploadError('User not authenticated')
             return
         }
+        if (!uploadLinkedPlaybookId) {
+            setUploadError('Please select a playbook. A linked playbook is required so party roles and compliance positions can be established.')
+            return
+        }
 
         setIsUploading(true)
         setUploadError(null)
@@ -1398,11 +1402,11 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
 
             // --- Observability: Log parse workflow triggered ---
             eventLogger.started('template_upload', 'parse_workflow_triggered', {
-                webhookUrl: `${API_BASE}/parse-contract-document`,
+                webhookUrl: `${API_BASE}/parse-template-structure`,
                 upload_source: 'company_admin'
             })
 
-            const response = await fetch(`${API_BASE}/parse-contract-document`, {
+            const response = await fetch(`${API_BASE}/parse-template-structure`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1415,6 +1419,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                     contract_type: contractType,
                     contract_type_key: DOCUMENT_TYPE_KEY_MAP[contractType] || contractType,
                     template_name: templateName,
+                    linked_playbook_id: uploadLinkedPlaybookId,
                     create_as_template: true,
                     is_company_template: true
                 })
@@ -1546,14 +1551,15 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
                                     Link to Playbook
-                                    <span className="ml-1.5 text-xs font-normal text-slate-400">(optional — sets compliance benchmark)</span>
+                                    <span className="ml-1.5 text-xs font-normal text-red-500">* required</span>
+                                    <span className="ml-1 text-xs font-normal text-slate-400">(establishes party roles &amp; compliance benchmark)</span>
                                 </label>
                                 <select
                                     value={uploadLinkedPlaybookId}
                                     onChange={(e) => setUploadLinkedPlaybookId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${!uploadLinkedPlaybookId ? 'border-amber-300 bg-amber-50' : 'border-slate-300'}`}
                                 >
-                                    <option value="">— No playbook —</option>
+                                    <option value="">— Select a playbook —</option>
                                     {playbooks.filter(p => p.isActive && p.rulesExtracted > 0).map(p => (
                                         <option key={p.playbookId} value={p.playbookId}>
                                             {p.playbookName}{p.contractTypeKey ? ` (${CONTRACT_TYPE_OPTIONS.find(o => o.value === p.contractTypeKey)?.label || p.contractTypeKey})` : ''}
@@ -1581,10 +1587,10 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                         <div className="flex gap-3 mt-6">
                             <button
                                 onClick={handleUploadSubmit}
-                                disabled={isUploading || !templateName.trim()}
+                                disabled={isUploading || !templateName.trim() || !uploadLinkedPlaybookId}
                                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isUploading ? 'Processing...' : 'Upload & Certify'}
+                                {isUploading ? 'Processing...' : 'Upload & Parse'}
                             </button>
                             <button
                                 onClick={() => {
@@ -3613,7 +3619,7 @@ function CompanyAdminContent() {
         await loadPlaybooks(userInfo.companyId)
     }
 
-    const handleTemplateUpload = async (file: File, templateName: string, contractType: string): Promise<string> => {
+    const handleTemplateUpload = async (file: File, templateName: string, contractType: string, linkedPlaybookId?: string): Promise<string> => {
         if (!userInfo?.companyId || !userInfo?.userId) throw new Error('Not authenticated')
 
         const extractTextFromFile = async (file: File): Promise<string> => {
@@ -3657,7 +3663,7 @@ function CompanyAdminContent() {
             throw new Error('Could not extract sufficient text from the document')
         }
 
-        const response = await fetch(`${API_BASE}/parse-contract-document`, {
+        const response = await fetch(`${API_BASE}/parse-template-structure`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3668,7 +3674,9 @@ function CompanyAdminContent() {
                 file_size: file.size,
                 document_text: extractedText,
                 contract_type: contractType,
+                contract_type_key: contractType,
                 template_name: templateName,
+                linked_playbook_id: linkedPlaybookId || null,
                 create_as_template: true,
                 is_company_template: true
             })
