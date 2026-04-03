@@ -309,17 +309,18 @@ function CreatePlaybookContent() {
             const playbookId = pbData.playbook.playbook_id
             update({ createdPlaybookId: playbookId, uploadStatus: 'parsing' })
 
-            // Send to N8N for parsing
-            const n8nRes = await fetch(`${N8N_API_BASE}/parse-playbook`, {
+            // Send to server-side proxy for n8n parsing (contract single-pass workflow)
+            const n8nRes = await fetch('/api/playbooks/parse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     playbook_id: playbookId,
                     extracted_text: extractedText,
+                    workflow: 'contract',
                 }),
             })
             if (!n8nRes.ok) {
-                console.error('N8N parse-playbook error:', n8nRes.status, await n8nRes.text().catch(() => ''))
+                console.error('Parse proxy error:', n8nRes.status, await n8nRes.text().catch(() => ''))
                 update({ uploadStatus: 'error', uploadError: 'Failed to start playbook analysis. Please try again.' })
                 return
             }
