@@ -135,7 +135,7 @@ interface ContractClause {
     // Position options (from clause library)
     positionOptions: PositionOption[]
     isHeader: boolean
-    processingStatus: 'pending' | 'processing' | 'certified' | 'failed'
+    processingStatus: 'pending' | 'processing' | 'certified' | 'failed' | 'extracted'
 }
 
 interface PositionOption {
