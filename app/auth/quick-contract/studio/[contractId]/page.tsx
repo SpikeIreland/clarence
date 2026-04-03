@@ -75,6 +75,7 @@ import { calculatePlaybookCompliance, normaliseCategory, getEffectiveRangeContex
 // Schedule detection types
 import { getRequiredSchedules } from '@/lib/schedule-types'
 // Schedule workspace components
+import PositionBar, { type ScalePoint } from '@/app/components/PositionBar'
 import StudioTabSwitcher, { type StudioTab } from '@/app/components/StudioTabSwitcher'
 import SchedulesWorkspace from '@/app/components/SchedulesWorkspace'
 import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
@@ -6133,178 +6134,39 @@ INSTRUCTIONS:
                                         <div className="bg-white rounded-xl border border-slate-200 p-5">
                                             <h3 className="text-sm font-semibold text-slate-700 mb-4">CLARENCE Recommended Position</h3>
 
-                                            {/* Position Scale */}
-                                            <div className="relative mb-6 pt-6 pb-2">
-                                                {/* Scale Background - BLUE (provider/flexibility) left â†’ EMERALD (customer/protection) right */}
-                                                <div className="relative h-4 bg-gradient-to-r from-blue-200 via-teal-200 via-50% to-emerald-200 rounded-full">
-                                                    {/* Scale markers (1-10 mapped to full bar width) */}
-                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                                        <div
-                                                            key={n}
-                                                            className="absolute top-0 bottom-0 w-px bg-white/50"
-                                                            style={{ left: `${positionToPercent(n)}%` }}
-                                                        />
-                                                    ))}
-
-                                                    {/* Playbook rule overlay — shown in template mode when clause has a confirmed mapping */}
-                                                    {isTemplateMode && (() => {
+                                            {/* ═══ UNIFIED POSITION BAR — Overview Tab ═══ */}
+                                            <div className="mb-6">
+                                                <PositionBar
+                                                    scalePoints={(() => {
+                                                        const rm = rangeMappings.get(selectedClause.clauseId)
+                                                        if (!rm?.isDisplayable || !rm.rangeData.scale_points.length) return []
+                                                        return rm.rangeData.scale_points.map(sp => ({
+                                                            position: sp.position,
+                                                            label: sp.label,
+                                                            value: sp.value,
+                                                            description: sp.description,
+                                                        }))
+                                                    })()}
+                                                    leftParty={roleContext?.providingPartyLabel || 'Party B'}
+                                                    rightParty={roleContext?.protectedPartyLabel || 'Party A'}
+                                                    clarence={getUserDisplayPosition(selectedClause) !== null ? {
+                                                        position: getUserDisplayPosition(selectedClause) || 5,
+                                                        draggable: isInitiator,
+                                                        onPositionChange: (pos) => handlePositionChange(selectedClause.clauseId, pos),
+                                                        fairnessLabel: selectedClause.clarenceFairness ? getFairnessLabel(selectedClause.clarenceFairness) : undefined,
+                                                    } : null}
+                                                    playbook={isTemplateMode ? (() => {
                                                         const overlay = playbookRuleOverlays.get(selectedClause.clauseName?.toLowerCase())
                                                         if (!overlay) return null
-                                                        const idealPct = positionToPercent(overlay.ideal)
-                                                        const minPct = positionToPercent(overlay.min)
-                                                        const maxPct = positionToPercent(overlay.max)
-                                                        return (
-                                                            <>
-                                                                {/* Acceptable range band */}
-                                                                <div
-                                                                    className="absolute inset-y-1 rounded-full bg-indigo-400/30 border border-indigo-400/50 z-10"
-                                                                    style={{ left: `${minPct}%`, width: `${Math.max(0.5, maxPct - minPct)}%` }}
-                                                                    title={`Playbook range: ${overlay.min}–${overlay.max}`}
-                                                                />
-                                                                {/* Ideal position marker */}
-                                                                <div
-                                                                    className="absolute top-0 bottom-0 w-1 bg-indigo-600 z-10 rounded-full"
-                                                                    style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }}
-                                                                    title={`Playbook ideal: ${overlay.ideal}`}
-                                                                />
-                                                            </>
-                                                        )
-                                                    })()}
-
-                                                    {/* CLARENCE Badge - Only marker shown */}
-                                                    {/* POSITION BAR: Left = Provider-Favouring (1), Right = Customer-Favouring (10) */}
-                                                    {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
-                                                    {getUserDisplayPosition(selectedClause) !== null && (
-                                                        <div
-                                                            className={`absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all ${isInitiator ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'cursor-default'}`}
-                                                            style={{
-                                                                left: `${positionToPercent(getUserDisplayPosition(selectedClause) || 5)}%`,
-                                                                top: '50%',
-                                                                transform: 'translate(-50%, -50%)'
-                                                            }}
-                                                            title={isInitiator
-                                                                ? `Position: ${(getUserDisplayPosition(selectedClause) || 5).toFixed(1)} - Drag to adjust`
-                                                                : `Position: ${(getUserDisplayPosition(selectedClause) || 5).toFixed(1)} (view only)`
-                                                            }
-                                                            draggable={false}
-                                                            onMouseDown={isInitiator ? (e) => {
-                                                                e.preventDefault()
-                                                                const bar = e.currentTarget.parentElement
-                                                                if (!bar) return
-
-                                                                const handleMouseMove = (moveEvent: MouseEvent) => {
-                                                                    const rect = bar.getBoundingClientRect()
-                                                                    const x = moveEvent.clientX - rect.left
-                                                                    const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const newPosition = Math.max(1, percent * 10)
-                                                                    const roundedPosition = Math.round(newPosition * 2) / 2
-
-                                                                    const role = getPartyRole()
-                                                                    setClauses(prev => prev.map(c =>
-                                                                        c.clauseId === selectedClause.clauseId
-                                                                            ? {
-                                                                                ...c,
-                                                                                ...(role === 'initiator'
-                                                                                    ? { initiatorPosition: roundedPosition }
-                                                                                    : { respondentPosition: roundedPosition }
-                                                                                )
-                                                                            }
-                                                                            : c
-                                                                    ))
-                                                                }
-
-                                                                const handleMouseUp = (upEvent: MouseEvent) => {
-                                                                    document.removeEventListener('mousemove', handleMouseMove)
-                                                                    document.removeEventListener('mouseup', handleMouseUp)
-
-                                                                    const rect = bar.getBoundingClientRect()
-                                                                    const x = upEvent.clientX - rect.left
-                                                                    const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const finalPosition = Math.max(1, Math.round((percent * 10) * 2) / 2)
-
-                                                                    handlePositionChange(selectedClause.clauseId, finalPosition)
-                                                                }
-
-                                                                document.addEventListener('mousemove', handleMouseMove)
-                                                                document.addEventListener('mouseup', handleMouseUp)
-                                                            } : undefined}
-                                                        >
-                                                            C
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Scale Labels — Real-world values if range mapping exists, otherwise numeric */}
-                                                {rangeMappings.has(selectedClause.clauseId) && rangeMappings.get(selectedClause.clauseId)?.isDisplayable ? (
-                                                    <>
-                                                        <div className="relative mt-4 h-4">
-                                                            {[1, 3, 5, 7, 10].map(pos => {
-                                                                const point = rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === pos)
-                                                                // Pin edge labels to bar edges; centre the rest
-                                                                const leftPercent = pos === 1 ? 0 : pos === 10 ? 100 : positionToPercent(pos)
-                                                                const alignment = pos === 1 ? 'translate-x-0' : pos === 10 ? '-translate-x-full' : '-translate-x-1/2'
-                                                                return point ? (
-                                                                    <span key={pos} className={`absolute text-[10px] text-slate-500 font-medium ${alignment}`} style={{ left: `${leftPercent}%` }}>
-                                                                        {point.label}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span key={pos} className={`absolute text-[10px] text-slate-400 font-medium ${alignment}`} style={{ left: `${leftPercent}%` }}>{pos}</span>
-                                                                )
-                                                            })}
-                                                        </div>
-                                                        {/* Current position — show real-world value */}
-                                                        {getUserDisplayPosition(selectedClause) !== null && (
-                                                            <div className="text-center mt-2">
-                                                                <span className="text-sm font-semibold text-purple-700">
-                                                                    {translatePosition(getUserDisplayPosition(selectedClause), selectedClause.clauseId)?.label}
-                                                                </span>
-                                                                <span className="text-xs text-slate-400 ml-2">
-                                                                    (Position {getUserDisplayPosition(selectedClause)?.toFixed(1)})
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                        {/* Industry standard band indicator */}
-                                                        {rangeMappings.get(selectedClause.clauseId)?.industryStandardMin && (
-                                                            <div className="text-center mt-1">
-                                                                <span className="text-[10px] text-purple-400">
-                                                                    Industry standard: {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMin)?.label || ''} — {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMax)?.label || ''}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                        {/* Party role labels */}
-                                                        <div className="flex justify-between mt-1.5 text-[10px] text-slate-400">
-                                                            <span>← {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Favours Party B'}</span>
-                                                            <span>{roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Favours Party A'} →</span>
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        {/* No range mappings — show simple orientation only */}
-                                                        <div className="flex justify-between mt-1.5 text-[10px] text-slate-400">
-                                                            <span>← {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Favours Party B'}</span>
-                                                            <span>{roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Favours Party A'} →</span>
-                                                        </div>
-                                                    </>
-                                                )}
+                                                        return {
+                                                            ideal: overlay.ideal,
+                                                            fallback: overlay.min,
+                                                            minimum: overlay.min,
+                                                            maximum: overlay.max,
+                                                        }
+                                                    })() : null}
+                                                />
                                             </div>
-
-                                            {/* Playbook overlay legend — template mode only */}
-                                            {isTemplateMode && (() => {
-                                                const overlay = playbookRuleOverlays.get(selectedClause.clauseName?.toLowerCase())
-                                                if (!overlay) return null
-                                                return (
-                                                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mb-3">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <div className="w-3 h-3 rounded-sm bg-indigo-400/50 border border-indigo-400"></div>
-                                                            <span>Playbook acceptable range ({overlay.min}–{overlay.max})</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <div className="w-0.5 h-3 bg-indigo-600 rounded-full"></div>
-                                                            <span>Ideal position ({overlay.ideal})</span>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })()}
 
                                             {/* Position Details */}
                                             <div className="flex items-center gap-6">
@@ -7012,13 +6874,7 @@ INSTRUCTIONS:
                                         )
                                     }
 
-                                    const toPercent = (v: number) => ((v - 1) / 9) * 100
                                     const rangeCtx = getEffectiveRangeContext(matchedRule)
-                                    const idealPct    = toPercent(matchedRule.ideal_position)
-                                    const minPct      = toPercent(matchedRule.minimum_position)
-                                    const maxPct      = toPercent(matchedRule.maximum_position)
-                                    const fallbackPct = toPercent(matchedRule.fallback_position)
-                                    const templatePct = clausePos != null ? toPercent(clausePos) : null
 
                                     // 4-tier status: Black (out of market) → Red (out of company) → Amber (outside ideal) → Green (within ideal)
                                     let statusLabel = 'No certified position yet'
@@ -7056,126 +6912,27 @@ INSTRUCTIONS:
                                                     </span>
                                                 </div>
 
-                                                {/* Position bar */}
-                                                <div className="relative h-12 mt-4">
-                                                    {/* Track */}
-                                                    <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
-                                                    {/* Amber market band */}
-                                                    <div className="absolute top-[19px] h-2.5 bg-amber-100 rounded-full border border-amber-300"
-                                                        style={{ left: `${minPct}%`, width: `${Math.max(0, maxPct - minPct)}%` }} />
-                                                    {/* Ideal badge — above track */}
-                                                    <div className="absolute top-0" style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }}>
-                                                        <div className="flex flex-col items-center">
-                                                            <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                                                                Ideal · {matchedRule.ideal_position}
-                                                            </span>
-                                                            <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
-                                                        </div>
-                                                    </div>
-                                                    {/* Fallback badge — below track */}
-                                                    <div className="absolute top-[12px]" style={{ left: `${fallbackPct}%`, transform: 'translateX(-50%)' }}>
-                                                        <div className="flex flex-col items-center">
-                                                            <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
-                                                            <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                                                                Fallback · {matchedRule.fallback_position}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    {/* Clause certified position — diamond coloured by 4-tier scheme */}
-                                                    {templatePct != null && (
-                                                        <div className="absolute z-20"
-                                                            style={{ left: `${templatePct}%`, top: '16px', transform: 'translateX(-50%) rotate(45deg)' }}>
-                                                            <div className={`w-4 h-4 rounded-sm border-2 border-white shadow-md ${
-                                                                clausePos! < matchedRule.minimum_position ? 'bg-slate-900' :
-                                                                clausePos! < matchedRule.fallback_position ? 'bg-red-500' :
-                                                                clausePos! < matchedRule.ideal_position - 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
-                                                            }`} />
-                                                        </div>
-                                                    )}
+                                                {/* ═══ UNIFIED POSITION BAR — Playbook Tab ═══ */}
+                                                <div className="mt-4">
+                                                    <PositionBar
+                                                        scalePoints={rangeCtx && rangeCtx.scale_points.length > 0
+                                                            ? rangeCtx.scale_points.map(sp => ({ position: sp.position, label: sp.label, value: sp.value }))
+                                                            : []
+                                                        }
+                                                        playbook={{
+                                                            ideal: matchedRule.ideal_position,
+                                                            fallback: matchedRule.fallback_position,
+                                                            minimum: matchedRule.minimum_position,
+                                                            maximum: matchedRule.maximum_position,
+                                                            escalation: matchedRule.requires_approval_below ?? null,
+                                                        }}
+                                                        compliance={clausePos != null ? { position: clausePos } : null}
+                                                        escalation={clausePos != null && clausePos < matchedRule.fallback_position && matchedRule.escalation_contact ? {
+                                                            contact: matchedRule.escalation_contact,
+                                                            email: matchedRule.escalation_contact_email ?? undefined,
+                                                        } : null}
+                                                    />
                                                 </div>
-
-                                                {/* Scale labels — show first, midpoint, last from rule's own range_context */}
-                                                {rangeCtx && rangeCtx.scale_points.length > 0 && (
-                                                    <div className="relative h-4 text-[8px] text-slate-400 mt-0.5">
-                                                        {rangeCtx.scale_points
-                                                            .filter((_, i, arr) => i === 0 || i === Math.floor(arr.length / 2) || i === arr.length - 1)
-                                                            .map((sp, idx, arr) => {
-                                                                const isFirst = idx === 0
-                                                                const isLast = idx === arr.length - 1
-                                                                return (
-                                                                    <span key={sp.position} className="absolute"
-                                                                        style={{ left: `${toPercent(sp.position)}%`, transform: isFirst ? 'none' : isLast ? 'translateX(-100%)' : 'translateX(-50%)' }}>
-                                                                        {sp.label}
-                                                                    </span>
-                                                                )
-                                                            })}
-                                                    </div>
-                                                )}
-
-                                                {/* Position summary — show translated labels from rule's range_context where available */}
-                                                <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-2 flex-wrap">
-                                                    <span>
-                                                        {(() => {
-                                                            const fLabel = translateRulePosition(matchedRule, matchedRule.fallback_position)
-                                                            const iLabel = translateRulePosition(matchedRule, matchedRule.ideal_position)
-                                                            const fallStr = fLabel && fLabel !== String(matchedRule.fallback_position) ? `fallback ${fLabel}` : `fallback ${matchedRule.fallback_position}`
-                                                            const idealStr = iLabel && iLabel !== String(matchedRule.ideal_position) ? `ideal ${iLabel}` : `ideal ${matchedRule.ideal_position}`
-                                                            return `Playbook: ${fallStr} · ${idealStr}`
-                                                        })()}
-                                                    </span>
-                                                    {clausePos != null && (
-                                                        <>
-                                                            <span className="text-slate-300">|</span>
-                                                            <span className={`font-medium ${
-                                                                clausePos < matchedRule.minimum_position ? 'text-slate-900' :
-                                                                clausePos < matchedRule.fallback_position ? 'text-red-600' :
-                                                                clausePos < matchedRule.ideal_position - 0.5 ? 'text-amber-600' : 'text-emerald-600'
-                                                            }`}>
-                                                                Clause: {clausePos}{(() => { const l = translateRulePosition(matchedRule, clausePos); return l && l !== String(clausePos) ? ` · ${l}` : '' })()}
-                                                            </span>
-                                                        </>
-                                                    )}
-                                                </div>
-
-                                                {/* Escalation */}
-                                                {clausePos != null && clausePos < matchedRule.fallback_position && matchedRule.escalation_contact && (
-                                                    <div className="mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                                                        Escalate to: {matchedRule.escalation_contact}
-                                                        {matchedRule.escalation_contact_email && ` (${matchedRule.escalation_contact_email})`}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Legend */}
-                                            <div className="flex items-center gap-4 text-[9px] text-slate-400 px-1 flex-wrap">
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded">Ideal</span>
-                                                    Company target
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded">Fallback</span>
-                                                    Company backstop
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="inline-block w-3 h-2 rounded bg-amber-100 border border-amber-300" />
-                                                    Market range
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500 rotate-45" />
-                                                    Within ideal
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="inline-block w-3 h-3 rounded-sm bg-amber-500 rotate-45" />
-                                                    Outside ideal
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="inline-block w-3 h-3 rounded-sm bg-red-500 rotate-45" />
-                                                    Out of company range
-                                                </span>
-                                                <span className="flex items-center gap-1.5">
-                                                    <span className="inline-block w-3 h-3 rounded-sm bg-slate-900 rotate-45" />
-                                                    Out of market
-                                                </span>
                                             </div>
                                         </div>
                                     )
