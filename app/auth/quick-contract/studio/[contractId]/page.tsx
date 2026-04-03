@@ -4024,8 +4024,10 @@ INSTRUCTIONS:
         // Only poll if we have a contract but no clauses yet
         if (!contractId || !contract || clauses.length > 0) return
 
-        // Only poll if contract is in a processing state (includes V2 pipeline statuses)
-        const processingStates = ['processing', 'certifying', 'uploading', 'pending', 'structure_ready', 'extracting_text']
+        // Poll if contract is in a processing state OR if status is 'ready' but we
+        // have no clauses yet (race condition: contract marked ready before Studio
+        // loaded its clauses — a single poll cycle will pick them up)
+        const processingStates = ['processing', 'certifying', 'uploading', 'pending', 'structure_ready', 'extracting_text', 'ready']
         if (!processingStates.includes(contract.status)) return
 
         console.log('[QC Studio] No clauses yet, polling for clause arrival... (status:', contract.status, ')')
@@ -5245,7 +5247,7 @@ INSTRUCTIONS:
                     {/* ==================== CLAUSE TREE ==================== */}
                     <div ref={clauseListRef} className="flex-1 overflow-y-auto min-h-0">
                         {/* Waiting for clauses to arrive */}
-                        {clauses.length === 0 && contract && ['processing', 'certifying', 'uploading', 'pending', 'structure_ready', 'extracting_text'].includes(contract.status) && (
+                        {clauses.length === 0 && contract && ['processing', 'certifying', 'uploading', 'pending', 'structure_ready', 'extracting_text', 'ready'].includes(contract.status) && (
                             <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                                 <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center mb-4">
                                     <div className="w-6 h-6 border-3 border-teal-600 border-t-transparent rounded-full animate-spin" />
@@ -5253,6 +5255,7 @@ INSTRUCTIONS:
                                 <h3 className="text-sm font-medium text-slate-700 mb-2">
                                     {contract.status === 'structure_ready' ? 'Structure Identified' :
                                      contract.status === 'extracting_text' ? 'Extracting Clause Text' :
+                                     contract.status === 'ready' ? 'Loading Clauses' :
                                      'Extracting Clauses'}
                                 </h3>
                                 <p className="text-xs text-slate-500 mb-4">
@@ -5260,6 +5263,8 @@ INSTRUCTIONS:
                                         ? 'CLARENCE has identified the clause structure. Clause headings will appear shortly, then text will be extracted section by section.'
                                         : contract.status === 'extracting_text'
                                         ? 'Clause headings are stored. CLARENCE is now extracting the full text for each clause — this happens section by section.'
+                                        : contract.status === 'ready'
+                                        ? 'Clauses are ready — loading them into the Studio now...'
                                         : 'CLARENCE is extracting and analyzing clauses from your document. This may take a few minutes for larger contracts.'}
                                 </p>
                                 {/* Progress steps */}
@@ -5320,7 +5325,7 @@ INSTRUCTIONS:
                         )}
 
                         {/* No clauses found after processing */}
-                        {clauses.length === 0 && contract && !['processing', 'certifying', 'uploading', 'pending', 'structure_ready', 'extracting_text'].includes(contract.status) && (
+                        {clauses.length === 0 && contract && !['processing', 'certifying', 'uploading', 'pending', 'structure_ready', 'extracting_text', 'ready'].includes(contract.status) && (
                             <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                                 <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
                                     <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
