@@ -14,6 +14,7 @@ import {
     groupRulesByScheduleType,
 } from '@/lib/playbook-compliance'
 import { getScheduleTypeLabel } from '@/lib/schedule-types'
+import PositionBar, { type ScalePoint } from '@/app/components/PositionBar'
 
 // ============================================================================
 // TYPES
@@ -58,70 +59,82 @@ function PlaybookIQLoading() {
 // EDITABLE POSITION BAR
 // ============================================================================
 
-function EditablePositionBar({ rule, onPositionChange }: {
-    rule: PlaybookRule
-    onPositionChange: (field: string, value: number) => void
-}) {
-    const safePos = (val: number | null | undefined): number => (Number.isFinite(val) ? val as number : 5)
-    const toPercent = (val: number | null | undefined) => ((safePos(val) - 1) / 9) * 100
-    const rangeCtx = getEffectiveRangeContext(rule)
-    const label = (pos: number) => translateRulePosition(rule, pos)
+// ============================================================================
+// RULE POSITION CONTROLS (page-level elements around the PositionBar)
+// ============================================================================
 
-    // Generate interpolated labels so every dropdown position (1-10) gets a unique label
-    const interpolatedLabel = (pos: number): string | null => {
-        if (!rangeCtx?.scale_points?.length) return null
-        const pts = [...rangeCtx.scale_points].sort((a, b) => a.position - b.position)
-        // Exact match
-        const exact = pts.find(p => p.position === pos)
-        if (exact) return exact.label
-        // For text/boolean types, show nearest label with position qualifier
-        if (rangeCtx.value_type === 'text' || rangeCtx.value_type === 'boolean') {
-            const nearest = pts.reduce((prev, curr) =>
-                Math.abs(curr.position - pos) < Math.abs(prev.position - pos) ? curr : prev
-            )
-            return nearest.label
-        }
-        // For numeric types, interpolate the value between surrounding scale points
-        const below = pts.filter(p => p.position < pos).pop()
-        const above = pts.find(p => p.position > pos)
-        if (below && above) {
-            // If scale points lack numeric values, fall back to nearest label
-            if (below.value == null || above.value == null || isNaN(below.value) || isNaN(above.value)) {
-                const nearest = Math.abs(pos - below.position) <= Math.abs(pos - above.position) ? below : above
-                return nearest.label
-            }
-            const ratio = (pos - below.position) / (above.position - below.position)
-            const interpolated = below.value + ratio * (above.value - below.value)
-            if (!Number.isFinite(interpolated)) {
-                const nearest = Math.abs(pos - below.position) <= Math.abs(pos - above.position) ? below : above
-                return nearest.label
-            }
-            const unit = rangeCtx.range_unit || ''
-            // Format based on value type
-            if (rangeCtx.value_type === 'percentage') {
-                return `${Math.round(interpolated)}${unit.includes('%') ? '%' : ' ' + unit}`
-            }
-            if (rangeCtx.value_type === 'currency') {
-                if (interpolated >= 1000000) return `£${(interpolated / 1000000).toFixed(1)}M`
-                if (interpolated >= 1000) return `£${Math.round(interpolated / 1000)}K`
-                return `£${Math.round(interpolated)}`
-            }
-            // Duration or count
-            const rounded = interpolated >= 10 ? Math.round(interpolated) : Math.round(interpolated * 10) / 10
-            const unitWord = unit.replace(/[()]/g, '').trim()
-            return `${rounded} ${unitWord}`
-        }
-        // Outside range — use nearest
+/** Safe number fallback for position values */
+const safePos = (val: number | null | undefined): number => (Number.isFinite(val) ? val as number : 5)
+
+/** Build ScalePoint[] from a rule's range context */
+function buildScalePoints(rule: PlaybookRule): ScalePoint[] {
+    const rangeCtx = getEffectiveRangeContext(rule)
+    if (!rangeCtx?.scale_points?.length) return []
+    return rangeCtx.scale_points.map(sp => ({
+        position: sp.position,
+        label: sp.label,
+        value: sp.value,
+    }))
+}
+
+/** Interpolate a dropdown label for any position 1-10 using the rule's range context */
+function interpolatedLabel(rule: PlaybookRule, pos: number): string | null {
+    const rangeCtx = getEffectiveRangeContext(rule)
+    if (!rangeCtx?.scale_points?.length) return null
+    const pts = [...rangeCtx.scale_points].sort((a, b) => a.position - b.position)
+    const exact = pts.find(p => p.position === pos)
+    if (exact) return exact.label
+    if (rangeCtx.value_type === 'text' || rangeCtx.value_type === 'boolean') {
         const nearest = pts.reduce((prev, curr) =>
             Math.abs(curr.position - pos) < Math.abs(prev.position - pos) ? curr : prev
         )
         return nearest.label
     }
+    const below = pts.filter(p => p.position < pos).pop()
+    const above = pts.find(p => p.position > pos)
+    if (below && above) {
+        if (below.value == null || above.value == null || isNaN(below.value) || isNaN(above.value)) {
+            const nearest = Math.abs(pos - below.position) <= Math.abs(pos - above.position) ? below : above
+            return nearest.label
+        }
+        const ratio = (pos - below.position) / (above.position - below.position)
+        const interpolated = below.value + ratio * (above.value - below.value)
+        if (!Number.isFinite(interpolated)) {
+            const nearest = Math.abs(pos - below.position) <= Math.abs(pos - above.position) ? below : above
+            return nearest.label
+        }
+        const unit = rangeCtx.range_unit || ''
+        if (rangeCtx.value_type === 'percentage') {
+            return `${Math.round(interpolated)}${unit.includes('%') ? '%' : ' ' + unit}`
+        }
+        if (rangeCtx.value_type === 'currency') {
+            if (interpolated >= 1000000) return `£${(interpolated / 1000000).toFixed(1)}M`
+            if (interpolated >= 1000) return `£${Math.round(interpolated / 1000)}K`
+            return `£${Math.round(interpolated)}`
+        }
+        const rounded = interpolated >= 10 ? Math.round(interpolated) : Math.round(interpolated * 10) / 10
+        const unitWord = unit.replace(/[()]/g, '').trim()
+        return `${rounded} ${unitWord}`
+    }
+    const nearest = pts.reduce((prev, curr) =>
+        Math.abs(curr.position - pos) < Math.abs(prev.position - pos) ? curr : prev
+    )
+    return nearest.label
+}
+
+/** Page-level position controls: unit badge, info tooltip, PositionBar, and dropdown selectors */
+function RulePositionSection({ rule, onPositionChange }: {
+    rule: PlaybookRule
+    onPositionChange: (field: string, value: number) => void
+}) {
+    const rangeCtx = getEffectiveRangeContext(rule)
+    const label = (pos: number) => translateRulePosition(rule, pos)
+    const scalePoints = buildScalePoints(rule)
 
     return (
         <div className="mt-2 mb-1">
-            {/* Unit badge + info icon */}
-            <div className="flex items-center gap-1.5 mb-1">
+            {/* Unit badge + info icon (page-level chrome) */}
+            <div className="flex items-center gap-1.5 mb-2">
                 {rangeCtx && (
                     <span className="px-1.5 py-0.5 text-[9px] font-medium bg-indigo-50 text-indigo-600 rounded border border-indigo-100">
                         {rangeCtx.range_unit || rangeCtx.value_type}
@@ -143,7 +156,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                         <span className="text-[9px] font-bold text-slate-500 group-hover/info:text-indigo-600">i</span>
                     </div>
                     <div className="absolute right-0 top-5 w-72 p-3 bg-white rounded-lg shadow-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed z-50 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150">
-                        <p className="font-semibold text-slate-800 mb-1.5">Click the bar to set positions</p>
+                        <p className="font-semibold text-slate-800 mb-1.5">Position Bar</p>
                         <div className="space-y-1.5">
                             <p><span className="inline-flex items-center px-1 py-px text-[8px] font-bold bg-emerald-500 text-white rounded mr-1 align-middle">Ideal</span> Company sweet spot — your target outcome</p>
                             <p><span className="inline-flex items-center px-1 py-px text-[8px] font-bold bg-red-500 text-white rounded mr-1 align-middle">Fallback</span> Company backstop — minimum acceptable</p>
@@ -159,54 +172,19 @@ function EditablePositionBar({ rule, onPositionChange }: {
                 </div>
             </div>
 
-            {/* Position bar */}
-            <div className="relative h-12 w-full cursor-default">
-                {/* Track */}
-                <div className="absolute inset-x-0 top-[22px] h-1.5 bg-slate-100 rounded-full" />
-                {/* Market band */}
-                <div className="absolute top-[19px] h-2.5 bg-amber-100 rounded-full border border-amber-300"
-                    style={{
-                        left: `${toPercent(rule.minimum_position)}%`,
-                        width: `${toPercent(rule.maximum_position) - toPercent(rule.minimum_position)}%`
-                    }} />
-                {/* Escalation threshold */}
-                {rule.requires_approval_below != null && (
-                    <div className="absolute top-[14px] border-l-2 border-dashed border-red-400" style={{ height: '16px', left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
-                )}
-                {/* Ideal badge — above track, line crosses through bar */}
-                <div className="absolute top-0" style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
-                    <div className="flex flex-col items-center">
-                        <span className="px-1.5 py-px text-[8px] font-bold bg-emerald-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                            Ideal · {safePos(rule.ideal_position)}
-                        </span>
-                        <div className="w-0 border-l-2 border-emerald-400" style={{ height: '26px' }} />
-                    </div>
-                </div>
-                {/* Fallback badge — below track, line crosses through bar */}
-                <div className="absolute top-[12px]" style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }}>
-                    <div className="flex flex-col items-center">
-                        <div className="w-0 border-l-2 border-red-400" style={{ height: '18px' }} />
-                        <span className="px-1.5 py-px text-[8px] font-bold bg-red-500 text-white rounded whitespace-nowrap leading-tight shadow-sm">
-                            Fallback · {safePos(rule.fallback_position)}
-                        </span>
-                    </div>
-                </div>
-            </div>
+            {/* ═══ UNIFIED POSITION BAR COMPONENT ═══ */}
+            <PositionBar
+                scalePoints={scalePoints}
+                playbook={{
+                    ideal: safePos(rule.ideal_position),
+                    fallback: safePos(rule.fallback_position),
+                    minimum: safePos(rule.minimum_position),
+                    maximum: safePos(rule.maximum_position),
+                    escalation: rule.requires_approval_below ?? null,
+                }}
+            />
 
-            {/* Scale labels */}
-            {rangeCtx?.scale_points?.length ? (
-                <div className="flex justify-between text-[9px] px-0.5 mt-0">
-                    <span className="text-indigo-500 font-medium">{label(1) || '1'}</span>
-                    <span className="text-indigo-500 font-medium">{label(5) || '5'}</span>
-                    <span className="text-indigo-500 font-medium">{label(10) || '10'}</span>
-                </div>
-            ) : (
-                <div className="flex justify-between text-[9px] text-slate-300 px-0.5 mt-0">
-                    <span>1</span><span>5</span><span>10</span>
-                </div>
-            )}
-
-            {/* Position chips — Market vs Company */}
+            {/* Position dropdowns (page-level editable controls) */}
             <div className="flex flex-wrap gap-2 mt-2">
                 {/* Market values */}
                 <div className="flex-1 min-w-0 rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5">
@@ -224,7 +202,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                                     className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 flex-1 truncate"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                        <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
+                                        <option key={n} value={n}>{n}{interpolatedLabel(rule, n) ? ` — ${interpolatedLabel(rule, n)}` : ''}</option>
                                     ))}
                                 </select>
                             </div>
@@ -247,7 +225,7 @@ function EditablePositionBar({ rule, onPositionChange }: {
                                     className="bg-transparent border-none text-[10px] font-bold cursor-pointer focus:outline-none appearance-none pr-2 min-w-0 flex-1 truncate"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                        <option key={n} value={n}>{n}{interpolatedLabel(n) ? ` — ${interpolatedLabel(n)}` : ''}</option>
+                                        <option key={n} value={n}>{n}{interpolatedLabel(rule, n) ? ` — ${interpolatedLabel(rule, n)}` : ''}</option>
                                     ))}
                                 </select>
                             </div>
@@ -469,7 +447,7 @@ function AddRuleModal({ categoryOptions, onAdd, onClose, saving }: {
 // RULE CARD
 // ============================================================================
 
-function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, saving, onDelete }: {
+function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, saving, onDelete, onAcceptReview, acceptingReview }: {
     rule: PlaybookRule
     isDirty: boolean
     onFieldChange: (field: string, value: unknown) => void
@@ -477,6 +455,8 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
     onSave: () => void
     saving: boolean
     onDelete: () => void
+    onAcceptReview: () => void
+    acceptingReview: boolean
 }) {
     const [editingField, setEditingField] = useState<string | null>(null)
     const [showSource, setShowSource] = useState(false)
@@ -516,8 +496,21 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                             {rule.clause_name}
                         </h4>
                     )}
-                    {allSamePosition && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200 flex-shrink-0">Needs Review</span>
+                    {allSamePosition && !rule.review_accepted && (
+                        <span className="inline-flex items-center gap-1.5 flex-shrink-0">
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-50 text-red-600 rounded border border-red-200">Needs Review</span>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onAcceptReview() }}
+                                disabled={acceptingReview}
+                                className="px-1.5 py-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-600 rounded border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                                title="Accept this rule as-is — clears the review flag"
+                            >
+                                {acceptingReview ? '...' : 'Accept'}
+                            </button>
+                        </span>
+                    )}
+                    {allSamePosition && rule.review_accepted && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-medium bg-emerald-50 text-emerald-600 rounded border border-emerald-200 flex-shrink-0">Accepted</span>
                     )}
                 </div>
                 <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
@@ -565,7 +558,7 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
             </div>
 
             {/* Position bar */}
-            <EditablePositionBar rule={rule} onPositionChange={onPositionChange} />
+            <RulePositionSection rule={rule} onPositionChange={onPositionChange} />
 
             {/* Editable fields */}
             <div className="mt-3 space-y-2">
@@ -671,7 +664,25 @@ function RuleCard({ rule, isDirty, onFieldChange, onPositionChange, onSave, savi
                         Source extract
                     </button>
                     {showSource && (
-                        <div className="mt-1.5">
+                        <div className="mt-1.5 space-y-1.5">
+                            {/* Source context: section ref, name, parent */}
+                            {rule.source_context && (rule.source_context.section_ref || rule.source_context.section_name) && (
+                                <div className="px-3 py-1.5 bg-indigo-50/50 border-l-2 border-indigo-300 rounded-r">
+                                    <div className="flex items-center gap-2 text-[10px] text-indigo-600 font-medium">
+                                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                        {rule.source_context.section_ref && (
+                                            <span className="px-1 py-0.5 bg-indigo-100 rounded font-mono">{rule.source_context.section_ref}</span>
+                                        )}
+                                        {rule.source_context.section_name && (
+                                            <span>{rule.source_context.section_name}</span>
+                                        )}
+                                    </div>
+                                    {rule.source_context.parent_context && (
+                                        <p className="mt-1 text-[10px] text-slate-500 pl-5">{rule.source_context.parent_context}</p>
+                                    )}
+                                </div>
+                            )}
+                            {/* Verbatim source quote */}
                             {rule.source_quote ? (
                                 <div className="px-3 py-2 bg-slate-50 border-l-2 border-indigo-200 rounded-r text-[11px] text-slate-600 italic leading-relaxed">
                                     &ldquo;{rule.source_quote}&rdquo;
@@ -971,11 +982,32 @@ function PlaybookReviewContent() {
         setTimeout(() => setSaveAllStatus(null), 2000)
     }
 
-    // Helper: check if a rule needs review
+    // Helper: check if a rule needs review (identical positions AND not yet accepted)
     const ruleNeedsReview = (r: PlaybookRule) =>
         r.ideal_position === r.minimum_position &&
         r.ideal_position === r.maximum_position &&
-        r.ideal_position === r.fallback_position
+        r.ideal_position === r.fallback_position &&
+        !r.review_accepted
+
+    // Accept a flagged rule as-is
+    const [acceptingRules, setAcceptingRules] = useState<Set<string>>(new Set())
+    const handleAcceptReview = async (ruleId: string) => {
+        setAcceptingRules(prev => new Set(prev).add(ruleId))
+        try {
+            const res = await fetch(`/api/playbooks/${playbookId}/rules/${ruleId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ review_accepted: true }),
+            })
+            if (res.ok) {
+                setRules(prev => prev.map(r => r.rule_id === ruleId ? { ...r, review_accepted: true } : r))
+            }
+        } catch (e) {
+            console.error('Accept review error:', e)
+        } finally {
+            setAcceptingRules(prev => { const next = new Set(prev); next.delete(ruleId); return next })
+        }
+    }
 
     // Filter and search
     const filteredGroups = ruleGroups
@@ -1296,6 +1328,8 @@ function PlaybookReviewContent() {
                                         onSave={() => saveRule(rule.rule_id)}
                                         saving={savingRules.has(rule.rule_id)}
                                         onDelete={() => handleDeleteRule(rule.rule_id)}
+                                        onAcceptReview={() => handleAcceptReview(rule.rule_id)}
+                                        acceptingReview={acceptingRules.has(rule.rule_id)}
                                     />
                                 ))}
                             </div>
