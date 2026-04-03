@@ -3641,6 +3641,7 @@ INSTRUCTIONS:
     }, [playbookRules, clauses])
 
     // Rule lookup: mapping table → exact name → name containment → category fallback
+    // Used for general display (e.g. showing which rule a clause relates to)
     const findRuleForClause = useCallback((clauseName: string | undefined, category: string | undefined): PlaybookRule | undefined => {
         if (playbookRules.length === 0) return undefined
         const nameLower = clauseName?.toLowerCase()?.trim() ?? ''
@@ -3663,17 +3664,37 @@ INSTRUCTIONS:
         return playbookRules.find(r => normaliseCategory(r.category) === normaliseCategory(category ?? ''))
     }, [playbookRules, mappedClauseToRule])
 
+    // High-confidence rule lookup: mapping table or exact name ONLY
+    // Used for breach/compliance indicators — fuzzy matches produce false positives
+    // (e.g. "TERM" matching "Termination assistance") so we only show indicators
+    // when we have a confirmed or exact match. This is an initial assessment;
+    // the user refines matches in the Mapping workspace.
+    const findExactRuleForClause = useCallback((clauseName: string | undefined): PlaybookRule | undefined => {
+        if (playbookRules.length === 0) return undefined
+        const nameLower = clauseName?.toLowerCase()?.trim() ?? ''
+        // 1. Mapping table (confirmed by admin)
+        if (nameLower && mappedClauseToRule.has(nameLower)) return mappedClauseToRule.get(nameLower)
+        // 2. Exact clause name match only
+        if (nameLower) {
+            return playbookRules.find(r => r.clause_name.toLowerCase().trim() === nameLower)
+        }
+        return undefined
+    }, [playbookRules, mappedClauseToRule])
+
     // Per-clause playbook compliance status for sidebar dots — 4-tier colour scheme:
     //   Black  = out of market range entirely (below minimum_position)
     //   Red    = out of company range (below fallback_position but within market)
     //   Amber  = outside ideal but within company range (below ideal but above fallback)
     //   Green  = at or within 0.5 of ideal position
+    // NOTE: Only shown for high-confidence matches (mapping table or exact name).
+    // Fuzzy/containment matches are excluded to avoid false breach indicators.
+    // This is an initial assessment — the user refines via the Mapping workspace.
     const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach' | 'critical'>>(() => {
         const map = new Map<string, 'compliant' | 'warning' | 'breach' | 'critical'>()
         if (playbookRules.length === 0) return map
         for (const clause of clauses) {
             if (!clause.clarenceCertified || clause.clarencePosition == null) continue
-            const rule = findRuleForClause(clause.clauseName, clause.category)
+            const rule = findExactRuleForClause(clause.clauseName)
             if (!rule) continue
             const pos = clause.clarencePosition
             if (pos < rule.minimum_position) {
@@ -3687,7 +3708,7 @@ INSTRUCTIONS:
             }
         }
         return map
-    }, [findRuleForClause, clauses])
+    }, [findExactRuleForClause, clauses])
 
     // Auto-save dirty positions every 30 seconds
     useEffect(() => {

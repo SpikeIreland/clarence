@@ -948,6 +948,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
     const [templateName, setTemplateName] = useState('')
     const [contractType, setContractType] = useState('custom')
     const [uploadLinkedPlaybookId, setUploadLinkedPlaybookId] = useState<string>('')
+    const [showPlaybookConfirm, setShowPlaybookConfirm] = useState(false)
     const [linkingTemplateId, setLinkingTemplateId] = useState<string | null>(null)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
@@ -1360,10 +1361,11 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
             setUploadError('User not authenticated')
             return
         }
-        if (!uploadLinkedPlaybookId) {
-            setUploadError('Please select a playbook. A linked playbook is required so party roles and compliance positions can be established.')
+        if (!uploadLinkedPlaybookId && !showPlaybookConfirm) {
+            setShowPlaybookConfirm(true)
             return
         }
+        setShowPlaybookConfirm(false)
 
         setIsUploading(true)
         setUploadError(null)
@@ -1551,13 +1553,12 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
                                     Link to Playbook
-                                    <span className="ml-1.5 text-xs font-normal text-red-500">* required</span>
-                                    <span className="ml-1 text-xs font-normal text-slate-400">(establishes party roles &amp; compliance benchmark)</span>
+                                    <span className="ml-1 text-xs font-normal text-slate-400">(optional — sets compliance benchmark &amp; party roles)</span>
                                 </label>
                                 <select
                                     value={uploadLinkedPlaybookId}
                                     onChange={(e) => setUploadLinkedPlaybookId(e.target.value)}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${!uploadLinkedPlaybookId ? 'border-amber-300 bg-amber-50' : 'border-slate-300'}`}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                 >
                                     <option value="">— Select a playbook —</option>
                                     {playbooks.filter(p => p.isActive && p.rulesExtracted > 0).map(p => (
@@ -1584,10 +1585,38 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                             </div>
                         )}
 
+                        {showPlaybookConfirm && (
+                            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm font-medium text-amber-800">No playbook selected</p>
+                                        <p className="text-xs text-amber-700 mt-1">Without a linked playbook, CLARENCE won't be able to assess compliance positions or identify party roles. You can always link a playbook later.</p>
+                                        <div className="flex gap-2 mt-3">
+                                            <button
+                                                onClick={handleUploadSubmit}
+                                                className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                                            >
+                                                Continue without playbook
+                                            </button>
+                                            <button
+                                                onClick={() => setShowPlaybookConfirm(false)}
+                                                className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-white border border-amber-300 rounded-lg hover:bg-amber-50"
+                                            >
+                                                Go back and select one
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex gap-3 mt-6">
                             <button
                                 onClick={handleUploadSubmit}
-                                disabled={isUploading || !templateName.trim() || !uploadLinkedPlaybookId}
+                                disabled={isUploading || !templateName.trim()}
                                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isUploading ? 'Processing...' : 'Upload & Parse'}
@@ -1600,6 +1629,7 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                                     setUploadError(null)
                                     setUploadProgress('')
                                     setUploadLinkedPlaybookId('')
+                                    setShowPlaybookConfirm(false)
                                 }}
                                 disabled={isUploading}
                                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50"
@@ -1696,19 +1726,15 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                                     {template.status === 'ready' && template.clauseCount > 0 && template.linkedPlaybookId && (
                                         <button
                                             onClick={() => router.push(`/auth/company-admin/template/${template.templateId}/mapping`)}
-                                            className={`px-3 py-1.5 text-sm font-medium rounded-lg flex items-center gap-1.5 ${
-                                                template.unconfirmedMappings > 0
-                                                    ? 'text-red-700 bg-red-100 hover:bg-red-200'
-                                                    : 'text-violet-700 bg-violet-100 hover:bg-violet-200'
-                                            }`}
+                                            className="px-3 py-1.5 text-sm font-medium rounded-lg flex items-center gap-1.5 text-violet-700 bg-violet-100 hover:bg-violet-200"
                                             title={template.unconfirmedMappings > 0
-                                                ? `${template.unconfirmedMappings} unconfirmed mapping${template.unconfirmedMappings === 1 ? '' : 's'} need review`
+                                                ? `${template.unconfirmedMappings} auto-mapped clause${template.unconfirmedMappings === 1 ? '' : 's'} to review`
                                                 : 'Review clause-to-rule mappings'}
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                                             Review Mappings
                                             {template.unconfirmedMappings > 0 && (
-                                                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-600 text-white rounded-full min-w-[18px] text-center">
+                                                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-violet-600 text-white rounded-full min-w-[18px] text-center">
                                                     {template.unconfirmedMappings}
                                                 </span>
                                             )}
