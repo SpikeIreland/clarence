@@ -281,11 +281,23 @@ export default function PositionBar({
                         {playbook && (
                             <>
                                 <div
-                                    className="absolute inset-y-0 bg-amber-200/50 border-y border-amber-300/60 rounded-full"
+                                    className="absolute bg-amber-300/60 border-2 border-amber-400 rounded-full"
                                     style={{
                                         left: `${toPercent(playbook.minimum)}%`,
                                         width: `${Math.max(0.5, toPercent(playbook.maximum) - toPercent(playbook.minimum))}%`,
+                                        top: '-3px',
+                                        bottom: '-3px',
                                     }}
+                                />
+                                {/* Min marker */}
+                                <div
+                                    className="absolute w-0.5 bg-amber-500 rounded-full"
+                                    style={{ left: `${toPercent(playbook.minimum)}%`, top: '-3px', bottom: '-3px' }}
+                                />
+                                {/* Max marker */}
+                                <div
+                                    className="absolute w-0.5 bg-amber-500 rounded-full"
+                                    style={{ left: `${toPercent(playbook.maximum)}%`, top: '-3px', bottom: '-3px' }}
                                 />
                                 {/* Escalation line */}
                                 {playbook.escalation != null && (
