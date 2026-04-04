@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import PositionBar from '@/app/components/PositionBar'
 
 // ============================================================================
 // TYPES
@@ -82,8 +83,6 @@ const BackIcon = () => (
 // ============================================================================
 // HELPERS
 // ============================================================================
-
-const toPercent = (v: number) => ((v - 1) / 9) * 100
 
 type StatusFilter = 'all' | 'unconfirmed' | 'unmapped' | 'confirmed'
 type SortMode = 'clause_order' | 'category'
@@ -830,35 +829,17 @@ export default function MappingReviewPage() {
                                             )}
                                         </div>
 
-                                        {/* Position bar */}
+                                        {/* ═══ UNIFIED POSITION BAR ═══ */}
                                         <div className="mb-3">
                                             <div className="text-[10px] font-medium text-slate-500 mb-1">Negotiation Position Range</div>
-                                            <div className="relative h-5 bg-slate-100 rounded-full overflow-visible">
-                                                <div
-                                                    className="absolute top-1 h-3 bg-amber-100 rounded-full border border-amber-200"
-                                                    style={{ left: `${toPercent(selectedRule.minimum_position)}%`, width: `${Math.max(2, toPercent(selectedRule.maximum_position) - toPercent(selectedRule.minimum_position))}%` }}
-                                                />
-                                                <div
-                                                    className="absolute top-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-sm"
-                                                    style={{ left: `${toPercent(selectedRule.ideal_position)}%`, transform: 'translateX(-50%)' }}
-                                                    title={`Ideal: ${selectedRule.ideal_position}`}
-                                                />
-                                                <div
-                                                    className="absolute top-0.5 w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow-sm"
-                                                    style={{ left: `${toPercent(selectedRule.fallback_position)}%`, transform: 'translateX(-50%)' }}
-                                                    title={`Fallback: ${selectedRule.fallback_position}`}
-                                                />
-                                            </div>
-                                            <div className="flex justify-between text-[9px] text-slate-400 mt-1 px-1">
-                                                <span>1 (Strong)</span>
-                                                <span>5</span>
-                                                <span>10 (Weak)</span>
-                                            </div>
-                                            <div className="flex gap-4 mt-1 text-[9px]">
-                                                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Ideal: {selectedRule.ideal_position}</span>
-                                                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Fallback: {selectedRule.fallback_position}</span>
-                                                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-300 inline-block" /> Range: {selectedRule.minimum_position}–{selectedRule.maximum_position}</span>
-                                            </div>
+                                            <PositionBar
+                                                playbook={{
+                                                    ideal: selectedRule.ideal_position,
+                                                    fallback: selectedRule.fallback_position,
+                                                    minimum: selectedRule.minimum_position,
+                                                    maximum: selectedRule.maximum_position,
+                                                }}
+                                            />
                                         </div>
                                     </div>
 
