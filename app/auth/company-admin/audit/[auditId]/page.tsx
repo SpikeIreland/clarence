@@ -23,6 +23,7 @@ import {
     RedLinesTab,
     FlexibilityTab,
 } from '@/app/components/PlaybookComplianceIndicator'
+import PositionBar from '@/app/components/PositionBar'
 import type {
     AlignmentReportResult,
     CategoryNarrative,
@@ -202,50 +203,26 @@ function AlignmentBar({ rule, templatePosition }: {
     rule: PlaybookRule
     templatePosition: number | null
 }) {
-    const toPercent = (val: number) => ((val - 1) / 9) * 100
     const rangeCtx = getEffectiveRangeContext(rule)
 
-    const idealPct  = toPercent(rule.ideal_position)
-    const minPct    = toPercent(rule.minimum_position)
-    const maxPct    = toPercent(rule.maximum_position)
-
-    let barLeft  = idealPct
-    let barWidth = 0
-    let barColor = 'bg-slate-300'
+    // Gap label (page-level context kept outside the component)
     let gapLabel: string | null = null
     let gapColor = 'text-slate-400'
-
     if (templatePosition != null) {
-        const tPct = toPercent(templatePosition)
         const diff = templatePosition - rule.ideal_position
-
         if (diff < 0) {
-            barLeft  = tPct
-            barWidth = idealPct - tPct
-            if (templatePosition < rule.minimum_position) {
-                barColor  = 'bg-red-400'
-                gapColor  = 'text-red-500'
-                gapLabel  = `${Math.abs(diff)} below ideal · breaches minimum`
-            } else {
-                barColor  = 'bg-amber-400'
-                gapColor  = 'text-amber-500'
-                gapLabel  = `${Math.abs(diff)} below ideal`
-            }
+            gapColor = templatePosition < rule.minimum_position ? 'text-red-500' : 'text-amber-500'
+            gapLabel = templatePosition < rule.minimum_position
+                ? `${Math.abs(diff)} below ideal · breaches minimum`
+                : `${Math.abs(diff)} below ideal`
         } else if (diff > 0) {
-            barLeft  = idealPct
-            barWidth = tPct - idealPct
-            barColor  = 'bg-emerald-400'
-            gapColor  = 'text-emerald-600'
-            gapLabel  = `${diff} above ideal`
+            gapColor = 'text-emerald-600'
+            gapLabel = `${diff} above ideal`
         } else {
             gapLabel = 'Exact match'
             gapColor = 'text-emerald-600'
         }
     }
-
-    const diamondColor = templatePosition == null
-        ? 'bg-slate-300'
-        : templatePosition >= rule.minimum_position ? 'bg-emerald-500' : 'bg-red-500'
 
     return (
         <div className="mt-1.5 mb-1">
@@ -256,21 +233,15 @@ function AlignmentBar({ rule, templatePosition }: {
                     </span>
                 </div>
             )}
-            <div className="relative h-8">
-                <div className="absolute top-3 left-0 right-0 h-2 bg-slate-100 rounded-full" />
-                <div className="absolute top-3 h-2 bg-blue-50 border border-blue-100 rounded-full"
-                    style={{ left: `${minPct}%`, width: `${maxPct - minPct}%` }} />
-                {barWidth > 0 && (
-                    <div className={`absolute top-3 h-2 rounded-full ${barColor} opacity-80`}
-                        style={{ left: `${barLeft}%`, width: `${barWidth}%` }} />
-                )}
-                <div className="absolute top-1.5 w-0.5 h-5 bg-purple-500 rounded-full z-10"
-                    style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }} />
-                {templatePosition != null && (
-                    <div className={`absolute top-1.5 w-4 h-4 rounded-sm ${diamondColor} border-2 border-white shadow-md z-20`}
-                        style={{ left: `${toPercent(templatePosition)}%`, transform: 'translateX(-50%) rotate(45deg)' }} />
-                )}
-            </div>
+            <PositionBar
+                playbook={{
+                    ideal: rule.ideal_position,
+                    fallback: rule.fallback_position,
+                    minimum: rule.minimum_position,
+                    maximum: rule.maximum_position,
+                }}
+                compliance={templatePosition != null ? { position: templatePosition } : null}
+            />
             {gapLabel && (
                 <div className={`text-[9px] mt-0.5 font-medium ${gapColor}`}>{gapLabel}</div>
             )}
@@ -521,12 +492,6 @@ function ClauseAuditCard({
     const barTrackColor = result.score >= 80 ? 'bg-emerald-100' : result.score >= 60 ? 'bg-amber-100' : 'bg-red-100'
     const barFillColor = result.score >= 80 ? 'bg-emerald-500' : result.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
 
-    // Build a lightweight position bar inline
-    const toPercent = (val: number) => Math.min(100, Math.max(0, ((val - 1) / 9) * 100))
-    const idealPct = toPercent(result.ruleIdealPosition)
-    const minPct = toPercent(result.ruleMinimumPosition)
-    const clausePct = result.clausePosition != null ? toPercent(result.clausePosition) : null
-
     return (
         <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
             {/* Collapsed header row */}
@@ -667,45 +632,15 @@ function ClauseAuditCard({
                     {/* Position comparison bar — full width */}
                     <div className="bg-white rounded-lg border border-slate-200 p-3">
                         <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Position Comparison</div>
-                        <div className="relative h-10">
-                            {/* Track */}
-                            <div className="absolute top-4 left-0 right-0 h-2 bg-slate-100 rounded-full" />
-                            {/* Acceptable range */}
-                            <div className="absolute top-4 h-2 bg-blue-50 border border-blue-100 rounded-full"
-                                style={{ left: `${minPct}%`, width: `${idealPct - minPct}%` }} />
-                            {/* Ideal position marker */}
-                            <div className="absolute top-2 w-0.5 h-6 bg-purple-500 rounded-full z-10"
-                                style={{ left: `${idealPct}%`, transform: 'translateX(-50%)' }} />
-                            {/* Minimum position marker */}
-                            <div className="absolute top-3 w-0.5 h-4 bg-slate-400 rounded-full z-10"
-                                style={{ left: `${minPct}%`, transform: 'translateX(-50%)' }} />
-                            {/* Clause position diamond */}
-                            {clausePct != null && (
-                                <div className={`absolute top-2 w-4 h-4 rounded-sm border-2 border-white shadow-md z-20 ${
-                                    result.score >= 80 ? 'bg-emerald-500' : result.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                                }`}
-                                    style={{ left: `${clausePct}%`, transform: 'translateX(-50%) rotate(45deg)' }} />
-                            )}
-                        </div>
-                        {/* Legend */}
-                        <div className="flex items-center gap-4 text-[9px] text-slate-400 mt-1">
-                            <span className="flex items-center gap-1">
-                                <span className="w-3 h-0.5 bg-purple-500 inline-block rounded" /> Ideal
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="w-3 h-0.5 bg-slate-400 inline-block rounded" /> Minimum
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <span className="w-3 h-3 bg-blue-50 inline-block rounded border border-blue-100" /> Acceptable range
-                            </span>
-                            {clausePct != null && (
-                                <span className="flex items-center gap-1">
-                                    <span className={`w-2.5 h-2.5 rounded-sm inline-block rotate-45 ${
-                                        result.score >= 80 ? 'bg-emerald-500' : result.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                                    }`} /> Template position
-                                </span>
-                            )}
-                        </div>
+                        <PositionBar
+                            playbook={{
+                                ideal: result.ruleIdealPosition,
+                                fallback: result.ruleMinimumPosition,
+                                minimum: result.ruleMinimumPosition,
+                                maximum: result.ruleIdealPosition,
+                            }}
+                            compliance={result.clausePosition != null ? { position: result.clausePosition } : null}
+                        />
                     </div>
 
                     {/* AI Assessment — from narrative */}
