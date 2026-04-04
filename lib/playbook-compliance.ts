@@ -395,7 +395,8 @@ function alignPosition(position: number, perspective: PlaybookPerspective): numb
 export function scoreRule(
     rule: PlaybookRule,
     effectivePosition: number | null,
-    perspective: PlaybookPerspective = 'customer'
+    perspective: PlaybookPerspective = 'customer',
+    skipPerspectiveFlip: boolean = false
 ): {
     status: RuleStatus
     score: number
@@ -410,7 +411,8 @@ export function scoreRule(
     }
 
     // Convert contract position to match playbook perspective
-    const pos = alignPosition(effectivePosition, perspective)
+    // Skip when position comes from clarence_position (already assessed on correct scale)
+    const pos = skipPerspectiveFlip ? effectivePosition : alignPosition(effectivePosition, perspective)
 
     // Deal breaker below minimum = BREACH (most critical — 0%)
     if (rule.is_deal_breaker && pos < rule.minimum_position) {
@@ -1070,7 +1072,8 @@ export function runClauseCentricAudit(
             : null
 
         // Score using the existing scoring function
-        const { status, score, detail } = scoreRule(rule, effectivePosition, perspective)
+        // skipPerspectiveFlip=true because clarence_position is already assessed on the correct scale
+        const { status, score, detail } = scoreRule(rule, effectivePosition, perspective, true)
 
         // Get market range context
         const marketRangeContext = getEffectiveRangeContext(rule)
