@@ -604,13 +604,13 @@ function ClauseAuditCard({
                                 <div className="flex items-center justify-between text-[10px]">
                                     <span className="text-slate-500">Ideal Position</span>
                                     <span className="font-bold text-purple-600">
-                                        {result.idealPositionLabel || `${result.ruleIdealPosition}/100`}
+                                        {result.idealPositionLabel || `${result.ruleIdealPosition}/10`}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between text-[10px]">
                                     <span className="text-slate-500">Minimum Acceptable</span>
                                     <span className="font-semibold text-slate-600">
-                                        {result.minimumPositionLabel || `${result.ruleMinimumPosition}/100`}
+                                        {result.minimumPositionLabel || `${result.ruleMinimumPosition}/10`}
                                     </span>
                                 </div>
                             </div>
@@ -635,9 +635,9 @@ function ClauseAuditCard({
                         <PositionBar
                             playbook={{
                                 ideal: result.ruleIdealPosition,
-                                fallback: result.ruleMinimumPosition,
+                                fallback: result.ruleFallbackPosition,
                                 minimum: result.ruleMinimumPosition,
-                                maximum: result.ruleIdealPosition,
+                                maximum: result.ruleMaximumPosition,
                             }}
                             compliance={result.clausePosition != null ? { position: result.clausePosition } : null}
                         />
