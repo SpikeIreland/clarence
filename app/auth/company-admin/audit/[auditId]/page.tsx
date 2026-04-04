@@ -734,12 +734,40 @@ function ClauseAuditCard({
                     )}
 
                     {/* Market range context */}
-                    {result.rangeMapping && (
-                        <div className="bg-white rounded-lg border border-slate-200 p-3">
-                            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Market Range Context</div>
-                            <div className="text-xs text-slate-600">{typeof result.rangeMapping === 'string' ? result.rangeMapping : JSON.stringify(result.rangeMapping)}</div>
-                        </div>
-                    )}
+                    {result.rangeMapping && (() => {
+                        const rm = typeof result.rangeMapping === 'string'
+                            ? (() => { try { return JSON.parse(result.rangeMapping) } catch { return null } })()
+                            : result.rangeMapping
+                        if (!rm?.range_data?.scale_points) return null
+                        const points = rm.range_data.scale_points as { label: string; value: number; position: number; description: string }[]
+                        const unit = (rm.range_unit || '').replace(/_/g, ' ')
+                        const minIdx = rm.industry_standard_min as number | undefined
+                        const maxIdx = rm.industry_standard_max as number | undefined
+                        const minPt = minIdx != null ? points[minIdx - 1] : null
+                        const maxPt = maxIdx != null ? points[maxIdx - 1] : null
+                        return (
+                            <div className="bg-white rounded-lg border border-slate-200 p-3">
+                                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Market Range Context</div>
+                                {minPt && maxPt && (
+                                    <p className="text-xs text-slate-700 mb-2">
+                                        Industry standard: <strong>{minPt.label}</strong> to <strong>{maxPt.label}</strong>
+                                        {unit ? ` (${unit})` : ''}
+                                    </p>
+                                )}
+                                <div className="flex items-center gap-1">
+                                    {points.map((pt, i) => {
+                                        const isInRange = minIdx != null && maxIdx != null && (i + 1) >= minIdx && (i + 1) <= maxIdx
+                                        return (
+                                            <div key={i} className="flex flex-col items-center flex-1 min-w-0" title={pt.description}>
+                                                <div className={`w-full h-2 rounded-sm ${isInRange ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                                                <span className={`text-[9px] mt-1 truncate w-full text-center ${isInRange ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>{pt.label}</span>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )
+                    })()}
 
                     {/* Scoring detail */}
                     <div className="flex items-center gap-3 text-[10px] text-slate-400 px-1">
