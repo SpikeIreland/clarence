@@ -1169,9 +1169,10 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                     .text('Position Analysis', 72, doc.y, { width: pageW })
                 doc.moveDown(0.5)
 
-                // Position values — single-column layout, label on left (75%), value on right (25%)
-                const posLabelW = Math.round(pageW * 0.72)
-                const posValueW = pageW - posLabelW
+                // Position values — label on left, value on right (allow wrapping for long scale labels)
+                const posLabelW = 120
+                const posGap = 8
+                const posValueW = pageW - posLabelW - posGap
                 const posItems = [
                     { label: 'Clause Position:', value: result.clausePositionLabel || (result.clausePosition != null ? `${result.clausePosition}/10` : 'Not assessed'), color: result.clausePosition != null ? clr : '#94A3B8', bold: true },
                     { label: 'Ideal Position:', value: result.idealPositionLabel || `${result.ruleIdealPosition}/10`, color: '#7C3AED', bold: false },
@@ -1182,12 +1183,15 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
 
                 for (const item of posItems) {
                     const rowY = doc.y
+                    // Label (fixed, no wrap)
                     doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
                         .text(item.label, 72, rowY, { width: posLabelW, lineBreak: false })
-                    doc.font(item.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(item.color)
-                        .text(item.value, 72 + posLabelW, rowY, { width: posValueW, align: 'right', lineBreak: false })
+                    // Value (allow wrapping for long scale-point descriptions)
+                    doc.font(item.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor(item.color)
+                    const valH = doc.heightOfString(item.value, { width: posValueW })
+                    doc.text(item.value, 72 + posLabelW + posGap, rowY, { width: posValueW })
                     doc.x = 72
-                    doc.y = rowY + 14
+                    doc.y = rowY + Math.max(14, valH + 4)
                 }
                 doc.moveDown(0.4)
 
