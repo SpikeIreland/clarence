@@ -1001,7 +1001,9 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             d.font('Helvetica').fontSize(6).fillColor('#94A3B8')
             d.text('1', x - 2, y + barH + 2, { width: 10, lineBreak: false })
             d.text('10', x + w - 6, y + barH + 2, { width: 14, lineBreak: false })
+            // Reset cursor and font to avoid poisoning subsequent moveDown() calls
             d.x = 72
+            d.font('Helvetica').fontSize(9)
         }
 
         // ── Helper: ensure enough space or add page ──
@@ -1053,6 +1055,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             doc.x = 72
             doc.y = legY + 14
             doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
+            doc.font('Helvetica').fontSize(11) // Reset font size so moveDown produces reasonable gap
             doc.moveDown(0.6)
 
             const sortedPdfClauses = [...pdfCcSummary.clauseResults].sort((a, b) => a.score - b.score)
@@ -1113,8 +1116,9 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                         ? result.clauseText.slice(0, 600) + '...'
                         : result.clauseText
                     // Measure height first (must set font/size before heightOfString)
+                    // IMPORTANT: include lineGap in measurement to match actual rendering
                     doc.font('Helvetica').fontSize(8.5)
-                    const clauseTextH = doc.heightOfString(clauseTextStr, { width: pageW - 24 })
+                    const clauseTextH = doc.heightOfString(clauseTextStr, { width: pageW - 24, lineGap: 2 })
                     doc.roundedRect(72, clauseTextY - 4, pageW, clauseTextH + 16, 3).fill('#F8FAFC')
                     doc.font('Helvetica').fontSize(8.5).fillColor('#334155')
                         .text(clauseTextStr, 84, clauseTextY + 4, { width: pageW - 24, lineGap: 2 })
@@ -1350,6 +1354,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.x = 72 // Reset cursor after legend drawing
         doc.y = legItemY + 18
         doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
+        doc.font('Helvetica').fontSize(11) // Reset font size so moveDown produces reasonable gap
         doc.moveDown(0.8)
 
         const sortedCats = [...compliance.categories].sort((a, b) => a.score - b.score)
@@ -1359,7 +1364,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             const bgClr = cat.score >= 80 ? '#ECFDF5' : cat.score >= 60 ? '#FFFBEB' : '#FEF2F2'
 
             // Check if we need a new page (enough space for header + bar + narrative)
-            if (doc.y > 560) doc.addPage()
+            if (doc.y > 560) { doc.addPage(); doc.x = 72 }
 
             // Category card background
             const cardY = doc.y
@@ -1376,11 +1381,12 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
             const badgeX = 72 + pageW - badgeW
             doc.roundedRect(badgeX, cardY + 1, badgeW, 16, 8).fill(bgClr)
             doc.font('Helvetica-Bold').fontSize(10).fillColor(clr)
-                .text(badgeText, badgeX + 8, cardY + 3, { width: badgeW - 16 })
+                .text(badgeText, badgeX + 8, cardY + 3, { width: badgeW - 16, lineBreak: false })
 
+            doc.x = 72
             doc.y = cardY + 20
             doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
-                .text(`${cat.rulesPassed} aligned \u00B7 ${cat.rulesWarning} partial \u00B7 ${cat.rulesFailed} misaligned of ${cat.rulesTotal} rules`)
+                .text(`${cat.rulesPassed} aligned \u00B7 ${cat.rulesWarning} partial \u00B7 ${cat.rulesFailed} misaligned of ${cat.rulesTotal} rules`, 72, doc.y, { width: pageW })
             doc.moveDown(0.4)
 
             // Position bars for each rule in this category
@@ -1389,7 +1395,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 doc.moveDown(0.2)
 
                 for (const scored of cat.rules) {
-                    if (doc.y > 680) { doc.addPage() }
+                    if (doc.y > 680) { doc.addPage(); doc.x = 72 }
 
                     const ruleY = doc.y
                     const labelW = 160
@@ -1446,7 +1452,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
 
         // ── Red Lines ──
         if (compliance.redLines.length > 0) {
-            if (doc.y > 550) doc.addPage()
+            if (doc.y > 550) { doc.addPage(); doc.x = 72 }
             doc.font('Helvetica-Bold').fontSize(18).fillColor('#4338CA')
                 .text('Red Lines & Deal Breakers')
             doc.moveDown(0.5)
