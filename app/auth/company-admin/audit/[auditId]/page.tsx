@@ -234,6 +234,13 @@ function AlignmentBar({ rule, templatePosition }: {
                 </div>
             )}
             <PositionBar
+                scalePoints={
+                    rangeCtx?.scale_points?.map(sp => ({
+                        position: sp.position,
+                        label: sp.label,
+                        value: sp.value,
+                    })) || []
+                }
                 playbook={{
                     ideal: rule.ideal_position,
                     fallback: rule.fallback_position,
@@ -633,6 +640,13 @@ function ClauseAuditCard({
                     <div className="bg-white rounded-lg border border-slate-200 p-3">
                         <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Position Comparison</div>
                         <PositionBar
+                            scalePoints={
+                                result.marketRangeContext?.scale_points?.map(sp => ({
+                                    position: sp.position,
+                                    label: sp.label,
+                                    value: sp.value,
+                                })) || []
+                            }
                             playbook={{
                                 ideal: result.ruleIdealPosition,
                                 fallback: result.ruleFallbackPosition,
