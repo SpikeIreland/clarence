@@ -140,7 +140,7 @@ export async function POST(
             .select('playbook_rule_id, template_clause_id, match_method, match_confidence, match_reason')
             .eq('template_id', audit.template_id)
             .eq('playbook_id', audit.playbook_id)
-            .eq('status', 'active')
+            .in('status', ['active', 'confirmed', 'unconfirmed'])
 
         // 8. If no mappings exist, try to generate them via the RPC function
         let mappingsToUse = existingMappings || []
@@ -160,7 +160,7 @@ export async function POST(
                         .select('playbook_rule_id, template_clause_id, match_method, match_confidence, match_reason')
                         .eq('template_id', audit.template_id)
                         .eq('playbook_id', audit.playbook_id)
-                        .eq('status', 'active')
+                        .in('status', ['active', 'confirmed', 'unconfirmed'])
                     mappingsToUse = freshMappings || []
                 }
             } catch (rpcError) {
