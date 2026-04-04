@@ -934,76 +934,128 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
         doc.y = boxY + boxH + 20
 
         // ── Helper: draw alignment position bar ──
-        // Supports ideal, minimum, maximum, fallback, and template positions
+        // Matches the PositionBar component visual design:
+        //   - Gradient track (blue → teal → emerald)
+        //   - Amber market band (min → max)
+        //   - Emerald "Ideal · N" pill badge above bar
+        //   - Red "Fallback · N" pill badge below bar
+        //   - Compliance diamond at clause position
+        //   - Scale numbers 1-10 underneath
+        // Returns total height consumed so caller can advance doc.y
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        function drawPositionBar(d: any, rule: { ideal_position: number; minimum_position: number; maximum_position: number; fallback_position?: number }, templatePos: number | null, x: number, y: number, w: number) {
-            const barH = 10
+        function drawPositionBar(d: any, rule: { ideal_position: number; minimum_position: number; maximum_position: number; fallback_position?: number }, templatePos: number | null, x: number, y: number, w: number): number {
+            const barH = 8
+            const badgeH = 12
+            const badgeGap = 3
             const toX = (val: number) => x + ((val - 1) / 9) * w
 
-            // Track background (full 1-10 range)
-            d.roundedRect(x, y, w, barH, 4).fill('#F1F5F9')
+            // ── Space above bar for Ideal badge ──
+            const topZone = badgeH + badgeGap + 2 // pill + connector + gap
+            const barY = y + topZone
 
-            // Acceptable range band (min to max)
-            const rangeLeft = toX(rule.minimum_position)
-            const rangeRight = toX(rule.maximum_position)
-            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 3).fill('#EEF2FF')
-            d.roundedRect(rangeLeft, y, rangeRight - rangeLeft, barH, 3).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+            // ── 1. Gradient track (blue-200 → teal-200 → emerald-200) ──
+            const grad = d.linearGradient(x, barY, x + w, barY)
+            grad.stop(0, '#BFDBFE')    // blue-200
+            grad.stop(0.5, '#99F6E4')  // teal-200
+            grad.stop(1, '#A7F3D0')    // emerald-200
+            d.roundedRect(x, barY, w, barH, 4).fill(grad)
 
-            // Gap bar between ideal and template
-            if (templatePos != null) {
-                const idealX = toX(rule.ideal_position)
-                const templX = toX(templatePos)
-                const diff = templatePos - rule.ideal_position
-                let barColor = '#10B981' // emerald — above ideal
-                if (diff < 0 && templatePos < rule.minimum_position) {
-                    barColor = '#EF4444' // red — breach
-                } else if (diff < 0) {
-                    barColor = '#F59E0B' // amber — below ideal
-                } else if (diff === 0) {
-                    barColor = '#10B981' // exact match
-                }
-                if (diff !== 0) {
-                    const bLeft = Math.min(idealX, templX)
-                    const bWidth = Math.abs(idealX - templX)
-                    d.rect(bLeft, y + 1, bWidth, barH - 2).fillOpacity(0.6).fill(barColor)
-                    d.fillOpacity(1)
-                }
-            }
-
-            // Fallback position marker (dashed vertical line, grey)
-            if (rule.fallback_position && rule.fallback_position !== rule.ideal_position) {
-                const fbX = toX(rule.fallback_position)
+            // Tick marks at each integer position
+            for (let pos = 1; pos <= 10; pos++) {
+                const tx = toX(pos)
                 d.save()
-                d.moveTo(fbX, y - 2).lineTo(fbX, y + barH + 2)
-                    .strokeColor('#94A3B8').lineWidth(1).dash(2, { space: 2 }).stroke()
-                d.undash()
+                d.moveTo(tx, barY).lineTo(tx, barY + barH)
+                    .strokeColor('#FFFFFF').lineWidth(0.5).fillOpacity(0.5).stroke()
                 d.restore()
             }
 
-            // Ideal position marker (solid purple vertical line)
-            const idealXPos = toX(rule.ideal_position)
-            d.moveTo(idealXPos, y - 2).lineTo(idealXPos, y + barH + 2)
-                .strokeColor('#7C3AED').lineWidth(1.5).stroke()
+            // ── 2. Market band (amber, min → max) ──
+            const rangeLeft = toX(rule.minimum_position)
+            const rangeRight = toX(rule.maximum_position)
+            const bandW = Math.max(2, rangeRight - rangeLeft)
+            d.save()
+            d.roundedRect(rangeLeft, barY, bandW, barH, 3).fillOpacity(0.35).fill('#FDE68A') // amber-200
+            d.fillOpacity(1)
+            d.roundedRect(rangeLeft, barY, bandW, barH, 3).strokeColor('#FCD34D').lineWidth(0.5).stroke() // amber-300
+            d.restore()
 
-            // Template position marker (diamond)
+            // ── 3. Ideal badge (above bar — emerald pill) ──
+            const idealX = toX(rule.ideal_position)
+            const idealLabel = `Ideal \u00B7 ${rule.ideal_position}`
+            d.font('Helvetica-Bold').fontSize(6.5)
+            const idealLabelW = d.widthOfString(idealLabel) + 8
+            const idealPillX = idealX - idealLabelW / 2
+            const idealPillY = y
+            // Connector line
+            d.moveTo(idealX, idealPillY + badgeH).lineTo(idealX, barY)
+                .strokeColor('#10B981').lineWidth(0.75).stroke()
+            // Pill background
+            d.roundedRect(idealPillX, idealPillY, idealLabelW, badgeH, badgeH / 2).fill('#10B981')
+            // Pill text
+            d.font('Helvetica-Bold').fontSize(6.5).fillColor('#FFFFFF')
+                .text(idealLabel, idealPillX + 4, idealPillY + 2, { width: idealLabelW - 8, align: 'center', lineBreak: false })
+
+            // ── 4. Fallback badge (below bar — red pill) ──
+            if (rule.fallback_position && rule.fallback_position !== rule.ideal_position) {
+                const fbX = toX(rule.fallback_position)
+                const fbLabel = `Fallback \u00B7 ${rule.fallback_position}`
+                d.font('Helvetica-Bold').fontSize(6.5)
+                const fbLabelW = d.widthOfString(fbLabel) + 8
+                const fbPillX = fbX - fbLabelW / 2
+                const fbPillY = barY + barH + badgeGap + 2
+                // Connector line
+                d.moveTo(fbX, barY + barH).lineTo(fbX, fbPillY)
+                    .strokeColor('#EF4444').lineWidth(0.75).stroke()
+                // Pill background
+                d.roundedRect(fbPillX, fbPillY, fbLabelW, badgeH, badgeH / 2).fill('#EF4444')
+                // Pill text
+                d.font('Helvetica-Bold').fontSize(6.5).fillColor('#FFFFFF')
+                    .text(fbLabel, fbPillX + 4, fbPillY + 2, { width: fbLabelW - 8, align: 'center', lineBreak: false })
+            }
+
+            // ── 5. Compliance diamond (clause position) ──
             if (templatePos != null) {
                 const tX = toX(templatePos)
-                const tY = y + barH / 2
-                const dSize = 5
-                const diamondColor = templatePos >= rule.minimum_position ? '#059669' : '#DC2626'
+                const tY = barY + barH / 2
+                const dSize = 6
+                // Tier colour: emerald if within range, amber if in band but below ideal, red if out of range, slate if way out
+                let diamondColor = '#10B981' // emerald — within ideal
+                if (templatePos < rule.minimum_position) {
+                    diamondColor = templatePos < rule.minimum_position - 2 ? '#1E293B' : '#EF4444' // slate-900 or red
+                } else if (templatePos < rule.ideal_position) {
+                    diamondColor = '#F59E0B' // amber — below ideal but in range
+                }
                 d.save()
                 d.moveTo(tX, tY - dSize).lineTo(tX + dSize, tY).lineTo(tX, tY + dSize).lineTo(tX - dSize, tY).closePath()
                 d.fill(diamondColor)
+                // White border for visibility
+                d.moveTo(tX, tY - dSize).lineTo(tX + dSize, tY).lineTo(tX, tY + dSize).lineTo(tX - dSize, tY).closePath()
+                d.strokeColor('#FFFFFF').lineWidth(0.75).stroke()
                 d.restore()
             }
 
-            // Scale labels
+            // ── 6. Scale numbers (1-10 underneath) ──
+            const scaleY = barY + barH + (rule.fallback_position && rule.fallback_position !== rule.ideal_position ? badgeH + badgeGap + 6 : 4)
+            d.font('Helvetica').fontSize(5.5).fillColor('#94A3B8')
+            for (let pos = 1; pos <= 10; pos++) {
+                const numX = toX(pos)
+                d.text(`${pos}`, numX - 4, scaleY, { width: 8, align: 'center', lineBreak: false })
+            }
+
+            // ── 7. Orientation labels ──
+            const orientY = scaleY + 8
             d.font('Helvetica').fontSize(6).fillColor('#94A3B8')
-            d.text('1', x - 2, y + barH + 2, { width: 10, lineBreak: false })
-            d.text('10', x + w - 6, y + barH + 2, { width: 14, lineBreak: false })
-            // Reset cursor and font to avoid poisoning subsequent moveDown() calls
+            d.text('\u2190 Provider-favoring', x, orientY, { width: w / 2, lineBreak: false })
+            d.font('Helvetica').fontSize(6).fillColor('#94A3B8')
+            d.text('Customer-favoring \u2192', x + w / 2, orientY, { width: w / 2, align: 'right', lineBreak: false })
+
+            // ── Reset cursor and font ──
             d.x = 72
             d.font('Helvetica').fontSize(9)
+
+            // Return total height used
+            const totalH = (orientY + 10) - y
+            return totalH
         }
 
         // ── Helper: ensure enough space or add page ──
@@ -1020,38 +1072,36 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 .text('Clause-by-Clause Analysis', 72, doc.y, { width: pageW })
             doc.moveDown(0.4)
 
-            // Position bar legend — compact single line
+            // Position bar legend — matches component visual design
             const legendY = doc.y
             doc.font('Helvetica').fontSize(7).fillColor('#64748B')
                 .text('Position Bar Key:', 72, legendY, { lineBreak: false })
             const legY = legendY
             const legStartX = 148
-            // Range band
-            doc.roundedRect(legStartX, legY, 20, 6, 2).fill('#EEF2FF')
-            doc.roundedRect(legStartX, legY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+            // Market band (amber)
+            doc.roundedRect(legStartX, legY, 20, 6, 2).fillOpacity(0.35).fill('#FDE68A')
+            doc.fillOpacity(1)
+            doc.roundedRect(legStartX, legY, 20, 6, 2).strokeColor('#FCD34D').lineWidth(0.5).stroke()
             doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Min-Max range', legStartX + 24, legY - 1, { lineBreak: false })
-            // Ideal marker
-            const leg2X = legStartX + 100
-            doc.moveTo(leg2X, legY - 1).lineTo(leg2X, legY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
-            doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Ideal', leg2X + 6, legY - 1, { lineBreak: false })
-            // Fallback marker
-            const leg3X = leg2X + 48
+                .text('Market range', legStartX + 24, legY - 1, { lineBreak: false })
+            // Ideal pill
+            const leg2X = legStartX + 94
+            doc.roundedRect(leg2X, legY - 2, 28, 10, 5).fill('#10B981')
+            doc.font('Helvetica-Bold').fontSize(5.5).fillColor('#FFFFFF')
+                .text('Ideal', leg2X + 2, legY, { width: 24, align: 'center', lineBreak: false })
+            // Fallback pill
+            const leg3X = leg2X + 36
+            doc.roundedRect(leg3X, legY - 2, 36, 10, 5).fill('#EF4444')
+            doc.font('Helvetica-Bold').fontSize(5.5).fillColor('#FFFFFF')
+                .text('Fallback', leg3X + 2, legY, { width: 32, align: 'center', lineBreak: false })
+            // Clause diamond
+            const leg4X = leg3X + 44
             doc.save()
-            doc.moveTo(leg3X, legY - 1).lineTo(leg3X, legY + 7).strokeColor('#94A3B8').lineWidth(1).dash(2, { space: 2 }).stroke()
-            doc.undash()
+            doc.moveTo(leg4X + 4, legY - 2).lineTo(leg4X + 8, legY + 3).lineTo(leg4X + 4, legY + 8).lineTo(leg4X, legY + 3).closePath()
+            doc.fill('#10B981')
             doc.restore()
             doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Fallback', leg3X + 6, legY - 1, { lineBreak: false })
-            // Template diamond
-            const leg4X = leg3X + 56
-            doc.save()
-            doc.moveTo(leg4X + 3, legY - 1).lineTo(leg4X + 6, legY + 3).lineTo(leg4X + 3, legY + 7).lineTo(leg4X, legY + 3).closePath()
-            doc.fill('#059669')
-            doc.restore()
-            doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-                .text('Clause position', leg4X + 10, legY - 1, { lineBreak: false })
+                .text('Clause position', leg4X + 12, legY - 1, { lineBreak: false })
             doc.x = 72
             doc.y = legY + 14
             doc.moveTo(72, doc.y).lineTo(72 + pageW, doc.y).strokeColor('#E2E8F0').lineWidth(0.5).stroke()
@@ -1195,11 +1245,11 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 }
                 doc.moveDown(0.4)
 
-                // Draw the position bar
+                // Draw the position bar (component-style with badges)
                 const barX = 72
                 const barW = pageW
                 const barY = doc.y
-                drawPositionBar(doc, {
+                const barTotalH = drawPositionBar(doc, {
                     ideal_position: result.ruleIdealPosition,
                     minimum_position: result.ruleMinimumPosition,
                     maximum_position: result.ruleMaximumPosition,
@@ -1207,7 +1257,7 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 }, result.clausePosition, barX, barY, barW)
 
                 doc.x = 72
-                doc.y = barY + 28
+                doc.y = barY + barTotalH + 4
                 doc.moveDown(0.3)
 
                 // Status label
@@ -1327,33 +1377,34 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                 .text('Category Analysis')
         doc.moveDown(0.3)
 
-        // Legend for position bars
+        // Legend for position bars — matches component visual design
         const legendY = doc.y
         const legendX = 72
         doc.font('Helvetica').fontSize(7).fillColor('#64748B')
             .text('Position Bar Legend:', legendX, legendY)
 
         const legItemY = legendY + 10
-        // Acceptable range
-        doc.roundedRect(legendX, legItemY, 20, 6, 2).fill('#EEF2FF')
-        doc.roundedRect(legendX, legItemY, 20, 6, 2).strokeColor('#C7D2FE').lineWidth(0.5).stroke()
+        // Market band (amber)
+        doc.roundedRect(legendX, legItemY, 20, 6, 2).fillOpacity(0.35).fill('#FDE68A')
+        doc.fillOpacity(1)
+        doc.roundedRect(legendX, legItemY, 20, 6, 2).strokeColor('#FCD34D').lineWidth(0.5).stroke()
         doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-            .text('Acceptable range', legendX + 24, legItemY - 1, { lineBreak: false })
+            .text('Market range', legendX + 24, legItemY - 1, { lineBreak: false })
 
-        // Ideal marker
-        const leg2X = legendX + 110
-        doc.moveTo(leg2X, legItemY - 1).lineTo(leg2X, legItemY + 7).strokeColor('#7C3AED').lineWidth(1.5).stroke()
-        doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-            .text('Ideal position', leg2X + 6, legItemY - 1, { lineBreak: false })
+        // Ideal pill
+        const leg2X = legendX + 94
+        doc.roundedRect(leg2X, legItemY - 2, 28, 10, 5).fill('#10B981')
+        doc.font('Helvetica-Bold').fontSize(5.5).fillColor('#FFFFFF')
+            .text('Ideal', leg2X + 2, legItemY, { width: 24, align: 'center', lineBreak: false })
 
-        // Template diamond
-        const leg3X = leg2X + 90
+        // Clause diamond
+        const leg3X = leg2X + 36
         doc.save()
-        doc.moveTo(leg3X + 3, legItemY - 1).lineTo(leg3X + 6, legItemY + 3).lineTo(leg3X + 3, legItemY + 7).lineTo(leg3X, legItemY + 3).closePath()
-        doc.fill('#059669')
+        doc.moveTo(leg3X + 4, legItemY - 2).lineTo(leg3X + 8, legItemY + 3).lineTo(leg3X + 4, legItemY + 8).lineTo(leg3X, legItemY + 3).closePath()
+        doc.fill('#10B981')
         doc.restore()
         doc.font('Helvetica').fontSize(6.5).fillColor('#64748B')
-            .text('Template position', leg3X + 10, legItemY - 1, { lineBreak: false })
+            .text('Template position', leg3X + 12, legItemY - 1, { lineBreak: false })
 
         doc.x = 72 // Reset cursor after legend drawing
         doc.y = legItemY + 18
@@ -1421,9 +1472,9 @@ async function buildPdf(audit: AuditRow, report: AlignmentReportResult, playbook
                         .text(rName, cardX + 12, ruleY, { width: labelW - 12 })
 
                     // Draw the position bar
-                    drawPositionBar(doc, scored.rule, scored.effectivePosition, barX, ruleY, barW)
+                    const ruleBarH = drawPositionBar(doc, scored.rule, scored.effectivePosition, barX, ruleY, barW)
 
-                    doc.y = ruleY + 18
+                    doc.y = ruleY + Math.max(18, ruleBarH + 4)
                 }
                 doc.x = 72 // Reset to left margin after position bar drawing
                 doc.moveDown(0.3)
