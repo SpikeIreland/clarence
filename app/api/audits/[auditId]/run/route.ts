@@ -135,12 +135,18 @@ export async function POST(
         }
 
         // 7. Load existing clause-rule mappings from playbook_rule_clause_map
-        const { data: existingMappings } = await supabase
+        // Use .neq('status', 'rejected') instead of .in() for broader compatibility
+        const { data: existingMappings, error: mappingsError } = await supabase
             .from('playbook_rule_clause_map')
             .select('playbook_rule_id, template_clause_id, match_method, match_confidence, match_reason')
             .eq('template_id', audit.template_id)
             .eq('playbook_id', audit.playbook_id)
-            .in('status', ['active', 'confirmed', 'unconfirmed'])
+            .neq('status', 'rejected')
+
+        if (mappingsError) {
+            console.error(`[Audit Run] Mappings query error:`, mappingsError)
+        }
+        console.log(`[Audit Run] Loaded ${existingMappings?.length ?? 0} existing mappings for template=${audit.template_id}`)
 
         // 8. If no mappings exist, try to generate them via the RPC function
         let mappingsToUse = existingMappings || []
@@ -155,12 +161,13 @@ export async function POST(
                     mappingsToUse = rpcResult
                 } else {
                     // Re-fetch from table in case the RPC inserted them
-                    const { data: freshMappings } = await supabase
+                    const { data: freshMappings, error: freshError } = await supabase
                         .from('playbook_rule_clause_map')
                         .select('playbook_rule_id, template_clause_id, match_method, match_confidence, match_reason')
                         .eq('template_id', audit.template_id)
                         .eq('playbook_id', audit.playbook_id)
-                        .in('status', ['active', 'confirmed', 'unconfirmed'])
+                        .neq('status', 'rejected')
+                    if (freshError) console.error(`[Audit Run] Fresh mappings query error:`, freshError)
                     mappingsToUse = freshMappings || []
                 }
             } catch (rpcError) {
