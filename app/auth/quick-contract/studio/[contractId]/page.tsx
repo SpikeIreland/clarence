@@ -5369,17 +5369,34 @@ INSTRUCTIONS:
 
                         {/* Normal clause tree rendering */}
                         {clauses.length > 0 && (() => {
-                            // Build parent-child tree
+                            // Build parent-child tree — flatten all descendants under their top-level ancestor
+                            // so that level 3+ clauses (e.g. 1.2.1) appear under their level 1 section (clause 1)
                             const parentMap = new Map<string, ContractClause[]>()
                             const topLevel: ContractClause[] = []
+                            const clauseById = new Map<string, ContractClause>()
+                            filteredClauses.forEach(c => clauseById.set(c.clauseId, c))
+
+                            // Find the top-level ancestor for any clause by walking up the parent chain
+                            const findTopLevelAncestor = (clause: ContractClause): string | null => {
+                                let current = clause
+                                while (current.parentClauseId) {
+                                    const parent = clauseById.get(current.parentClauseId)
+                                    if (!parent) break
+                                    if (!parent.parentClauseId) return parent.clauseId // Found top-level
+                                    current = parent
+                                }
+                                return null
+                            }
 
                             filteredClauses.forEach(clause => {
-                                if (clause.parentClauseId) {
-                                    const siblings = parentMap.get(clause.parentClauseId) || []
-                                    siblings.push(clause)
-                                    parentMap.set(clause.parentClauseId, siblings)
-                                } else {
+                                if (!clause.parentClauseId) {
                                     topLevel.push(clause)
+                                } else {
+                                    // Flatten: put under the top-level ancestor, not the direct parent
+                                    const topAncestorId = findTopLevelAncestor(clause) || clause.parentClauseId
+                                    const siblings = parentMap.get(topAncestorId) || []
+                                    siblings.push(clause)
+                                    parentMap.set(topAncestorId, siblings)
                                 }
                             })
 
