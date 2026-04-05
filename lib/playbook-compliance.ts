@@ -441,20 +441,35 @@ export function scoreRule(
         }
     }
 
-    // Within acceptable range — minimum to ideal (85%)
+    // Within acceptable range — minimum to ideal
+    // Score proportionally: at minimum = 60%, at ideal-1 = 90%, giving a smooth gradient
     if (pos >= rule.minimum_position) {
+        const range = rule.ideal_position - rule.minimum_position
+        const progress = range > 0 ? (pos - rule.minimum_position) / range : 1
+        // Scale from 60% (at minimum) to 90% (just below ideal)
+        const proportionalScore = Math.round(60 + progress * 30)
+
         // Check if below escalation threshold
         if (rule.requires_approval_below != null && pos < rule.requires_approval_below) {
             return {
                 status: 'warning',
-                score: 85,
+                score: proportionalScore,
                 detail: `Position ${effectivePosition} is within range but below escalation threshold (${rule.requires_approval_below}) — requires approval`
+            }
+        }
+
+        // At exact minimum — flag as marginal
+        if (pos === rule.minimum_position) {
+            return {
+                status: 'acceptable',
+                score: proportionalScore,
+                detail: `Position ${effectivePosition} is at the minimum acceptable (${rule.minimum_position}) — review recommended`
             }
         }
 
         return {
             status: 'acceptable',
-            score: 85,
+            score: proportionalScore,
             detail: `Position ${effectivePosition} is within acceptable range (${rule.minimum_position}-${rule.ideal_position})`
         }
     }
@@ -982,52 +997,78 @@ export function matchClausesToRules(
         }
     }
 
-    // 2. Dynamic matching for unmatched rules → find best clause by category + name similarity
+    // 2. Dynamic matching for unmatched rules
+    //    Strategy: name-first across ALL clauses (categories often don't align
+    //    between playbook rules and template clauses), then category fallback.
     const unmatchedRulesForDynamic = rules.filter(r => !matchedRuleIds.has(r.rule_id))
     const activeClauses = clauses.filter(c => !c.is_header)
 
     for (const rule of unmatchedRulesForDynamic) {
-        const ruleNormCat = normaliseCategory(rule.category)
-
-        // Find clauses in the same normalised category
-        const categoryClauses = activeClauses.filter(c =>
-            normaliseCategory(c.category) === ruleNormCat
-        )
-
-        if (categoryClauses.length === 0) continue
-
-        // Try name similarity first — pick best match
         let bestClause: AuditClause | null = null
         let bestConfidence = 0
         let bestMethod = 'dynamic_category'
         let bestReason = 'Category match'
 
-        for (const clause of categoryClauses) {
-            const rName = rule.clause_name.toLowerCase().trim()
-            const cName = clause.clause_name.toLowerCase().trim()
+        const rName = rule.clause_name.toLowerCase().trim()
 
+        // 2a. Name-based matching across ALL active clauses (not gated by category)
+        for (const clause of activeClauses) {
+            const cName = clause.clause_name.toLowerCase().trim()
+            const sameCategory = normaliseCategory(clause.category) === normaliseCategory(rule.category)
+
+            // Exact name match
             if (rName === cName) {
                 bestClause = clause
                 bestConfidence = 100
                 bestMethod = 'dynamic_exact'
-                bestReason = 'Exact clause name match'
+                bestReason = sameCategory ? 'Exact name match (same category)' : 'Exact name match (cross-category)'
                 break
             }
 
+            // Containment match (one name contains the other)
             if (cName.includes(rName) || rName.includes(cName)) {
-                if (75 > bestConfidence) {
+                // Boost confidence if categories also align
+                const conf = sameCategory ? 80 : 70
+                if (conf > bestConfidence) {
                     bestClause = clause
-                    bestConfidence = 75
+                    bestConfidence = conf
                     bestMethod = 'dynamic_containment'
-                    bestReason = 'Name containment match'
+                    bestReason = sameCategory ? 'Name containment match (same category)' : 'Name containment match (cross-category)'
+                }
+            }
+
+            // Word overlap match — check if key words from the rule name appear in the clause name
+            if (!bestClause || bestConfidence < 60) {
+                const rWords = rName.split(/[\s\-\/]+/).filter(w => w.length > 3)
+                const cWords = cName.split(/[\s\-\/]+/).filter(w => w.length > 3)
+                if (rWords.length > 0) {
+                    const overlap = rWords.filter(w => cWords.some(cw => cw.includes(w) || w.includes(cw)))
+                    const overlapRatio = overlap.length / rWords.length
+                    if (overlapRatio >= 0.5) {
+                        const conf = sameCategory ? 65 : 55
+                        if (conf > bestConfidence) {
+                            bestClause = clause
+                            bestConfidence = conf
+                            bestMethod = 'dynamic_word_overlap'
+                            bestReason = `Word overlap (${overlap.join(', ')})`
+                        }
+                    }
                 }
             }
         }
 
-        // Fall back to first clause in category by display_order
+        // 2b. Category fallback — if no name match found, pick first clause in same category
         if (!bestClause) {
-            bestClause = categoryClauses.sort((a, b) => (a.display_order || 0) - (b.display_order || 0))[0]
-            bestConfidence = 50
+            const ruleNormCat = normaliseCategory(rule.category)
+            const categoryClauses = activeClauses.filter(c =>
+                normaliseCategory(c.category) === ruleNormCat
+            )
+            if (categoryClauses.length > 0) {
+                bestClause = categoryClauses.sort((a, b) => (a.display_order || 0) - (b.display_order || 0))[0]
+                bestConfidence = 40
+                bestMethod = 'dynamic_category'
+                bestReason = 'Category fallback (no name match)'
+            }
         }
 
         if (bestClause) {
