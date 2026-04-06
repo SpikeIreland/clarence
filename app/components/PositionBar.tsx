@@ -36,7 +36,8 @@
 
 'use client'
 
-import { useState, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 
 
 // ============================================================================
@@ -254,8 +255,18 @@ export default function PositionBar({
         ? Math.abs(parties.customer.position - parties.provider.position)
         : null
 
-    // ── Range label hover ──
+    // ── Range label hover (fixed-position tooltip to escape overflow containers) ──
     const [hoveredLabel, setHoveredLabel] = useState<number | null>(null)
+    const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
+    const labelRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+    useEffect(() => {
+        if (hoveredLabel == null) { setTooltipPos(null); return }
+        const el = labelRefs.current.get(hoveredLabel)
+        if (!el) { setTooltipPos(null); return }
+        const rect = el.getBoundingClientRect()
+        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top })
+    }, [hoveredLabel])
 
     // ── Display positions for range labels ──
     const labelPositions = [1, 3, 5, 7, 10]
@@ -438,12 +449,12 @@ export default function PositionBar({
                         const isFirst = pos === 1
                         const isLast = pos === 10
                         const isLong = point.label.length > 10
-                        const isHovered = hoveredLabel === pos
 
                         return (
                             <div
                                 key={pos}
-                                className={`absolute ${isHovered ? 'z-[100]' : ''}`}
+                                ref={(el) => { if (el) labelRefs.current.set(pos, el); else labelRefs.current.delete(pos) }}
+                                className="absolute"
                                 style={{
                                     left: `${pct}%`,
                                     transform: isFirst ? 'translateX(0)' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
@@ -461,21 +472,37 @@ export default function PositionBar({
                                         <span className="w-1 h-1 rounded-full bg-slate-300 inline-block" />
                                     </span>
                                 )}
-
-                                {isLong && isHovered && (
-                                    <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg shadow-lg z-[100] whitespace-nowrap pointer-events-none">
-                                        <div className="font-medium">{point.label}</div>
-                                        {point.description && (
-                                            <div className="text-slate-400 text-[9px] mt-0.5">{point.description}</div>
-                                        )}
-                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
-                                    </div>
-                                )}
                             </div>
                         )
                     })}
                 </div>
             )}
+
+            {/* ═══ Hover tooltip — rendered via portal to escape overflow containers ═══ */}
+            {hoveredLabel != null && tooltipPos && typeof document !== 'undefined' && (() => {
+                const point = scalePoints.find(p => Math.abs(p.position - hoveredLabel) < 0.5)
+                if (!point || point.label.length <= 10) return null
+                return createPortal(
+                    <div
+                        className="fixed pointer-events-none"
+                        style={{
+                            left: `${tooltipPos.x}px`,
+                            top: `${tooltipPos.y - 8}px`,
+                            transform: 'translate(-50%, -100%)',
+                            zIndex: 9999,
+                        }}
+                    >
+                        <div className="bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
+                            <div className="font-medium">{point.label}</div>
+                            {point.description && (
+                                <div className="text-slate-400 text-[9px] mt-0.5">{point.description}</div>
+                            )}
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+                        </div>
+                    </div>,
+                    document.body
+                )
+            })()}
 
             {/* ═══ FIXED: Party orientation labels ═══ */}
             <div className="flex justify-between items-center mt-0.5">
