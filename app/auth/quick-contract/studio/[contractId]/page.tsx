@@ -4167,6 +4167,64 @@ INSTRUCTIONS:
                         setExpandedSections(new Set(headerIds))
                     }
 
+                    // Auto-map clauses to playbook rules if in template mode with a linked playbook
+                    if (isTemplateMode) {
+                        const autoMapToPlaybook = async () => {
+                            try {
+                                // Determine template ID and playbook ID
+                                let templateId = editTemplateId
+                                let playbookId = linkedPlaybookIdParam
+
+                                // If we have a template ID but no playbook, look it up
+                                if (templateId && !playbookId) {
+                                    const { data: tmpl } = await supabase
+                                        .from('contract_templates')
+                                        .select('linked_playbook_id')
+                                        .eq('template_id', templateId)
+                                        .single()
+                                    playbookId = tmpl?.linked_playbook_id || null
+                                }
+
+                                // If we have a playbook from URL but no template ID yet, look it up via source_contract_id
+                                if (!templateId && playbookId) {
+                                    const { data: tmpl } = await supabase
+                                        .from('contract_templates')
+                                        .select('template_id')
+                                        .eq('source_contract_id', resolvedContractId || contractId)
+                                        .single()
+                                    templateId = tmpl?.template_id || null
+                                }
+
+                                if (templateId && playbookId) {
+                                    // Check if mappings already exist
+                                    const { count } = await supabase
+                                        .from('playbook_rule_clause_map')
+                                        .select('*', { count: 'exact', head: true })
+                                        .eq('template_id', templateId)
+
+                                    if (!count || count === 0) {
+                                        console.log('[QC Studio] Auto-mapping clauses to playbook rules...')
+                                        const { data: mapResult, error: mapErr } = await supabase.rpc('map_playbook_rules_to_template_clauses', {
+                                            template_id: templateId,
+                                            playbook_id: playbookId,
+                                            replace_existing: false,
+                                        })
+                                        if (mapErr) {
+                                            console.warn('[QC Studio] Auto-mapping RPC error:', mapErr.message)
+                                        } else {
+                                            console.log('[QC Studio] Auto-mapping complete:', mapResult)
+                                        }
+                                    } else {
+                                        console.log(`[QC Studio] Mappings already exist (${count}), skipping auto-map`)
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn('[QC Studio] Auto-mapping failed:', err)
+                            }
+                        }
+                        autoMapToPlaybook() // Fire and forget
+                    }
+
                     // Update welcome message now that clauses have arrived (exclude schedule clauses)
                     const nonHeaderArrived = mappedClauses.filter(c => !c.isHeader && !/^schedule\s+\d/i.test(c.clauseNumber || ''))
                     const certifiedArrived = nonHeaderArrived.filter(c => c.clarenceCertified).length
