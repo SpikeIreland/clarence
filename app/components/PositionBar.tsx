@@ -160,11 +160,21 @@ interface ComplianceTier {
 }
 
 const getComplianceTier = (pos: number, playbook: PlaybookOverlay): ComplianceTier => {
-    if (pos < playbook.minimum)
+    // Direction-aware: ideal can be lower OR higher than fallback on the scale.
+    // dir = direction from ideal toward "worse" (toward fallback/maximum).
+    // isBeyond(pos, threshold) = is pos further from ideal than threshold, in the worse direction?
+    const dir = Math.sign(playbook.fallback - playbook.ideal) || 1
+    const isBeyond = (p: number, threshold: number) => (p - threshold) * dir > 0.1
+
+    // Out of market: position is beyond the market boundary in the worse direction
+    // Use maximum (worse-side boundary), not minimum (better-side boundary)
+    if (isBeyond(pos, playbook.maximum))
         return { label: 'Out of market', bg: 'bg-slate-900', text: 'text-white', diamond: 'bg-slate-900', border: '' }
-    if (pos < playbook.fallback)
+    // Out of company range: beyond fallback but within market
+    if (isBeyond(pos, playbook.fallback))
         return { label: 'Out of company range', bg: 'bg-red-50', text: 'text-red-600', diamond: 'bg-red-500', border: 'border-red-200' }
-    if (pos < playbook.ideal - 0.5)
+    // Outside ideal: beyond ideal tolerance but within fallback
+    if (isBeyond(pos, playbook.ideal + dir * 0.5))
         return { label: 'Outside ideal', bg: 'bg-amber-50', text: 'text-amber-700', diamond: 'bg-amber-500', border: 'border-amber-200' }
     return { label: 'Within ideal', bg: 'bg-emerald-50', text: 'text-emerald-700', diamond: 'bg-emerald-500', border: 'border-emerald-200' }
 }

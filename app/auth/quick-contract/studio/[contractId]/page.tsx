@@ -3697,13 +3697,13 @@ INSTRUCTIONS:
     }, [playbookRules, mappedClauseToRule])
 
     // Per-clause playbook compliance status for sidebar dots — 4-tier colour scheme:
-    //   Black  = out of market range entirely (below minimum_position)
-    //   Red    = out of company range (below fallback_position but within market)
-    //   Amber  = outside ideal but within company range (below ideal but above fallback)
+    //   Black  = out of market range (beyond maximum_position in the worse direction)
+    //   Red    = out of company range (beyond fallback but within market)
+    //   Amber  = outside ideal but within company range (beyond ideal but within fallback)
     //   Green  = at or within 0.5 of ideal position
+    // Direction-aware: ideal can be lower or higher than fallback on the party-aware scale.
     // NOTE: Only shown for high-confidence matches (mapping table or exact name).
     // Fuzzy/containment matches are excluded to avoid false breach indicators.
-    // This is an initial assessment — the user refines via the Mapping workspace.
     const clausePlaybookStatus = useMemo<Map<string, 'compliant' | 'warning' | 'breach' | 'critical'>>(() => {
         const map = new Map<string, 'compliant' | 'warning' | 'breach' | 'critical'>()
         if (playbookRules.length === 0) return map
@@ -3712,11 +3712,15 @@ INSTRUCTIONS:
             const rule = findExactRuleForClause(clause.clauseName)
             if (!rule) continue
             const pos = clause.clarencePosition
-            if (pos < rule.minimum_position) {
+            // Direction from ideal toward "worse" (toward fallback/maximum)
+            const dir = Math.sign(rule.fallback_position - rule.ideal_position) || 1
+            const isBeyond = (p: number, threshold: number) => (p - threshold) * dir > 0.1
+
+            if (isBeyond(pos, rule.maximum_position)) {
                 map.set(clause.clauseId, 'critical')    // Black — out of market range
-            } else if (pos < rule.fallback_position) {
+            } else if (isBeyond(pos, rule.fallback_position)) {
                 map.set(clause.clauseId, 'breach')       // Red — out of company range
-            } else if (pos < rule.ideal_position - 0.5) {
+            } else if (isBeyond(pos, rule.ideal_position + dir * 0.5)) {
                 map.set(clause.clauseId, 'warning')      // Amber — outside ideal zone
             } else {
                 map.set(clause.clauseId, 'compliant')    // Green — within ideal zone
@@ -6979,16 +6983,20 @@ INSTRUCTIONS:
                                     const rangeCtx = getEffectiveRangeContext(matchedRule)
 
                                     // 4-tier status: Black (out of market) → Red (out of company) → Amber (outside ideal) → Green (within ideal)
+                                    // Direction-aware: ideal can be lower OR higher than fallback on the scale
                                     let statusLabel = 'No certified position yet'
                                     let statusColor = 'bg-slate-100 text-slate-500 border-slate-200'
                                     if (clausePos != null) {
-                                        if (clausePos < matchedRule.minimum_position) {
+                                        const dir = Math.sign(matchedRule.fallback_position - matchedRule.ideal_position) || 1
+                                        const isBeyond = (p: number, threshold: number) => (p - threshold) * dir > 0.1
+
+                                        if (isBeyond(clausePos, matchedRule.maximum_position)) {
                                             statusLabel = 'Out of market range'
                                             statusColor = 'bg-slate-900 text-white border-slate-900'
-                                        } else if (clausePos < matchedRule.fallback_position) {
+                                        } else if (isBeyond(clausePos, matchedRule.fallback_position)) {
                                             statusLabel = 'Out of company range'
                                             statusColor = 'bg-red-50 text-red-600 border-red-200'
-                                        } else if (clausePos < matchedRule.ideal_position - 0.5) {
+                                        } else if (isBeyond(clausePos, matchedRule.ideal_position + dir * 0.5)) {
                                             statusLabel = 'Outside ideal'
                                             statusColor = 'bg-amber-50 text-amber-700 border-amber-200'
                                         } else {
