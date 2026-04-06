@@ -7,15 +7,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase'
 
 function validatePositionOrdering(
-    min: number, fallback: number, ideal: number, max: number
+    min: number, fallback: number, ideal: number, max: number,
+    perspective: string = 'customer'
 ): string | null {
     if (min < 1 || min > 10) return 'minimum_position must be 1-10'
     if (fallback < 1 || fallback > 10) return 'fallback_position must be 1-10'
     if (ideal < 1 || ideal > 10) return 'ideal_position must be 1-10'
     if (max < 1 || max > 10) return 'maximum_position must be 1-10'
-    if (min > fallback) return 'minimum_position must be <= fallback_position'
-    if (fallback > ideal) return 'fallback_position must be <= ideal_position'
-    if (ideal > max) return 'ideal_position must be <= maximum_position'
+    if (min > max) return 'minimum_position must be <= maximum_position'
+
+    if (perspective === 'provider') {
+        // Provider: min <= ideal <= fallback <= max (ideal is LOW, fallback is HIGHER)
+        if (min > ideal) return 'minimum_position must be <= ideal_position (provider)'
+        if (ideal > fallback) return 'ideal_position must be <= fallback_position (provider)'
+        if (fallback > max) return 'fallback_position must be <= maximum_position (provider)'
+    } else {
+        // Customer: min <= fallback <= ideal <= max (ideal is HIGH, fallback is LOWER)
+        if (min > fallback) return 'minimum_position must be <= fallback_position'
+        if (fallback > ideal) return 'fallback_position must be <= ideal_position'
+        if (ideal > max) return 'ideal_position must be <= maximum_position'
+    }
     return null
 }
 
@@ -42,6 +53,15 @@ export async function POST(
             )
         }
 
+        // Fetch playbook perspective for position validation
+        const supabaseCheck = createServiceRoleClient()
+        const { data: pbData } = await supabaseCheck
+            .from('company_playbooks')
+            .select('playbook_perspective')
+            .eq('playbook_id', playbookId)
+            .single()
+        const perspective = pbData?.playbook_perspective || 'customer'
+
         // Validate all rules before inserting
         for (let i = 0; i < rules.length; i++) {
             const rule = rules[i]
@@ -55,7 +75,8 @@ export async function POST(
                 rule.minimum_position,
                 rule.fallback_position,
                 rule.ideal_position,
-                rule.maximum_position
+                rule.maximum_position,
+                perspective
             )
             if (posError) {
                 return NextResponse.json(

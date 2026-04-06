@@ -842,32 +842,60 @@ function PlaybookReviewContent() {
         setRules(prev => prev.map(r => r.rule_id === ruleId ? { ...r, [field]: value } : r))
     }
 
-    // Position change with ordering validation
+    // Position change with perspective-aware ordering validation
+    // Customer playbooks: min <= fallback <= ideal <= max (ideal is HIGH)
+    // Provider playbooks: min <= ideal <= fallback <= max (ideal is LOW)
     const handlePositionChange = (ruleId: string, field: string, value: number) => {
         const rule = getEffectiveRule(rules.find(r => r.rule_id === ruleId)!)
         const updated = { ...rule, [field]: value }
+        const isProvider = playbook?.playbook_perspective === 'provider'
 
-        // Auto-adjust to maintain min <= fallback <= ideal <= max
-        if (field === 'minimum_position') {
-            if (value > updated.fallback_position) updated.fallback_position = value
-            if (value > updated.ideal_position) updated.ideal_position = value
-            if (value > updated.maximum_position) updated.maximum_position = value
-        } else if (field === 'fallback_position') {
-            if (value < updated.minimum_position) updated.minimum_position = value
-            if (value > updated.ideal_position) updated.ideal_position = value
-            if (value > updated.maximum_position) updated.maximum_position = value
-            // Keep escalate threshold in sync with fallback unless user has set it independently
-            if (updated.requires_approval_below === null || updated.requires_approval_below === rule.fallback_position) {
-                updated.requires_approval_below = value
+        if (isProvider) {
+            // Provider ordering: min <= ideal <= fallback <= max
+            if (field === 'minimum_position') {
+                if (value > updated.ideal_position) updated.ideal_position = value
+                if (value > updated.fallback_position) updated.fallback_position = value
+                if (value > updated.maximum_position) updated.maximum_position = value
+            } else if (field === 'ideal_position') {
+                if (value < updated.minimum_position) updated.minimum_position = value
+                if (value > updated.fallback_position) updated.fallback_position = value
+                if (value > updated.maximum_position) updated.maximum_position = value
+            } else if (field === 'fallback_position') {
+                if (value < updated.minimum_position) updated.minimum_position = value
+                if (value < updated.ideal_position) updated.ideal_position = value
+                if (value > updated.maximum_position) updated.maximum_position = value
+                // Keep escalate threshold in sync with fallback unless user has set it independently
+                if (updated.requires_approval_below === null || updated.requires_approval_below === rule.fallback_position) {
+                    updated.requires_approval_below = value
+                }
+            } else if (field === 'maximum_position') {
+                if (value < updated.minimum_position) updated.minimum_position = value
+                if (value < updated.ideal_position) updated.ideal_position = value
+                if (value < updated.fallback_position) updated.fallback_position = value
             }
-        } else if (field === 'ideal_position') {
-            if (value < updated.minimum_position) updated.minimum_position = value
-            if (value < updated.fallback_position) updated.fallback_position = value
-            if (value > updated.maximum_position) updated.maximum_position = value
-        } else if (field === 'maximum_position') {
-            if (value < updated.minimum_position) updated.minimum_position = value
-            if (value < updated.fallback_position) updated.fallback_position = value
-            if (value < updated.ideal_position) updated.ideal_position = value
+        } else {
+            // Customer ordering: min <= fallback <= ideal <= max
+            if (field === 'minimum_position') {
+                if (value > updated.fallback_position) updated.fallback_position = value
+                if (value > updated.ideal_position) updated.ideal_position = value
+                if (value > updated.maximum_position) updated.maximum_position = value
+            } else if (field === 'fallback_position') {
+                if (value < updated.minimum_position) updated.minimum_position = value
+                if (value > updated.ideal_position) updated.ideal_position = value
+                if (value > updated.maximum_position) updated.maximum_position = value
+                // Keep escalate threshold in sync with fallback unless user has set it independently
+                if (updated.requires_approval_below === null || updated.requires_approval_below === rule.fallback_position) {
+                    updated.requires_approval_below = value
+                }
+            } else if (field === 'ideal_position') {
+                if (value < updated.minimum_position) updated.minimum_position = value
+                if (value < updated.fallback_position) updated.fallback_position = value
+                if (value > updated.maximum_position) updated.maximum_position = value
+            } else if (field === 'maximum_position') {
+                if (value < updated.minimum_position) updated.minimum_position = value
+                if (value < updated.fallback_position) updated.fallback_position = value
+                if (value < updated.ideal_position) updated.ideal_position = value
+            }
         }
 
         // Batch all position updates (includes requires_approval_below if synced to fallback)

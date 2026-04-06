@@ -35,15 +35,26 @@ const ALLOWED_FIELDS = [
 ] as const
 
 function validatePositionOrdering(
-    min: number, fallback: number, ideal: number, max: number
+    min: number, fallback: number, ideal: number, max: number,
+    perspective: string = 'customer'
 ): string | null {
     if (min < 1 || min > 10) return 'minimum_position must be 1-10'
     if (fallback < 1 || fallback > 10) return 'fallback_position must be 1-10'
     if (ideal < 1 || ideal > 10) return 'ideal_position must be 1-10'
     if (max < 1 || max > 10) return 'maximum_position must be 1-10'
-    if (min > fallback) return 'minimum_position must be ≤ fallback_position'
-    if (fallback > ideal) return 'fallback_position must be ≤ ideal_position'
-    if (ideal > max) return 'ideal_position must be ≤ maximum_position'
+    if (min > max) return 'minimum_position must be ≤ maximum_position'
+
+    if (perspective === 'provider') {
+        // Provider: min <= ideal <= fallback <= max (ideal is LOW, fallback is HIGHER)
+        if (min > ideal) return 'minimum_position must be ≤ ideal_position (provider)'
+        if (ideal > fallback) return 'ideal_position must be ≤ fallback_position (provider)'
+        if (fallback > max) return 'fallback_position must be ≤ maximum_position (provider)'
+    } else {
+        // Customer: min <= fallback <= ideal <= max (ideal is HIGH, fallback is LOWER)
+        if (min > fallback) return 'minimum_position must be ≤ fallback_position'
+        if (fallback > ideal) return 'fallback_position must be ≤ ideal_position'
+        if (ideal > max) return 'ideal_position must be ≤ maximum_position'
+    }
     return null
 }
 
@@ -88,10 +99,10 @@ export async function PATCH(
         const hasPositionUpdate = positionFields.some(f => updates[f] !== undefined)
 
         if (hasPositionUpdate) {
-            // Fetch current rule to merge with updates
+            // Fetch current rule and playbook perspective to merge with updates
             const { data: currentRule, error: fetchError } = await supabase
                 .from('playbook_rules')
-                .select('minimum_position, fallback_position, ideal_position, maximum_position')
+                .select('minimum_position, fallback_position, ideal_position, maximum_position, playbook_id')
                 .eq('rule_id', ruleId)
                 .eq('playbook_id', playbookId)
                 .single()
@@ -102,6 +113,14 @@ export async function PATCH(
                     { status: 404 }
                 )
             }
+
+            // Get the playbook perspective for correct ordering validation
+            const { data: pbData } = await supabase
+                .from('company_playbooks')
+                .select('playbook_perspective')
+                .eq('playbook_id', playbookId)
+                .single()
+            const perspective = pbData?.playbook_perspective || 'customer'
 
             const merged = {
                 minimum_position: (updates.minimum_position ?? currentRule.minimum_position) as number,
@@ -114,7 +133,8 @@ export async function PATCH(
                 merged.minimum_position,
                 merged.fallback_position,
                 merged.ideal_position,
-                merged.maximum_position
+                merged.maximum_position,
+                perspective
             )
 
             if (validationError) {
