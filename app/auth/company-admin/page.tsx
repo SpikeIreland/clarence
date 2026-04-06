@@ -88,6 +88,7 @@ interface CompanyTemplate {
     createdAt: string
     createdBy?: string
     sourceFileName?: string
+    sourceContractId?: string | null
     linkedPlaybookId: string | null
     unconfirmedMappings: number
 }
@@ -962,6 +963,14 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
         })
     }, [])
 
+    // Auto-refresh when templates are still processing (polling every 10s)
+    useEffect(() => {
+        const hasProcessing = templates.some(t => t.status === 'processing')
+        if (!hasProcessing) return
+        const interval = setInterval(() => onRefresh(), 10000)
+        return () => clearInterval(interval)
+    }, [templates, onRefresh])
+
     const handleEditTemplate = async (template: CompanyTemplate) => {
         if (!userInfo?.userId || !userInfo?.companyId) return
         setEditingTemplateId(template.templateId)
@@ -1470,7 +1479,12 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
             return <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">Inactive</span>
         }
         if (template.status === 'processing') {
-            return <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Processing...</span>
+            return (
+                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full flex items-center gap-1.5">
+                    <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    Parsing in progress...
+                </span>
+            )
         }
         if (template.status === 'failed') {
             return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">Failed</span>
@@ -1723,6 +1737,15 @@ function TemplatesTab({ templates, isLoading, userInfo, playbooks, onUpload, onD
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
+                                    {template.status === 'processing' && template.sourceContractId && (
+                                        <button
+                                            onClick={() => router.push(`/auth/quick-contract/studio/${template.sourceContractId}?mode=template&company=true`)}
+                                            className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg flex items-center gap-1.5"
+                                        >
+                                            <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                            View Progress
+                                        </button>
+                                    )}
                                     {template.status === 'ready' && template.clauseCount > 0 && template.linkedPlaybookId && (
                                         <button
                                             onClick={() => router.push(`/auth/company-admin/template/${template.templateId}/mapping`)}
@@ -3292,6 +3315,7 @@ function CompanyAdminContent() {
                 status: t.clause_count > 0 ? 'ready' : 'processing',
                 createdAt: t.created_at,
                 sourceFileName: t.source_file_name,
+                sourceContractId: t.source_contract_id || null,
                 linkedPlaybookId: t.linked_playbook_id || null,
                 unconfirmedMappings: unconfirmedMap.get(t.template_id) || 0,
             })))

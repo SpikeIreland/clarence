@@ -612,6 +612,8 @@ function QuickContractStudioContent() {
     const [chatInput, setChatInput] = useState('')
     const [chatLoading, setChatLoading] = useState(false)
     const chatEndRef = useRef<HTMLDivElement>(null)
+    const chatContainerRef = useRef<HTMLDivElement>(null)
+    const lastRationaleIndexRef = useRef<number>(-1)
     const clauseMenuRef = useRef<HTMLDivElement>(null)
     const clauseListRef = useRef<HTMLDivElement>(null)
     const workspacePanelRef = useRef<HTMLDivElement>(null)
@@ -1340,12 +1342,26 @@ function QuickContractStudioContent() {
         }
     }, [chatInput, chatLoading, contractId, selectedClause])
 
-    // Auto-scroll chat (only for NEW messages, not clause selection)
+    // Auto-scroll chat: scroll to TOP of rationale messages, BOTTOM for user conversations
     const prevChatLengthRef = useRef(0)
     useEffect(() => {
-        // Only scroll to bottom when a new message is added, not when switching clauses
         if (chatMessages.length > prevChatLengthRef.current) {
-            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            const newMsg = chatMessages[chatMessages.length - 1]
+            const isRationale = newMsg?.id?.startsWith('rationale-')
+            if (isRationale && chatContainerRef.current) {
+                // Scroll to show the START of the new rationale message
+                // Use requestAnimationFrame to ensure DOM has rendered the new message
+                requestAnimationFrame(() => {
+                    const messageElements = chatContainerRef.current?.querySelectorAll('[data-chat-message]')
+                    const lastMessage = messageElements?.[messageElements.length - 1]
+                    if (lastMessage) {
+                        lastMessage.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                })
+            } else {
+                // User conversation: scroll to bottom as before
+                chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }
         }
         prevChatLengthRef.current = chatMessages.length
     }, [chatMessages])
@@ -2335,7 +2351,7 @@ function QuickContractStudioContent() {
 
             setTemplateSaved(true)
             setSavedTemplateId(targetTemplateId)
-            redirectTimeoutRef.current = setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
+            redirectTimeoutRef.current = setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin?tab=templates' : '/auth/contracts'), 1500)
 
         } catch (error) {
             console.error('Failed to save template:', error)
@@ -4574,7 +4590,7 @@ INSTRUCTIONS:
                         <button
                             onClick={() => {
                                 if (isTemplateMode) {
-                                    router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
+                                    router.push(isCompanyTemplate ? '/auth/company-admin?tab=templates' : '/auth/contracts')
                                 } else if (getPartyRole() === 'respondent') {
                                     window.location.href = '/provider'
                                 } else {
@@ -7062,10 +7078,11 @@ INSTRUCTIONS:
                     </div>
 
                     {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+                    <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
                         {chatMessages.map((message) => (
                             <div
                                 key={message.id}
+                                data-chat-message
                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                             >
                                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'

@@ -183,11 +183,13 @@ const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
 }
 
 export function normaliseCategory(raw: string): string {
+    if (!raw) return 'other'
     const key = raw.toLowerCase().replace(/_/g, ' ').trim()
     return CATEGORY_MAP[key] || key.replace(/\s+/g, '_')
 }
 
 export function getCategoryDisplayName(normalisedKey: string): string {
+    if (!normalisedKey) return 'Other'
     return CATEGORY_DISPLAY_NAMES[normalisedKey] || normalisedKey
         .replace(/_/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase())
