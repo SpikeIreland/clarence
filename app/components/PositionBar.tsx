@@ -433,7 +433,7 @@ export default function PositionBar({
                         return (
                             <div
                                 key={pos}
-                                className="absolute"
+                                className={`absolute ${isHovered ? 'z-[100]' : ''}`}
                                 style={{
                                     left: `${pct}%`,
                                     transform: isFirst ? 'translateX(0)' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
@@ -453,7 +453,7 @@ export default function PositionBar({
                                 )}
 
                                 {isLong && isHovered && (
-                                    <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg shadow-lg z-50 whitespace-nowrap">
+                                    <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg shadow-lg z-[100] whitespace-nowrap pointer-events-none">
                                         <div className="font-medium">{point.label}</div>
                                         {point.description && (
                                             <div className="text-slate-400 text-[9px] mt-0.5">{point.description}</div>

@@ -1342,15 +1342,14 @@ function QuickContractStudioContent() {
         }
     }, [chatInput, chatLoading, contractId, selectedClause])
 
-    // Auto-scroll chat: scroll to TOP of rationale messages, BOTTOM for user conversations
+    // Auto-scroll chat: assistant messages scroll to TOP of the new message,
+    // user messages scroll to bottom (so the user sees what they just typed)
     const prevChatLengthRef = useRef(0)
     useEffect(() => {
         if (chatMessages.length > prevChatLengthRef.current) {
             const newMsg = chatMessages[chatMessages.length - 1]
-            const isRationale = newMsg?.id?.startsWith('rationale-')
-            if (isRationale && chatContainerRef.current) {
-                // Scroll to show the START of the new rationale message
-                // Use requestAnimationFrame to ensure DOM has rendered the new message
+            if (newMsg?.role === 'assistant' && chatContainerRef.current) {
+                // Scroll to show the START of the assistant's message
                 requestAnimationFrame(() => {
                     const messageElements = chatContainerRef.current?.querySelectorAll('[data-chat-message]')
                     const lastMessage = messageElements?.[messageElements.length - 1]
@@ -1359,7 +1358,7 @@ function QuickContractStudioContent() {
                     }
                 })
             } else {
-                // User conversation: scroll to bottom as before
+                // User's own message: scroll to bottom so they see what they typed
                 chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
             }
         }
@@ -6267,16 +6266,7 @@ INSTRUCTIONS:
                                                         onPositionChange: (pos) => handlePositionChange(selectedClause.clauseId, pos),
                                                         fairnessLabel: selectedClause.clarenceFairness ? getFairnessLabel(selectedClause.clarenceFairness) : undefined,
                                                     } : null}
-                                                    playbook={isTemplateMode ? (() => {
-                                                        const overlay = playbookRuleOverlays.get(selectedClause.clauseName?.toLowerCase())
-                                                        if (!overlay) return null
-                                                        return {
-                                                            ideal: overlay.ideal,
-                                                            fallback: overlay.min,
-                                                            minimum: overlay.min,
-                                                            maximum: overlay.max,
-                                                        }
-                                                    })() : null}
+                                                    playbook={null}  /* Playbook ranges only shown on Playbook tab */
                                                 />
                                             </div>
 
